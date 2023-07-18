@@ -1,0 +1,52 @@
+{
+  "name": "libsql-experimental",
+  "version": "0.0.1",
+  "description": "",
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "main": "index.js",
+  "scripts": {
+    "test": "cargo test",
+    "debug": "cargo build --message-format=json | neon dist",
+    "build": "cargo build --message-format=json --release | neon dist",
+    "cross": "cross build --message-format=json --release | neon dist -m /target",
+    "pack-build": "neon pack-build",
+    "prepack": "neon install-builds",
+    "postversion": "git push --follow-tags"
+  },
+  "author": "Pekka Enberg <penberg@iki.fi>",
+  "license": "MIT",
+  "neon": {
+    "targets": {
+      "aarch64-apple-darwin": "@libsql/experimental-darwin-arm64",
+      "x86_64-unknown-linux-gnu": "@libsql/experimental-linux-x64-gnu"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/libsql/libsql-experimental.git"
+  },
+  "keywords": [
+    "libsql"
+  ],
+  "bugs": {
+    "url": "https://github.com/libsql/libsql-experimental/issues"
+  },
+  "homepage": "https://github.com/libsql/libsql-experimental",
+  "devDependencies": {
+    "@neon-rs/cli": "^0.0.4"
+  },
+  "dependencies": {
+    "@neon-rs/load": "^0.0.4"
+  },
+  "optionalDependencies": {
+    "@libsql-experimental/darwin-arm64": "0.0.1",
+    "@libsql-experimental/linux-x64-gnu": "0.0.1"
+  }
+}

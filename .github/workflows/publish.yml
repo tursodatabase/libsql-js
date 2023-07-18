@@ -1,0 +1,74 @@
+name: publish
+
+env:
+  NODE_VERSION: 18.x
+  NPM_REGISTRY: 'https://registry.npmjs.org'
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  pack:
+    name: Pack (main)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Pack
+        uses: neon-actions/pack@v0.1
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          github-release: true
+
+  macos-builds:
+    name: Builds (macOS)
+    strategy:
+      matrix:
+        target: [aarch64-apple-darwin]
+    runs-on: macos-arm64
+    permissions:
+      contents: write
+    steps:
+      - name: Build
+        uses: neon-actions/build@v0.1
+        with:
+          target: ${{ matrix.target }}
+          node-version: ${{ env.NODE_VERSION }}
+          npm-publish: false
+          github-release: true
+
+  other-builds:
+    name: Builds (other platforms)
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Build
+        uses: neon-actions/build@v0.1
+        with:
+          target: ${{ matrix.target }}
+          node-version: ${{ env.NODE_VERSION }}
+          use-cross: true
+          npm-publish: false
+          github-release: true
+
+  publish:
+    name: Publish
+    needs: [pack, macos-builds, other-builds]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish
+        uses: neon-actions/publish@v0.1
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: ${{ env.NPM_REGISTRY }}
+          github-release: "*.tgz"

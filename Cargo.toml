@@ -1,0 +1,19 @@
+[package]
+name = "libsql-experimental"
+version = "0.0.1"
+description = ""
+authors = ["Pekka Enberg <penberg@iki.fi>"]
+license = "MIT"
+edition = "2021"
+exclude = ["index.node"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+libsql = { git = "https://github.com/libsql/libsql/", rev = "861d623a0462732e84e18b554afe06ad6127129f", default-features = false }
+
+[dependencies.neon]
+version = "0.10"
+default-features = false
+features = ["napi-6"]
