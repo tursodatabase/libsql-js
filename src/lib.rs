@@ -3,24 +3,47 @@ use std::cell::RefCell;
 use neon::prelude::*;
 
 struct Database {
-    _db: libsql::Database,
+    db: libsql::Database,
     conn: libsql::Connection,
+    rt: tokio::runtime::Runtime,
 }
+
+unsafe impl Sync for Database {}
+unsafe impl Send for Database {}
 
 impl Finalize for Database {}
 
 impl Database {
-    fn new(db: libsql::Database, conn: libsql::Connection) -> Self {
-        Database { _db: db, conn }
+    fn new(db: libsql::Database, conn: libsql::Connection, rt: tokio::runtime::Runtime) -> Self {
+        Database { db, conn, rt }
     }
 
-    fn js_new(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
-        let dbpath = cx.argument::<JsString>(0)?.value(&mut cx);
-        let db = libsql::Database::open(dbpath).unwrap();
+    fn js_open(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
+        let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
+        let db = libsql::Database::open(db_path.clone()).unwrap();
         let conn = db.connect().unwrap();
-        let db = Database::new(db, conn);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let db = Database::new(db, conn, rt);
         Ok(cx.boxed(db))
     }
+
+    fn js_open_with_rpc_sync(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
+        let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
+        let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
+        let opts = libsql::Opts::with_http_sync(sync_url);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let db = rt.block_on(libsql::Database::open_with_opts(db_path, opts)).unwrap();
+        let conn = db.connect().unwrap();
+        let db = Database::new(db, conn, rt);
+        Ok(cx.boxed(db))
+    }
+
+    fn js_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+        let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
+        db.rt.block_on(db.db.sync()).unwrap();
+        Ok(cx.undefined())
+    }
+
 
     fn js_exec(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
@@ -216,7 +239,9 @@ fn convert_row_raw(
 
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
-    cx.export_function("databaseNew", Database::js_new)?;
+    cx.export_function("databaseOpen", Database::js_open)?;
+    cx.export_function("databaseOpenWithRpcSync", Database::js_open_with_rpc_sync)?;
+    cx.export_function("databaseSync", Database::js_sync)?;
     cx.export_function("databaseExec", Database::js_exec)?;
     cx.export_function("databasePrepare", Database::js_prepare)?;
     cx.export_function("statementRaw", Statement::js_raw)?;
