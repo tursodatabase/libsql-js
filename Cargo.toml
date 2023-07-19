@@ -11,7 +11,7 @@ exclude = ["index.node"]
 crate-type = ["cdylib"]
 
 [dependencies]
-libsql = { git = "https://github.com/libsql/libsql/", rev = "861d623a0462732e84e18b554afe06ad6127129f", default-features = false }
+libsql = { git = "https://github.com/psarna/libsql/", rev = "f70da8bdeffaf8f21514018399577a97b7777da9", default-features = false }
 
 [dependencies.neon]
 version = "0.10"

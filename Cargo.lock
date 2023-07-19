@@ -273,7 +273,7 @@ dependencies = [
 [[package]]
 name = "libsql"
 version = "0.1.2"
-source = "git+https://github.com/libsql/libsql/?rev=861d623a0462732e84e18b554afe06ad6127129f#861d623a0462732e84e18b554afe06ad6127129f"
+source = "git+https://github.com/psarna/libsql/?rev=f70da8bdeffaf8f21514018399577a97b7777da9#f70da8bdeffaf8f21514018399577a97b7777da9"
 dependencies = [
  "futures",
  "libsql-sys",
@@ -295,9 +295,10 @@ dependencies = [
 [[package]]
 name = "libsql-sys"
 version = "0.2.9"
-source = "git+https://github.com/libsql/libsql/?rev=861d623a0462732e84e18b554afe06ad6127129f#861d623a0462732e84e18b554afe06ad6127129f"
+source = "git+https://github.com/psarna/libsql/?rev=f70da8bdeffaf8f21514018399577a97b7777da9#f70da8bdeffaf8f21514018399577a97b7777da9"
 dependencies = [
  "bindgen",
+ "cc",
  "default-env",
  "once_cell",
  "tracing",
