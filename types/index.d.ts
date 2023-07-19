@@ -72,6 +72,7 @@ declare namespace Libsql {
             source: string,
         ): BindParameters extends unknown[] ? Statement<BindParameters> : Statement<[BindParameters]>;
         transaction<F extends VariableArgFunction>(fn: F): Transaction<F>;
+        sync(): this;
         exec(source: string): this;
         pragma(source: string, options?: Database.PragmaOptions): unknown;
         function(name: string, cb: (...params: unknown[]) => unknown): this;
@@ -119,6 +120,7 @@ declare namespace Database {
         timeout?: number | undefined;
         verbose?: ((message?: unknown, ...additionalArgs: unknown[]) => void) | undefined;
         nativeBinding?: string | undefined;
+        syncUrl?: string | undefined;
     }
 
     interface SerializeOptions {
