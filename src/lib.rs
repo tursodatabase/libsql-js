@@ -26,7 +26,11 @@ impl Database {
     fn js_exec(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
-        db.conn.execute(sql, ()).unwrap();
+        if let Err(err) = db.conn.execute(sql, ()) {
+            let err = map_err(err);
+            let err = cx.error(err)?;
+            return cx.throw(err);
+        }
         Ok(cx.undefined())
     }
 
@@ -36,6 +40,15 @@ impl Database {
         let stmt = db.conn.prepare(sql).unwrap();
         let stmt = Statement { stmt };
         Ok(cx.boxed(stmt))
+    }
+}
+
+fn map_err(err: libsql::Error) -> String {
+    match err {
+        libsql::Error::PrepareFailed(_, err) => err,
+        _ => {
+            todo!();
+        }
     }
 }
 

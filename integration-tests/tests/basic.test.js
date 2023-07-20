@@ -1,7 +1,7 @@
 import test from "ava";
 
 test("basic usage", async (t) => {
-  for (const provider of ["libsql", "sqlite"]) {
+  for (const provider of ["sqlite", "libsql"]) {
     await testBasicUsage(provider, t);
   }
 });
@@ -19,6 +19,21 @@ const testBasicUsage = async (provider, t) => {
 
   t.is(row.name, "Alice");
 };
+
+test("errors", async (t) => {
+  for (const provider of ["sqlite", "libsql"]) {
+    await testErrors(provider, t);
+  }
+});
+
+const testErrors = async (provider, t) => {
+  const db = await connect(provider);
+
+  const error = await t.throws(() => {
+    db.exec("SELECT * FROM users")
+  });
+  t.is(error.message, 'no such table: users');
+}
 
 const connect = async (provider) => {
   if (provider === "libsql") {

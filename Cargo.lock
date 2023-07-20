@@ -691,7 +691,7 @@ dependencies = [
 [[package]]
 name = "libsql"
 version = "0.1.2"
-source = "git+https://github.com/libsql/libsql/?rev=c2cf4380bbf254ec7bd2f10c025a260a123bdcb5#c2cf4380bbf254ec7bd2f10c025a260a123bdcb5"
+source = "git+https://github.com/libsql/libsql/?rev=af54ae9976dec3497fdbd23191c32b9ad6025a35#af54ae9976dec3497fdbd23191c32b9ad6025a35"
 dependencies = [
  "futures",
  "libsql-sys",
@@ -714,7 +714,7 @@ dependencies = [
 [[package]]
 name = "libsql-sys"
 version = "0.2.9"
-source = "git+https://github.com/libsql/libsql/?rev=c2cf4380bbf254ec7bd2f10c025a260a123bdcb5#c2cf4380bbf254ec7bd2f10c025a260a123bdcb5"
+source = "git+https://github.com/libsql/libsql/?rev=af54ae9976dec3497fdbd23191c32b9ad6025a35#af54ae9976dec3497fdbd23191c32b9ad6025a35"
 dependencies = [
  "bindgen",
  "cc",
@@ -726,7 +726,7 @@ dependencies = [
 [[package]]
 name = "libsql_replication"
 version = "0.0.1"
-source = "git+https://github.com/libsql/libsql/?rev=c2cf4380bbf254ec7bd2f10c025a260a123bdcb5#c2cf4380bbf254ec7bd2f10c025a260a123bdcb5"
+source = "git+https://github.com/libsql/libsql/?rev=af54ae9976dec3497fdbd23191c32b9ad6025a35#af54ae9976dec3497fdbd23191c32b9ad6025a35"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -925,6 +925,16 @@ checksum = "77a8165726e8236064dbb45459242600304b42a5ea24ee2948e18e023bf7ba84"
 dependencies = [
  "overload",
  "winapi",
+]
+
+[[package]]
+name = "num_cpus"
+version = "1.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4161fcb6d602d4d2081af7c3a45852d875a03dd337a6bfdd6e06407b61342a43"
+dependencies = [
+ "hermit-abi",
+ "libc",
 ]
 
 [[package]]
@@ -1480,6 +1490,7 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "num_cpus",
  "pin-project-lite",
  "socket2",
  "tokio-macros",
