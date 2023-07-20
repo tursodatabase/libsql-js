@@ -44,6 +44,17 @@ test("Statement.iterate()", async (t) => {
   }
 });
 
+test("Statement.all()", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("SELECT * FROM users");
+  const expected = [
+    { id: 1, name: 'Alice', email: 'alice@example.org' },
+    { id: 2, name: 'Bob', email: 'bob@example.com' },
+  ];
+  t.deepEqual(stmt.all(), expected);
+});
+
 test("errors", async (t) => {
   const db = t.context.db;
 
