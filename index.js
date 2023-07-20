@@ -5,7 +5,7 @@ const { load, currentTarget } = require('@neon-rs/load');
 // Static requires for bundlers.
 if (0) { require('./.targets'); }
 
-const { databaseNew, databaseExec, databasePrepare, statementGet, statementRows, rowsNext } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
+const { databaseNew, databaseExec, databasePrepare, statementRaw, statementGet, statementRows, rowsNext } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
 
 /**
  * Database represents a connection that can prepare and execute SQL statements.
@@ -119,7 +119,7 @@ class Statement {
     }
 
     raw(raw) {
-        this.raw = raw;
+        statementRaw.call(this.stmt, raw || true);
         return this;
     }
 

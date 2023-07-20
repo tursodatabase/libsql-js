@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use neon::prelude::*;
 
 struct Database {
@@ -35,7 +37,7 @@ impl Database {
         let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let stmt = db.conn.prepare(sql).unwrap();
-        let stmt = Statement { stmt };
+        let stmt = Statement { stmt, raw: RefCell::new(false) };
         Ok(cx.boxed(stmt))
     }
 }
@@ -51,6 +53,7 @@ fn map_err(err: libsql::Error) -> String {
 
 struct Statement {
     stmt: libsql::Statement,
+    raw: RefCell<bool>,
 }
 
 impl Finalize for Statement {}
@@ -78,6 +81,20 @@ fn js_value_to_value(cx: &mut FunctionContext, v: Handle<'_, JsValue>) -> libsql
 }
 
 impl Statement {
+    fn js_raw(mut cx: FunctionContext) -> JsResult<JsNull> {
+        let stmt = cx
+            .this()
+            .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
+        let raw = cx.argument::<JsBoolean>(0)?;
+        let raw = raw.value(&mut cx);
+        stmt.set_raw(raw);
+        Ok(cx.null())
+    }
+
+    fn set_raw(&self, raw: bool) {
+        self.raw.replace(raw);
+    }
+
     fn js_get(mut cx: FunctionContext) -> JsResult<JsValue> {
         let stmt = cx
             .this()
@@ -94,9 +111,15 @@ impl Statement {
         match stmt.stmt.execute(&params) {
             Some(rows) => {
                 let row = rows.next().unwrap().unwrap();
-                let mut result = cx.empty_object();
-                convert_row(&mut cx, &mut result, &rows, &row);
-                Ok(result.upcast())
+                if *stmt.raw.borrow() {
+                    let mut result = cx.empty_array();
+                    convert_row_raw(&mut cx, &mut result, &rows, &row);
+                    Ok(result.upcast())
+                } else {
+                    let mut result = cx.empty_object();
+                    convert_row(&mut cx, &mut result, &rows, &row);
+                    Ok(result.upcast())
+                }
             }
             None => Ok(cx.undefined().upcast()),
         }
@@ -165,11 +188,31 @@ fn convert_row(
     }
 }
 
+fn convert_row_raw(
+    cx: &mut FunctionContext,
+    result: &mut JsArray,
+    rows: &libsql::rows::Rows,
+    row: &libsql::rows::Row,
+) {
+    for idx in 0..rows.column_count() {
+        let v = row.get_value(idx).unwrap();
+        let v: Handle<'_, JsValue> = match v {
+            libsql::Value::Null => cx.null().upcast(),
+            libsql::Value::Integer(v) => cx.number(v as f64).upcast(),
+            libsql::Value::Float(v) => cx.number(v).upcast(),
+            libsql::Value::Text(v) => cx.string(v).upcast(),
+            libsql::Value::Blob(_v) => todo!("unsupported type"),
+        };
+        result.set(cx, idx as u32, v).unwrap();
+    }
+}
+
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("databaseNew", Database::js_new)?;
     cx.export_function("databaseExec", Database::js_exec)?;
     cx.export_function("databasePrepare", Database::js_prepare)?;
+    cx.export_function("statementRaw", Statement::js_raw)?;
     cx.export_function("statementGet", Statement::js_get)?;
     cx.export_function("statementRows", Statement::js_rows)?;
     cx.export_function("rowsNext", Rows::js_next)?;

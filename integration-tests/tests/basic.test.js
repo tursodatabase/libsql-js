@@ -19,6 +19,13 @@ test("Statement.get()", async (t) => {
   t.is(stmt.get(2).name, "Bob");
 });
 
+test("Statement.get() [raw]", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
+  t.deepEqual(stmt.raw().get(1), [1, "Alice", 'alice@example.org']);
+});
+
 test("Statement.iterate() [empty]", async (t) => {
   const db = t.context.db;
 
