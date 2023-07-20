@@ -1,13 +1,7 @@
 import test from "ava";
 
 test("basic usage", async (t) => {
-  for (const provider of ["sqlite", "libsql"]) {
-    await testBasicUsage(provider, t);
-  }
-});
-
-const testBasicUsage = async (provider, t) => {
-  const db = await connect(provider);
+  const db = await connect();
 
   db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
 
@@ -18,24 +12,19 @@ const testBasicUsage = async (provider, t) => {
   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
 
   t.is(row.name, "Alice");
-};
-
-test("errors", async (t) => {
-  for (const provider of ["sqlite", "libsql"]) {
-    await testErrors(provider, t);
-  }
 });
 
-const testErrors = async (provider, t) => {
-  const db = await connect(provider);
+test("errors", async (t) => {
+  const db = await connect();
 
   const error = await t.throws(() => {
     db.exec("SELECT * FROM users")
   });
   t.is(error.message, 'no such table: users');
-}
+});
 
-const connect = async (provider) => {
+const connect = async () => {
+  const provider = process.env.PROVIDER;
   if (provider === "libsql") {
     const x = await import("libsql-experimental");
     const options = {};
