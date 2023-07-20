@@ -56,7 +56,15 @@ struct Statement {
 impl Finalize for Statement {}
 
 fn js_value_to_value(cx: &mut FunctionContext, v: Handle<'_, JsValue>) -> libsql::Value {
-    if v.is_a::<JsNumber, _>(cx) {
+    if v.is_a::<JsNull, _>(cx) {
+        todo!("null");
+    } else if v.is_a::<JsUndefined, _>(cx) {
+        todo!("undefined");
+    } else if v.is_a::<JsArray, _>(cx) {
+        todo!("array");
+    } else if v.is_a::<JsBoolean, _>(cx) {
+        todo!("bool");
+    } else if v.is_a::<JsNumber, _>(cx) {
         let v = v.downcast_or_throw::<JsNumber, _>(cx).unwrap();
         let v = v.value(cx);
         libsql::Value::Integer(v as i64)
