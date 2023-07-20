@@ -39,7 +39,7 @@ const connect = async (provider) => {
   if (provider === "libsql") {
     const x = await import("libsql-experimental");
     const options = {};
-    const db = new x.Database(":memory:", options);
+    const db = new x.default(":memory:", options);
     return db;
   }
   if (provider == "sqlite") {
