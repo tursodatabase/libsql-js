@@ -1,7 +1,14 @@
 import test from "ava";
 
-test("basic usage", async (t) => {
+test.beforeEach(async (t) => {
   const db = await connect();
+	t.context = {
+		db,
+	};
+});
+
+test("basic usage", async (t) => {
+  const db = t.context.db;
 
   db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
 
@@ -15,12 +22,12 @@ test("basic usage", async (t) => {
 });
 
 test("errors", async (t) => {
-  const db = await connect();
+  const db = t.context.db;
 
   const error = await t.throws(() => {
-    db.exec("SELECT * FROM users")
+    db.exec("SELECT * FROM missing_table")
   });
-  t.is(error.message, 'no such table: users');
+  t.is(error.message, 'no such table: missing_table');
 });
 
 const connect = async () => {
