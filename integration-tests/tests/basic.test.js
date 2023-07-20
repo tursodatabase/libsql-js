@@ -4,17 +4,18 @@ test.beforeEach(async (t) => {
   const db = await connect();
   db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
   db.exec("INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.org')");
+  db.exec("INSERT INTO users (id, name, email) VALUES (2, 'Bob', 'bob@example.com')");
 	t.context = {
 		db,
 	};
 });
 
-test("basic usage", async (t) => {
+test("Statement.get()", async (t) => {
   const db = t.context.db;
 
-  const userId = 1;
-  const row = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
-  t.is(row.name, "Alice");
+  const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
+  t.is(stmt.get(1).name, "Alice");
+  t.is(stmt.get(2).name, "Bob");
 });
 
 test("errors", async (t) => {

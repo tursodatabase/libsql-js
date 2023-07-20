@@ -81,6 +81,7 @@ impl Statement {
             params.push(v);
         }
         let params = libsql::Params::Positional(params);
+        stmt.stmt.reset();
         let rows = stmt.stmt.execute(&params).unwrap();
         let row = rows.next().unwrap().unwrap();
         let result = cx.empty_object();
