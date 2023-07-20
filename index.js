@@ -159,7 +159,7 @@ class Statement {
 
     all(...bindParameters) {
        const result = [];
-       for (const row of this.iterate(bindParameters)) {
+       for (const row of this.iterate(...bindParameters)) {
           result.push(row);
        }
        return result;
