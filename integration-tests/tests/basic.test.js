@@ -19,6 +19,24 @@ test("Statement.get()", async (t) => {
   t.is(stmt.get(2).name, "Bob");
 });
 
+test("Statement.iterate() [empty]", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("SELECT * FROM users WHERE id = 0");
+  t.is(stmt.iterate().next().done, true);
+});
+
+test("Statement.iterate()", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("SELECT * FROM users");
+  const expected = [1, 2];
+  var idx = 0;
+  for (const row of stmt.iterate()) {
+    t.is(row.id, expected[idx++]);
+  }
+});
+
 test("errors", async (t) => {
   const db = t.context.db;
 

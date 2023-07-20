@@ -5,7 +5,7 @@ const { load, currentTarget } = require('@neon-rs/load');
 // Static requires for bundlers.
 if (0) { require('./.targets'); }
 
-const { databaseNew, databaseExec, databasePrepare, statementGet } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
+const { databaseNew, databaseExec, databasePrepare, statementGet, statementRows, rowsNext } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
 
 /**
  * Database represents a connection that can prepare and execute SQL statements.
@@ -56,6 +56,31 @@ class Statement {
      */
     get(...bindParameters) {
         return statementGet.call(this.stmt, ...bindParameters);
+    }
+
+    /**
+     * Executes the SQL statement and returns an iterator to the resulting rows.
+     *
+     * @param bindParameters - The bind parameters for executing the statement.
+     */
+    iterate(...bindParameters) {
+        const rows = statementRows.call(this.stmt, ...bindParameters);
+        const iter = {
+            next() {
+                if (!rows) {
+                    return { done: true };
+                }
+                const row = rowsNext.call(rows);
+                if (!row) {
+                    return { done: true };
+                }
+                return { value: row, done: false };
+            },
+            [Symbol.iterator]() {
+                return this;
+            },
+        };
+        return iter;
     }
 }
 
