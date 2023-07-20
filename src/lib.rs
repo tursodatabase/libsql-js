@@ -70,7 +70,7 @@ fn js_value_to_value(cx: &mut FunctionContext, v: Handle<'_, JsValue>) -> libsql
 }
 
 impl Statement {
-    fn js_get(mut cx: FunctionContext) -> JsResult<JsObject> {
+    fn js_get(mut cx: FunctionContext) -> JsResult<JsValue> {
         let stmt = cx
             .this()
             .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
@@ -82,23 +82,30 @@ impl Statement {
         }
         let params = libsql::Params::Positional(params);
         stmt.stmt.reset();
-        let rows = stmt.stmt.execute(&params).unwrap();
-        let row = rows.next().unwrap().unwrap();
-        let result = cx.empty_object();
-        for idx in 0..rows.column_count() {
-            let v = row.get_value(idx).unwrap();
-            let column_name = rows.column_name(idx);
-            let key = cx.string(column_name);
-            let v: Handle<'_, JsValue> = match v {
-                libsql::Value::Null => cx.null().upcast(),
-                libsql::Value::Integer(v) => cx.number(v as f64).upcast(),
-                libsql::Value::Float(v) => cx.number(v).upcast(),
-                libsql::Value::Text(v) => cx.string(v).upcast(),
-                libsql::Value::Blob(_v) => todo!("unsupported type"),
-            };
-            result.set(&mut cx, key, v)?;
+
+        match stmt.stmt.execute(&params) {
+            Some(rows) => {
+                let row = rows.next().unwrap().unwrap();
+                let result = cx.empty_object();
+                for idx in 0..rows.column_count() {
+                    let v = row.get_value(idx).unwrap();
+                    let column_name = rows.column_name(idx);
+                    let key = cx.string(column_name);
+                    let v: Handle<'_, JsValue> = match v {
+                        libsql::Value::Null => cx.null().upcast(),
+                        libsql::Value::Integer(v) => cx.number(v as f64).upcast(),
+                        libsql::Value::Float(v) => cx.number(v).upcast(),
+                        libsql::Value::Text(v) => cx.string(v).upcast(),
+                        libsql::Value::Blob(_v) => todo!("unsupported type"),
+                    };
+                    result.set(&mut cx, key, v)?;
+                }
+                Ok(result.upcast())
+            }
+            None => {
+                Ok(cx.undefined().upcast())
+            }
         }
-        Ok(result)
     }
 }
 

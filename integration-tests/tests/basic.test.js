@@ -14,6 +14,7 @@ test("Statement.get()", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
+  t.is(stmt.get(0), undefined);
   t.is(stmt.get(1).name, "Alice");
   t.is(stmt.get(2).name, "Bob");
 });
