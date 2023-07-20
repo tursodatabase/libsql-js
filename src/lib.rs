@@ -139,7 +139,7 @@ impl Statement {
         stmt.stmt.reset();
         match stmt.stmt.execute(&params) {
             Some(rows) => {
-                let rows = Rows { rows };
+                let rows = Rows { rows, raw: *stmt.raw.borrow() };
                 Ok(cx.boxed(rows).upcast())
             }
             None => Ok(cx.null().upcast()),
@@ -149,6 +149,7 @@ impl Statement {
 
 struct Rows {
     rows: libsql::Rows,
+    raw: bool,
 }
 
 impl Finalize for Rows {}
@@ -158,9 +159,15 @@ impl Rows {
         let rows = cx.this().downcast_or_throw::<JsBox<Rows>, _>(&mut cx)?;
         match rows.rows.next().unwrap() {
             Some(row) => {
-                let mut result = cx.empty_object();
-                convert_row(&mut cx, &mut result, &rows.rows, &row);
-                Ok(result.upcast())
+                if rows.raw {
+                    let mut result = cx.empty_array();
+                    convert_row_raw(&mut cx, &mut result, &rows.rows, &row);
+                    Ok(result.upcast())
+                } else {
+                    let mut result = cx.empty_object();
+                    convert_row(&mut cx, &mut result, &rows.rows, &row);
+                    Ok(result.upcast())
+                }
             }
             None => Ok(cx.undefined().upcast()),
         }

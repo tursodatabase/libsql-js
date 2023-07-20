@@ -55,6 +55,17 @@ test("Statement.all()", async (t) => {
   t.deepEqual(stmt.all(), expected);
 });
 
+test("Statement.all() [raw]", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("SELECT * FROM users");
+  const expected = [
+    [ 1, 'Alice', 'alice@example.org' ],
+    [ 2, 'Bob', 'bob@example.com' ],
+  ];
+  t.deepEqual(stmt.raw().all(), expected);
+});
+
 test("errors", async (t) => {
   const db = t.context.db;
 
