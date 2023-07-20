@@ -1,14 +1,16 @@
 # Experimental libSQL API for Node
 
-## Getting Started
+This source repository contains libSQL API bindings for Node, which aim to be compatible with [better-sqlite3](https://github.com/WiseLibs/better-sqlite3/).
 
-Install the package:
+## Installing
+
+You can install the package with `npm`:
 
 ```sh
 npm i libsql-experimental
 ```
 
-Example application:
+### Usage
 
 ```javascript
 import Database from 'libsql-experimental';
@@ -22,5 +24,3 @@ const row = db.prepare("SELECT * FROM users WHERE id = ?").get(1);
 
 console.log(`Name: ${row.name}, email: ${row.email}`);
 ```
-
-The packaging is based on the [neon-prebuild-example](https://github.com/dherman/neon-prebuild-example) project.
