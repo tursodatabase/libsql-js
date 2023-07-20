@@ -22,10 +22,14 @@ test("Statement.get()", async (t) => {
 test("errors", async (t) => {
   const db = t.context.db;
 
-  const error = await t.throws(() => {
+  const syntax_error = await t.throws(() => {
+    db.exec("SYNTAX ERROR")
+  });
+  t.is(syntax_error.message, 'near "SYNTAX": syntax error');
+  const no_such_table_error = await t.throws(() => {
     db.exec("SELECT * FROM missing_table")
   });
-  t.is(error.message, 'no such table: missing_table');
+  t.is(no_such_table_error.message, 'no such table: missing_table');
 });
 
 const connect = async () => {
