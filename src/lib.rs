@@ -1,10 +1,7 @@
-use std::any::Any;
-
-use libsql;
 use neon::prelude::*;
 
 struct Database {
-    db: libsql::Database,
+    _db: libsql::Database,
     conn: libsql::Connection,
 }
 
@@ -12,12 +9,12 @@ impl Finalize for Database {}
 
 impl Database {
     fn new(db: libsql::Database, conn: libsql::Connection) -> Self {
-        Database { db, conn }
+        Database { _db: db, conn }
     }
 
     fn js_new(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
-        let url = cx.argument::<JsString>(0)?.value(&mut cx);
-        let db = libsql::Database::open(url.clone()).unwrap();
+        let dbpath = cx.argument::<JsString>(0)?.value(&mut cx);
+        let db = libsql::Database::open(dbpath).unwrap();
         let conn = db.connect().unwrap();
         let db = Database::new(db, conn);
         Ok(cx.boxed(db))
@@ -96,7 +93,7 @@ impl Statement {
                 libsql::Value::Integer(v) => cx.number(v as f64).upcast(),
                 libsql::Value::Float(v) => cx.number(v).upcast(),
                 libsql::Value::Text(v) => cx.string(v).upcast(),
-                libsql::Value::Blob(v) => todo!("unsupported type"),
+                libsql::Value::Blob(_v) => todo!("unsupported type"),
             };
             result.set(&mut cx, key, v)?;
         }
