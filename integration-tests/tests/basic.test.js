@@ -10,13 +10,23 @@ test.beforeEach(async (t) => {
 	};
 });
 
-test("Statement.get()", async (t) => {
+test("Statement.get() [positional]", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
   t.is(stmt.get(0), undefined);
+  t.is(stmt.get([0]), undefined);
   t.is(stmt.get(1).name, "Alice");
   t.is(stmt.get(2).name, "Bob");
+});
+
+test("Statement.get() [named]", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("SELECT * FROM users WHERE id = :id");
+  t.is(stmt.get({ id: 0 }), undefined);
+  t.is(stmt.get({ id: 1 }).name, "Alice");
+  t.is(stmt.get({ id: 2 }).name, "Bob");
 });
 
 test("Statement.get() [raw]", async (t) => {

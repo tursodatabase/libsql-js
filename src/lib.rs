@@ -122,13 +122,8 @@ impl Statement {
         let stmt = cx
             .this()
             .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
-        let mut params = vec![];
-        for i in 0..cx.len() {
-            let v = cx.argument::<JsValue>(i)?;
-            let v = js_value_to_value(&mut cx, v);
-            params.push(v);
-        }
-        let params = libsql::Params::Positional(params);
+        let params = cx.argument::<JsValue>(0)?;
+        let params = convert_params(&mut cx, params);
         stmt.stmt.reset();
 
         match stmt.stmt.execute(&params) {
@@ -195,6 +190,40 @@ impl Rows {
             None => Ok(cx.undefined().upcast()),
         }
     }
+}
+
+fn convert_params(cx: &mut FunctionContext, v: Handle<'_, JsValue>) -> libsql::Params {
+    if v.is_a::<JsArray, _>(cx) {
+        let v = v.downcast_or_throw::<JsArray, _>(cx).unwrap();
+        convert_params_array(cx, v)
+    } else {
+        let v = v.downcast_or_throw::<JsObject, _>(cx).unwrap();
+        convert_params_object(cx, v)
+    }
+}
+
+fn convert_params_array(cx: &mut FunctionContext, v: Handle<'_, JsArray>) -> libsql::Params {
+    let mut params = vec![];
+    for i in 0..v.len(cx) {
+        let v = v.get(cx, i).unwrap();
+        let v = js_value_to_value(cx, v);
+        params.push(v);
+    }
+    libsql::Params::Positional(params)
+}
+
+fn convert_params_object(cx: &mut FunctionContext, v: Handle<'_, JsObject>) -> libsql::Params {
+    let mut params = vec![];
+    let keys = v.get_own_property_names(cx).unwrap();
+    for i in 0..keys.len(cx) {
+        let key: Handle<'_, JsValue> = keys.get(cx, i).unwrap();
+        let key = key.downcast_or_throw::<JsString, _>(cx).unwrap();
+        let v = v.get(cx, key).unwrap();
+        let v = js_value_to_value(cx, v);
+        let key = key.value(cx);
+        params.push((format!(":{}", key), v));
+    }
+    libsql::Params::Named(params)
 }
 
 fn convert_row(

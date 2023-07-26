@@ -141,7 +141,11 @@ class Statement {
      * @param bindParameters - The bind parameters for executing the statement.
      */
     get(...bindParameters) {
-        return statementGet.call(this.stmt, ...bindParameters);
+        if (typeof bindParameters[0] === 'object' && bindParameters[0] !== null) {
+            return statementGet.call(this.stmt, bindParameters[0]);
+        } else {
+            return statementGet.call(this.stmt, bindParameters.flat());
+        }
     }
 
     /**
