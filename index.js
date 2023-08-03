@@ -5,7 +5,7 @@ const { load, currentTarget } = require('@neon-rs/load');
 // Static requires for bundlers.
 if (0) { require('./.targets'); }
 
-const { databaseOpen, databaseOpenWithRpcSync, databaseSync, databaseExec, databasePrepare, statementRaw, statementGet, statementRows, rowsNext } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
+const { databaseOpen, databaseOpenWithRpcSync, databaseSync, databaseExec, databasePrepare, statementRaw, statementGet, statementRun, statementRows, rowsNext } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
 
 /**
  * Database represents a connection that can prepare and execute SQL statements.
@@ -141,6 +141,17 @@ class Statement {
     }
 
     /**
+     * Executes the SQL statement and returns an info object.
+     */
+    run(...bindParameters) {
+        if (typeof bindParameters[0] === 'object' && bindParameters[0] !== null) {
+            return statementRun.call(this.stmt, bindParameters[0]);
+        } else {
+            return statementRun.call(this.stmt, bindParameters.flat());
+        }
+    }
+
+    /**
      * Executes the SQL statement and returns the first row.
      *
      * @param bindParameters - The bind parameters for executing the statement.
@@ -162,9 +173,6 @@ class Statement {
         const rows = statementRows.call(this.stmt, ...bindParameters);
         const iter = {
             next() {
-                if (!rows) {
-                    return { done: true };
-                }
                 const row = rowsNext.call(rows);
                 if (!row) {
                     return { done: true };

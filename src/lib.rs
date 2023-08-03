@@ -1,9 +1,10 @@
 use std::cell::RefCell;
 use neon::prelude::*;
+use std::sync::Arc;
 
 struct Database {
     db: libsql::Database,
-    conn: libsql::Connection,
+    conn: Arc<libsql::Connection>,
     rt: tokio::runtime::Runtime,
 }
 
@@ -14,7 +15,7 @@ impl Finalize for Database {}
 
 impl Database {
     fn new(db: libsql::Database, conn: libsql::Connection, rt: tokio::runtime::Runtime) -> Self {
-        Database { db, conn, rt }
+        Database { db, conn: Arc::new(conn), rt }
     }
 
     fn js_open(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
@@ -59,7 +60,7 @@ impl Database {
         let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let stmt = db.conn.prepare(sql).unwrap();
-        let stmt = Statement { stmt: stmt, raw: RefCell::new(false) };
+        let stmt = Statement { conn: db.conn.clone(), stmt: stmt, raw: RefCell::new(false) };
         Ok(cx.boxed(stmt))
     }
 }
@@ -74,6 +75,7 @@ fn map_err(err: libsql::Error) -> String {
 }
 
 struct Statement {
+    conn: Arc<libsql::Connection>,
     stmt: libsql::Statement,
     raw: RefCell<bool>,
 }
@@ -120,6 +122,23 @@ impl Statement {
         self.raw.replace(raw);
     }
 
+    fn js_run(mut cx: FunctionContext) -> JsResult<JsValue> {
+        let stmt = cx
+            .this()
+            .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
+        let params = cx.argument::<JsValue>(0)?;
+        let params = convert_params(&mut cx, params);
+        stmt.stmt.reset();
+        let changes = stmt.stmt.execute(&params).unwrap();
+        let last_insert_rowid = stmt.conn.last_insert_rowid();
+        let info = cx.empty_object();
+        let changes = cx.number(changes as f64);
+        info.set(&mut cx, "changes", changes)?;
+        let last_insert_row_id = cx.number(last_insert_rowid as f64);
+        info.set(&mut cx, "lastInsertRowid", last_insert_row_id)?;
+        Ok(info.upcast())
+    }
+
     fn js_get(mut cx: FunctionContext) -> JsResult<JsValue> {
         let stmt = cx
             .this()
@@ -128,9 +147,9 @@ impl Statement {
         let params = convert_params(&mut cx, params);
         stmt.stmt.reset();
 
-        match stmt.stmt.execute(&params) {
-            Some(rows) => {
-                let row = rows.next().unwrap().unwrap();
+        let rows = stmt.stmt.query(&params).unwrap();
+        match rows.next().unwrap() {
+            Some(row) => {
                 if *stmt.raw.borrow() {
                     let mut result = cx.empty_array();
                     convert_row_raw(&mut cx, &mut result, &rows, &row);
@@ -140,8 +159,10 @@ impl Statement {
                     convert_row(&mut cx, &mut result, &rows, &row);
                     Ok(result.upcast())
                 }
+            },
+            None => {
+                Ok(cx.undefined().upcast())
             }
-            None => Ok(cx.undefined().upcast()),
         }
     }
 
@@ -157,13 +178,9 @@ impl Statement {
         }
         let params = libsql::Params::Positional(params);
         stmt.stmt.reset();
-        match stmt.stmt.execute(&params) {
-            Some(rows) => {
-                let rows = Rows { rows, raw: *stmt.raw.borrow() };
-                Ok(cx.boxed(rows).upcast())
-            }
-            None => Ok(cx.null().upcast()),
-        }
+        let rows = stmt.stmt.query(&params).unwrap();
+        let rows = Rows { rows, raw: *stmt.raw.borrow() };
+        Ok(cx.boxed(rows).upcast())
     }
 }
 
@@ -276,6 +293,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("databaseExec", Database::js_exec)?;
     cx.export_function("databasePrepare", Database::js_prepare)?;
     cx.export_function("statementRaw", Statement::js_raw)?;
+    cx.export_function("statementRun", Statement::js_run)?;
     cx.export_function("statementGet", Statement::js_get)?;
     cx.export_function("statementRows", Statement::js_rows)?;
     cx.export_function("rowsNext", Rows::js_next)?;

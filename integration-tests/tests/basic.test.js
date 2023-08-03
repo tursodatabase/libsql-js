@@ -10,6 +10,15 @@ test.beforeEach(async (t) => {
 	};
 });
 
+test("Statement.run() [positional]", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("INSERT INTO users(name, email) VALUES (?, ?)");
+  const info = stmt.run(['Carol', 'carol@example.net']);
+  t.is(info.changes, 1);
+  t.is(info.lastInsertRowid, 3);
+});
+
 test("Statement.get() [positional]", async (t) => {
   const db = t.context.db;
 

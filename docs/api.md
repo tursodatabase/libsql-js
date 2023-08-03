@@ -82,7 +82,13 @@ This function is currently not supported.
 
 ### run([...bindParameters]) ⇒ object
 
-This function is currently not supported.
+Executes the SQL statement and returns an info object.
+
+| Param          | Type                          | Description                                      |
+| -------------- | ----------------------------- | ------------------------------------------------ |
+| bindParameters | <code>array of objects</code> | The bind parameters for executing the statement. |
+
+The returned info object contains two properties: `changes` that describes the number of modified rows and `info.lastInsertRowid` that represents the `rowid` of the last inserted row.
 
 ### get([...bindParameters]) ⇒ row
 
