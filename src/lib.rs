@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-
 use neon::prelude::*;
 
 struct Database {
@@ -56,11 +55,11 @@ impl Database {
         Ok(cx.undefined())
     }
 
-    fn js_prepare(mut cx: FunctionContext) -> JsResult<JsBox<Statement>> {
+    fn js_prepare<'a>(mut cx: FunctionContext) -> JsResult<JsBox<Statement>> {
         let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let stmt = db.conn.prepare(sql).unwrap();
-        let stmt = Statement { stmt, raw: RefCell::new(false) };
+        let stmt = Statement { stmt: stmt, raw: RefCell::new(false) };
         Ok(cx.boxed(stmt))
     }
 }
@@ -79,7 +78,10 @@ struct Statement {
     raw: RefCell<bool>,
 }
 
-impl Finalize for Statement {}
+unsafe impl<'a> Sync for Statement {}
+unsafe impl<'a> Send for Statement {}
+
+impl<'a> Finalize for Statement {}
 
 fn js_value_to_value(cx: &mut FunctionContext, v: Handle<'_, JsValue>) -> libsql::Value {
     if v.is_a::<JsNull, _>(cx) {
@@ -239,7 +241,7 @@ fn convert_row(
         let v: Handle<'_, JsValue> = match v {
             libsql::Value::Null => cx.null().upcast(),
             libsql::Value::Integer(v) => cx.number(v as f64).upcast(),
-            libsql::Value::Float(v) => cx.number(v).upcast(),
+            libsql::Value::Real(v) => cx.number(v).upcast(),
             libsql::Value::Text(v) => cx.string(v).upcast(),
             libsql::Value::Blob(_v) => todo!("unsupported type"),
         };
@@ -258,7 +260,7 @@ fn convert_row_raw(
         let v: Handle<'_, JsValue> = match v {
             libsql::Value::Null => cx.null().upcast(),
             libsql::Value::Integer(v) => cx.number(v as f64).upcast(),
-            libsql::Value::Float(v) => cx.number(v).upcast(),
+            libsql::Value::Real(v) => cx.number(v).upcast(),
             libsql::Value::Text(v) => cx.string(v).upcast(),
             libsql::Value::Blob(_v) => todo!("unsupported type"),
         };
