@@ -2,7 +2,13 @@
 
 [![npm](https://badge.fury.io/js/libsql-experimental.svg)](https://badge.fury.io/js/libsql-experimental)
 
+[libSQL](https://github.com/libsql/libsql) is an open source, open contribution fork of SQLite.
 This source repository contains libSQL API bindings for Node, which aims to be compatible with [better-sqlite3](https://github.com/WiseLibs/better-sqlite3/).
+
+## Features
+
+* Local databases, like SQLite
+* Embedded replica mode that syncs from remote server to local file
 
 ## Installing
 
