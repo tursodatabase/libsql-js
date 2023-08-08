@@ -130,6 +130,11 @@ class Statement {
         this.stmt = stmt;
     }
 
+    /**
+     * Toggle raw mode.
+     *
+     * @param raw Enable or disable raw mode. If you don't pass the parameter, raw mode is enabled.
+     */
     raw(raw) {
         statementRaw.call(this.stmt, raw || true);
         return this;
@@ -173,6 +178,11 @@ class Statement {
         return iter;
     }
 
+    /**
+     * Executes the SQL statement and returns an array of the resulting rows.
+     *
+     * @param bindParameters - The bind parameters for executing the statement.
+     */
     all(...bindParameters) {
        const result = [];
        for (const row of this.iterate(...bindParameters)) {

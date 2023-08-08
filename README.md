@@ -12,6 +12,10 @@ You can install the package with `npm`:
 npm i libsql-experimental
 ```
 
+## Documentation
+
+* [API reference](docs/api.md)
+
 ## Getting Started
 
 To try out your first libsql program, type the following in `hello.js`:
