@@ -2,7 +2,7 @@
 
 [![npm](https://badge.fury.io/js/libsql-experimental.svg)](https://badge.fury.io/js/libsql-experimental)
 
-This source repository contains libSQL API bindings for Node, which aim to be compatible with [better-sqlite3](https://github.com/WiseLibs/better-sqlite3/).
+This source repository contains libSQL API bindings for Node, which aims to be compatible with [better-sqlite3](https://github.com/WiseLibs/better-sqlite3/).
 
 ## Installing
 
