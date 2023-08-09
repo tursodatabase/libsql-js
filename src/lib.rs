@@ -38,6 +38,13 @@ impl Database {
         Ok(cx.boxed(db))
     }
 
+    fn js_close(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+        let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
+        db.db.close();
+        Ok(cx.undefined())
+    }
+
+
     fn js_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
         db.rt.block_on(db.db.sync()).unwrap();
@@ -289,6 +296,7 @@ fn convert_row_raw(
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("databaseOpen", Database::js_open)?;
     cx.export_function("databaseOpenWithRpcSync", Database::js_open_with_rpc_sync)?;
+    cx.export_function("databaseClose", Database::js_close)?;
     cx.export_function("databaseSync", Database::js_sync)?;
     cx.export_function("databaseExec", Database::js_exec)?;
     cx.export_function("databasePrepare", Database::js_prepare)?;

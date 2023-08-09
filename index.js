@@ -5,7 +5,7 @@ const { load, currentTarget } = require('@neon-rs/load');
 // Static requires for bundlers.
 if (0) { require('./.targets'); }
 
-const { databaseOpen, databaseOpenWithRpcSync, databaseSync, databaseExec, databasePrepare, statementRaw, statementGet, statementRun, statementRows, rowsNext } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
+const { databaseOpen, databaseOpenWithRpcSync, databaseClose, databaseSync, databaseExec, databasePrepare, statementRaw, statementGet, statementRun, statementRows, rowsNext } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
 
 /**
  * Database represents a connection that can prepare and execute SQL statements.
@@ -109,8 +109,11 @@ class Database {
         databaseExec.call(this.db, sql);
     }
 
+    /**
+     * Closes the database connection.
+     */
     close() {
-        throw new Error("not implemented")
+        databaseSync.call(this.db);
     }
 
     defaultSafeIntegers(...args) {

@@ -74,7 +74,7 @@ Executes a SQL statement.
 
 ### close() ⇒ this
 
-This function is currently not supported.
+Closes the database connection.
 
 # class Statement
 
