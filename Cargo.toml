@@ -11,10 +11,13 @@ exclude = ["index.node"]
 crate-type = ["cdylib"]
 
 [dependencies]
-libsql = { git = "https://github.com/libsql/libsql/", rev = "8c3263b1c13421955a67c5b650c2a21c275f4791" }
+libsql = { git = "https://github.com/libsql/libsql/", rev = "59c4fd2c4d262a91879800903e3bae4180fdf6f4" }
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
 
 [dependencies.neon]
 version = "0.10"
 default-features = false
 features = ["napi-6"]
+
+[patch.crates-io]
+tonic = { git = "https://github.com/hyperium/tonic" }

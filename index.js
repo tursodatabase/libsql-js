@@ -19,7 +19,8 @@ class Database {
      */
     constructor(path, opts) {
         if (opts && opts.syncUrl) {
-            this.db = databaseOpenWithRpcSync(path, opts.syncUrl);
+            const syncAuth = opts.syncAuth ?? "";
+            this.db = databaseOpenWithRpcSync(path, opts.syncUrl, syncAuth);
         } else {
             this.db = databaseOpen(path);
         }

@@ -58,7 +58,7 @@ const db = new Database('hello.db');
 ```javascript
 import libsql_experimental as libsql
 
-const opts = { syncUrl: "<url>" };
+const opts = { syncUrl: "<url>", syncAuth: "<optional auth token>" };
 const db = new Database('hello.db', opts);
 db.sync();
 ```

@@ -30,7 +30,8 @@ impl Database {
     fn js_open_with_rpc_sync(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
-        let opts = libsql::Opts::with_http_sync(sync_url);
+        let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
+        let opts = libsql::Opts::with_http_sync(sync_url, sync_auth);
         let rt = tokio::runtime::Runtime::new().unwrap();
         let db = rt.block_on(libsql::Database::open_with_opts(db_path, opts)).unwrap();
         let conn = db.connect().unwrap();
