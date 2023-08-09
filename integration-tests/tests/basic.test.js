@@ -85,6 +85,35 @@ test("Statement.all() [raw]", async (t) => {
   t.deepEqual(stmt.raw().all(), expected);
 });
 
+test("Statement.columns()", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
+  t.deepEqual(stmt.columns(), [
+    {
+      column: 'id',
+      database: 'main',
+      name: 'id',
+      table: 'users',
+      type: 'INTEGER',
+    },
+    {
+      column: 'name',
+      database: 'main',
+      name: 'name',
+      table: 'users',
+      type: 'TEXT',
+    },
+    {
+      column: 'email',
+      database: 'main',
+      name: 'email',
+      table: 'users',
+      type: 'TEXT',
+    },
+  ]);
+});
+
 test("errors", async (t) => {
   const db = t.context.db;
 

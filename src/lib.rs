@@ -220,6 +220,28 @@ impl Statement {
         };
         Ok(cx.boxed(rows).upcast())
     }
+
+    fn js_columns(mut cx: FunctionContext) -> JsResult<JsValue> {
+        let stmt = cx
+            .this()
+            .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
+        let result = cx.empty_array();
+        for (i, col) in stmt.stmt.columns().iter().enumerate() {
+            let column = cx.empty_object();
+            let column_name = cx.string(col.name());
+            column.set(&mut cx, "column", column_name)?;
+            let column_origin_name = cx.string(col.origin_name().unwrap());
+            column.set(&mut cx, "name", column_origin_name)?;
+            let column_table_name = cx.string(col.table_name().unwrap());
+            column.set(&mut cx, "table", column_table_name)?;
+            let column_database_name = cx.string(col.database_name().unwrap());
+            column.set(&mut cx, "database", column_database_name)?;
+            let column_decl_type = cx.string(col.decl_type().unwrap());
+            column.set(&mut cx, "type", column_decl_type)?;
+            result.set(&mut cx, i as u32, column)?;
+        }
+        Ok(result.upcast())
+    }
 }
 
 struct Rows {
@@ -347,6 +369,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("statementRun", Statement::js_run)?;
     cx.export_function("statementGet", Statement::js_get)?;
     cx.export_function("statementRows", Statement::js_rows)?;
+    cx.export_function("statementColumns", Statement::js_columns)?;
     cx.export_function("rowsNext", Rows::js_next)?;
     Ok(())
 }

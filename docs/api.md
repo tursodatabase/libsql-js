@@ -135,7 +135,7 @@ This function enables or disables raw mode. Prepared statements return objects b
 
 ### columns() ⇒ array of objects
 
-This function is currently not supported.
+Returns the columns in the result set returned by this prepared statement.
 
 ### bind([...bindParameters]) ⇒ this
 

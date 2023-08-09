@@ -5,7 +5,20 @@ const { load, currentTarget } = require('@neon-rs/load');
 // Static requires for bundlers.
 if (0) { require('./.targets'); }
 
-const { databaseOpen, databaseOpenWithRpcSync, databaseClose, databaseSync, databaseExec, databasePrepare, statementRaw, statementGet, statementRun, statementRows, rowsNext } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
+const {
+  databaseOpen,
+  databaseOpenWithRpcSync,
+  databaseClose,
+  databaseSync,
+  databaseExec,
+  databasePrepare,
+  statementRaw,
+  statementGet,
+  statementRun,
+  statementRows,
+  statementColumns,
+  rowsNext,
+} = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
 
 /**
  * Database represents a connection that can prepare and execute SQL statements.
@@ -201,6 +214,13 @@ class Statement {
           result.push(row);
        }
        return result;
+    }
+
+    /**
+     * Returns the columns in the result set returned by this prepared statement.
+     */
+    columns() {
+        return statementColumns.call(this.stmt);
     }
 }
 
