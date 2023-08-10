@@ -1,5 +1,5 @@
-use std::cell::RefCell;
 use neon::prelude::*;
+use std::cell::RefCell;
 use std::sync::Arc;
 
 struct Database {
@@ -15,14 +15,21 @@ impl Finalize for Database {}
 
 impl Database {
     fn new(db: libsql::Database, conn: libsql::Connection, rt: tokio::runtime::Runtime) -> Self {
-        Database { db, conn: Arc::new(conn), rt }
+        Database {
+            db,
+            conn: Arc::new(conn),
+            rt,
+        }
     }
 
     fn js_open(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
-        let db = libsql::Database::open(db_path.clone()).unwrap();
-        let conn = db.connect().unwrap();
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let db = libsql::Database::open(db_path.clone())
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let conn = db
+            .connect()
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let rt = tokio::runtime::Runtime::new().or_else(|err| cx.throw_error(err.to_string()))?;
         let db = Database::new(db, conn, rt);
         Ok(cx.boxed(db))
     }
@@ -32,9 +39,13 @@ impl Database {
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
         let opts = libsql::Opts::with_http_sync(sync_url, sync_auth);
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let db = rt.block_on(libsql::Database::open_with_opts(db_path, opts)).unwrap();
-        let conn = db.connect().unwrap();
+        let rt = tokio::runtime::Runtime::new().or_else(|err| cx.throw_error(err.to_string()))?;
+        let db = rt
+            .block_on(libsql::Database::open_with_opts(db_path, opts))
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let conn = db
+            .connect()
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let db = Database::new(db, conn, rt);
         Ok(cx.boxed(db))
     }
@@ -45,40 +56,43 @@ impl Database {
         Ok(cx.undefined())
     }
 
-
     fn js_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
-        db.rt.block_on(db.db.sync()).unwrap();
+        db.rt
+            .block_on(db.db.sync())
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         Ok(cx.undefined())
     }
-
 
     fn js_exec(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
-        if let Err(err) = db.conn.execute(sql, ()) {
-            let err = map_err(err);
-            let err = cx.error(err)?;
-            return cx.throw(err);
-        }
+        db.conn
+            .execute(sql, ())
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         Ok(cx.undefined())
     }
 
     fn js_prepare<'a>(mut cx: FunctionContext) -> JsResult<JsBox<Statement>> {
         let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
-        let stmt = db.conn.prepare(sql).unwrap();
-        let stmt = Statement { conn: db.conn.clone(), stmt: stmt, raw: RefCell::new(false) };
+        let stmt = db
+            .conn
+            .prepare(sql)
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let stmt = Statement {
+            conn: db.conn.clone(),
+            stmt: stmt,
+            raw: RefCell::new(false),
+        };
         Ok(cx.boxed(stmt))
     }
 }
 
-fn map_err(err: libsql::Error) -> String {
+fn from_libsql_error(err: libsql::Error) -> String {
     match err {
         libsql::Error::PrepareFailed(_, err) => err,
-        _ => {
-            todo!();
-        }
+        _ => err.to_string(),
     }
 }
 
@@ -93,7 +107,10 @@ unsafe impl<'a> Send for Statement {}
 
 impl<'a> Finalize for Statement {}
 
-fn js_value_to_value(cx: &mut FunctionContext, v: Handle<'_, JsValue>) -> libsql::Value {
+fn js_value_to_value(
+    cx: &mut FunctionContext,
+    v: Handle<'_, JsValue>,
+) -> NeonResult<libsql::Value> {
     if v.is_a::<JsNull, _>(cx) {
         todo!("null");
     } else if v.is_a::<JsUndefined, _>(cx) {
@@ -103,13 +120,13 @@ fn js_value_to_value(cx: &mut FunctionContext, v: Handle<'_, JsValue>) -> libsql
     } else if v.is_a::<JsBoolean, _>(cx) {
         todo!("bool");
     } else if v.is_a::<JsNumber, _>(cx) {
-        let v = v.downcast_or_throw::<JsNumber, _>(cx).unwrap();
+        let v = v.downcast_or_throw::<JsNumber, _>(cx)?;
         let v = v.value(cx);
-        libsql::Value::Integer(v as i64)
+        Ok(libsql::Value::Integer(v as i64))
     } else if v.is_a::<JsString, _>(cx) {
-        let v = v.downcast_or_throw::<JsString, _>(cx).unwrap();
+        let v = v.downcast_or_throw::<JsString, _>(cx)?;
         let v = v.value(cx);
-        libsql::Value::Text(v)
+        Ok(libsql::Value::Text(v))
     } else {
         todo!("unsupported type");
     }
@@ -135,9 +152,12 @@ impl Statement {
             .this()
             .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
         let params = cx.argument::<JsValue>(0)?;
-        let params = convert_params(&mut cx, params);
+        let params = convert_params(&mut cx, params)?;
         stmt.stmt.reset();
-        let changes = stmt.stmt.execute(&params).unwrap();
+        let changes = stmt
+            .stmt
+            .execute(&params)
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let last_insert_rowid = stmt.conn.last_insert_rowid();
         let info = cx.empty_object();
         let changes = cx.number(changes as f64);
@@ -152,25 +172,29 @@ impl Statement {
             .this()
             .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
         let params = cx.argument::<JsValue>(0)?;
-        let params = convert_params(&mut cx, params);
+        let params = convert_params(&mut cx, params)?;
         stmt.stmt.reset();
 
-        let rows = stmt.stmt.query(&params).unwrap();
-        match rows.next().unwrap() {
+        let rows = stmt
+            .stmt
+            .query(&params)
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        match rows
+            .next()
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?
+        {
             Some(row) => {
                 if *stmt.raw.borrow() {
                     let mut result = cx.empty_array();
-                    convert_row_raw(&mut cx, &mut result, &rows, &row);
+                    convert_row_raw(&mut cx, &mut result, &rows, &row)?;
                     Ok(result.upcast())
                 } else {
                     let mut result = cx.empty_object();
-                    convert_row(&mut cx, &mut result, &rows, &row);
+                    convert_row(&mut cx, &mut result, &rows, &row)?;
                     Ok(result.upcast())
                 }
-            },
-            None => {
-                Ok(cx.undefined().upcast())
             }
+            None => Ok(cx.undefined().upcast()),
         }
     }
 
@@ -181,13 +205,19 @@ impl Statement {
         let mut params = vec![];
         for i in 0..cx.len() {
             let v = cx.argument::<JsValue>(i)?;
-            let v = js_value_to_value(&mut cx, v);
+            let v = js_value_to_value(&mut cx, v)?;
             params.push(v);
         }
         let params = libsql::Params::Positional(params);
         stmt.stmt.reset();
-        let rows = stmt.stmt.query(&params).unwrap();
-        let rows = Rows { rows, raw: *stmt.raw.borrow() };
+        let rows = stmt
+            .stmt
+            .query(&params)
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let rows = Rows {
+            rows,
+            raw: *stmt.raw.borrow(),
+        };
         Ok(cx.boxed(rows).upcast())
     }
 }
@@ -202,15 +232,19 @@ impl Finalize for Rows {}
 impl Rows {
     fn js_next(mut cx: FunctionContext) -> JsResult<JsValue> {
         let rows = cx.this().downcast_or_throw::<JsBox<Rows>, _>(&mut cx)?;
-        match rows.rows.next().unwrap() {
+        match rows
+            .rows
+            .next()
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?
+        {
             Some(row) => {
                 if rows.raw {
                     let mut result = cx.empty_array();
-                    convert_row_raw(&mut cx, &mut result, &rows.rows, &row);
+                    convert_row_raw(&mut cx, &mut result, &rows.rows, &row)?;
                     Ok(result.upcast())
                 } else {
                     let mut result = cx.empty_object();
-                    convert_row(&mut cx, &mut result, &rows.rows, &row);
+                    convert_row(&mut cx, &mut result, &rows.rows, &row)?;
                     Ok(result.upcast())
                 }
             }
@@ -219,38 +253,44 @@ impl Rows {
     }
 }
 
-fn convert_params(cx: &mut FunctionContext, v: Handle<'_, JsValue>) -> libsql::Params {
+fn convert_params(cx: &mut FunctionContext, v: Handle<'_, JsValue>) -> NeonResult<libsql::Params> {
     if v.is_a::<JsArray, _>(cx) {
-        let v = v.downcast_or_throw::<JsArray, _>(cx).unwrap();
+        let v = v.downcast_or_throw::<JsArray, _>(cx)?;
         convert_params_array(cx, v)
     } else {
-        let v = v.downcast_or_throw::<JsObject, _>(cx).unwrap();
+        let v = v.downcast_or_throw::<JsObject, _>(cx)?;
         convert_params_object(cx, v)
     }
 }
 
-fn convert_params_array(cx: &mut FunctionContext, v: Handle<'_, JsArray>) -> libsql::Params {
+fn convert_params_array(
+    cx: &mut FunctionContext,
+    v: Handle<'_, JsArray>,
+) -> NeonResult<libsql::Params> {
     let mut params = vec![];
     for i in 0..v.len(cx) {
-        let v = v.get(cx, i).unwrap();
-        let v = js_value_to_value(cx, v);
+        let v = v.get(cx, i)?;
+        let v = js_value_to_value(cx, v)?;
         params.push(v);
     }
-    libsql::Params::Positional(params)
+    Ok(libsql::Params::Positional(params))
 }
 
-fn convert_params_object(cx: &mut FunctionContext, v: Handle<'_, JsObject>) -> libsql::Params {
+fn convert_params_object(
+    cx: &mut FunctionContext,
+    v: Handle<'_, JsObject>,
+) -> NeonResult<libsql::Params> {
     let mut params = vec![];
-    let keys = v.get_own_property_names(cx).unwrap();
+    let keys = v.get_own_property_names(cx)?;
     for i in 0..keys.len(cx) {
-        let key: Handle<'_, JsValue> = keys.get(cx, i).unwrap();
-        let key = key.downcast_or_throw::<JsString, _>(cx).unwrap();
-        let v = v.get(cx, key).unwrap();
-        let v = js_value_to_value(cx, v);
+        let key: Handle<'_, JsValue> = keys.get(cx, i)?;
+        let key = key.downcast_or_throw::<JsString, _>(cx)?;
+        let v = v.get(cx, key)?;
+        let v = js_value_to_value(cx, v)?;
         let key = key.value(cx);
         params.push((format!(":{}", key), v));
     }
-    libsql::Params::Named(params)
+    Ok(libsql::Params::Named(params))
 }
 
 fn convert_row(
@@ -258,9 +298,9 @@ fn convert_row(
     result: &mut JsObject,
     rows: &libsql::rows::Rows,
     row: &libsql::rows::Row,
-) {
+) -> NeonResult<()> {
     for idx in 0..rows.column_count() {
-        let v = row.get_value(idx).unwrap();
+        let v = row.get_value(idx).or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let column_name = rows.column_name(idx);
         let key = cx.string(column_name);
         let v: Handle<'_, JsValue> = match v {
@@ -270,8 +310,9 @@ fn convert_row(
             libsql::Value::Text(v) => cx.string(v).upcast(),
             libsql::Value::Blob(_v) => todo!("unsupported type"),
         };
-        result.set(cx, key, v).unwrap();
+        result.set(cx, key, v)?;
     }
+    Ok(())
 }
 
 fn convert_row_raw(
@@ -279,9 +320,9 @@ fn convert_row_raw(
     result: &mut JsArray,
     rows: &libsql::rows::Rows,
     row: &libsql::rows::Row,
-) {
+) -> NeonResult<()> {
     for idx in 0..rows.column_count() {
-        let v = row.get_value(idx).unwrap();
+        let v = row.get_value(idx).or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let v: Handle<'_, JsValue> = match v {
             libsql::Value::Null => cx.null().upcast(),
             libsql::Value::Integer(v) => cx.number(v as f64).upcast(),
@@ -289,8 +330,9 @@ fn convert_row_raw(
             libsql::Value::Text(v) => cx.string(v).upcast(),
             libsql::Value::Blob(_v) => todo!("unsupported type"),
         };
-        result.set(cx, idx as u32, v).unwrap();
+        result.set(cx, idx as u32, v)?;
     }
+    Ok(())
 }
 
 #[neon::main]
