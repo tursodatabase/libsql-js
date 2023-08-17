@@ -1,7 +1,7 @@
-import Database from 'libsql-experimental';
+import Database from "libsql-experimental";
 
 const options = { syncUrl: "http://localhost:8080" };
-const db = new Database('hello.db', options);
+const db = new Database("hello.db", options);
 
 db.sync();
 

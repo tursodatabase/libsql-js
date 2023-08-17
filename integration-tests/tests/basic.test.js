@@ -3,18 +3,22 @@ import test from "ava";
 test.beforeEach(async (t) => {
   const db = await connect();
   db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
-  db.exec("INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.org')");
-  db.exec("INSERT INTO users (id, name, email) VALUES (2, 'Bob', 'bob@example.com')");
-	t.context = {
-		db,
-	};
+  db.exec(
+    "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.org')"
+  );
+  db.exec(
+    "INSERT INTO users (id, name, email) VALUES (2, 'Bob', 'bob@example.com')"
+  );
+  t.context = {
+    db,
+  };
 });
 
 test("Statement.run() [positional]", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("INSERT INTO users(name, email) VALUES (?, ?)");
-  const info = stmt.run(['Carol', 'carol@example.net']);
+  const info = stmt.run(["Carol", "carol@example.net"]);
   t.is(info.changes, 1);
   t.is(info.lastInsertRowid, 3);
 });
@@ -42,7 +46,7 @@ test("Statement.get() [raw]", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
-  t.deepEqual(stmt.raw().get(1), [1, "Alice", 'alice@example.org']);
+  t.deepEqual(stmt.raw().get(1), [1, "Alice", "alice@example.org"]);
 });
 
 test("Statement.iterate() [empty]", async (t) => {
@@ -68,8 +72,8 @@ test("Statement.all()", async (t) => {
 
   const stmt = db.prepare("SELECT * FROM users");
   const expected = [
-    { id: 1, name: 'Alice', email: 'alice@example.org' },
-    { id: 2, name: 'Bob', email: 'bob@example.com' },
+    { id: 1, name: "Alice", email: "alice@example.org" },
+    { id: 2, name: "Bob", email: "bob@example.com" },
   ];
   t.deepEqual(stmt.all(), expected);
 });
@@ -79,8 +83,8 @@ test("Statement.all() [raw]", async (t) => {
 
   const stmt = db.prepare("SELECT * FROM users");
   const expected = [
-    [ 1, 'Alice', 'alice@example.org' ],
-    [ 2, 'Bob', 'bob@example.com' ],
+    [1, "Alice", "alice@example.org"],
+    [2, "Bob", "bob@example.com"],
   ];
   t.deepEqual(stmt.raw().all(), expected);
 });
@@ -91,25 +95,25 @@ test("Statement.columns()", async (t) => {
   const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
   t.deepEqual(stmt.columns(), [
     {
-      column: 'id',
-      database: 'main',
-      name: 'id',
-      table: 'users',
-      type: 'INTEGER',
+      column: "id",
+      database: "main",
+      name: "id",
+      table: "users",
+      type: "INTEGER",
     },
     {
-      column: 'name',
-      database: 'main',
-      name: 'name',
-      table: 'users',
-      type: 'TEXT',
+      column: "name",
+      database: "main",
+      name: "name",
+      table: "users",
+      type: "TEXT",
     },
     {
-      column: 'email',
-      database: 'main',
-      name: 'email',
-      table: 'users',
-      type: 'TEXT',
+      column: "email",
+      database: "main",
+      name: "email",
+      table: "users",
+      type: "TEXT",
     },
   ]);
 });
@@ -117,16 +121,18 @@ test("Statement.columns()", async (t) => {
 test("Database.transaction()", async (t) => {
   const db = t.context.db;
 
-  const insert = db.prepare("INSERT INTO users(name, email) VALUES (:name, :email)");
+  const insert = db.prepare(
+    "INSERT INTO users(name, email) VALUES (:name, :email)"
+  );
 
   const insertMany = db.transaction((users) => {
     for (const user of users) insert.run(user);
   });
 
   insertMany([
-    { name: 'Joey', email: 'joey@example.org' },
-    { name: 'Sally', email: 'sally@example.org' },
-    { name: 'Junior', email: 'junior@example.org' },
+    { name: "Joey", email: "joey@example.org" },
+    { name: "Sally", email: "sally@example.org" },
+    { name: "Junior", email: "junior@example.org" },
   ]);
 
   const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
@@ -139,13 +145,13 @@ test("errors", async (t) => {
   const db = t.context.db;
 
   const syntax_error = await t.throws(() => {
-    db.exec("SYNTAX ERROR")
+    db.exec("SYNTAX ERROR");
   });
   t.is(syntax_error.message, 'near "SYNTAX": syntax error');
   const no_such_table_error = await t.throws(() => {
-    db.exec("SELECT * FROM missing_table")
+    db.exec("SELECT * FROM missing_table");
   });
-  t.is(no_such_table_error.message, 'no such table: missing_table');
+  t.is(no_such_table_error.message, "no such table: missing_table");
 });
 
 const connect = async () => {
