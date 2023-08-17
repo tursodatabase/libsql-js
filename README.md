@@ -81,6 +81,23 @@ db.exec("INSERT INTO users VALUES (1, 'alice@example.org')")
 const row = db.prepare("SELECT * FROM users WHERE id = ?").get(1);
 ```
 
+## Developing
+
+To build the `libsql` package, run:
+
+```console
+npm run build
+```
+
+You can then run the integration tests with:
+
+```console
+npm link
+cd integration-tests
+npm link libsql-experimental
+npm test
+```
+
 ## License
 
 This project is licensed under the [MIT license].
