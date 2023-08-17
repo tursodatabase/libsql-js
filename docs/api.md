@@ -35,7 +35,11 @@ The function returns a `Statement` object.
 
 ### transaction(function) ⇒ function
 
-This function is currently not supported.
+Returns a function that runs the given function in a transaction.
+
+| Param    | Type                  | Description                           |
+| -------- | --------------------- | ------------------------------------- |
+| function | <code>function</code> | The function to run in a transaction. |
 
 ### pragma(string, [options]) ⇒ results
 
