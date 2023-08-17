@@ -62,9 +62,26 @@ class Database {
         return new Statement(stmt);
     }
 
+    /**
+     * Returns a function that executes the given function in a transaction.
+     *
+     * @param {function} fn - The function to wrap in a transaction.
+     */
     transaction(fn) {
         if (typeof fn !== 'function') throw new TypeError('Expected first argument to be a function');
-        throw new Error("not implemented")
+
+        return (...bindParameters) => {
+            // TODO: Use libsql transaction API.
+            this.exec('BEGIN');
+            try {
+                const result = fn(...bindParameters);
+                this.exec('COMMIT');
+                return result;
+            } catch (err) {
+                this.exec('ROLLBACK');
+                throw err;
+            }
+        }
     }
 
     pragma(source, options) {

@@ -114,6 +114,27 @@ test("Statement.columns()", async (t) => {
   ]);
 });
 
+test("Database.transaction()", async (t) => {
+  const db = t.context.db;
+
+  const insert = db.prepare("INSERT INTO users(name, email) VALUES (:name, :email)");
+
+  const insertMany = db.transaction((users) => {
+    for (const user of users) insert.run(user);
+  });
+
+  insertMany([
+    { name: 'Joey', email: 'joey@example.org' },
+    { name: 'Sally', email: 'sally@example.org' },
+    { name: 'Junior', email: 'junior@example.org' },
+  ]);
+
+  const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
+  t.is(stmt.get(3).name, "Joey");
+  t.is(stmt.get(4).name, "Sally");
+  t.is(stmt.get(5).name, "Junior");
+});
+
 test("errors", async (t) => {
   const db = t.context.db;
 
