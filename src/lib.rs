@@ -91,7 +91,7 @@ impl Database {
 
 fn from_libsql_error(err: libsql::Error) -> String {
     match err {
-        libsql::Error::PrepareFailed(_, err) => err,
+        libsql::Error::PrepareFailed(_, _, err) => err,
         _ => err.to_string(),
     }
 }
