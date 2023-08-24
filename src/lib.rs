@@ -3,8 +3,8 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 struct Database {
-    db: libsql::Database,
-    conn: Arc<libsql::Connection>,
+    db: libsql::v2::Database,
+    conn: Arc<libsql::v2::Connection>,
     rt: tokio::runtime::Runtime,
 }
 
@@ -14,7 +14,11 @@ unsafe impl Send for Database {}
 impl Finalize for Database {}
 
 impl Database {
-    fn new(db: libsql::Database, conn: libsql::Connection, rt: tokio::runtime::Runtime) -> Self {
+    fn new(
+        db: libsql::v2::Database,
+        conn: libsql::v2::Connection,
+        rt: tokio::runtime::Runtime,
+    ) -> Self {
         Database {
             db,
             conn: Arc::new(conn),
@@ -24,12 +28,12 @@ impl Database {
 
     fn js_open(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
-        let db = libsql::Database::open(db_path.clone())
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
-        let conn = db
-            .connect()
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let rt = tokio::runtime::Runtime::new().or_else(|err| cx.throw_error(err.to_string()))?;
+        let db = libsql::v2::Database::open(db_path.clone())
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let fut = db.connect();
+        let result = rt.block_on(fut);
+        let conn = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let db = Database::new(db, conn, rt);
         Ok(cx.boxed(db))
     }
@@ -38,21 +42,20 @@ impl Database {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
-        let opts = libsql::Opts::with_http_sync(sync_url, sync_auth);
         let rt = tokio::runtime::Runtime::new().or_else(|err| cx.throw_error(err.to_string()))?;
-        let db = rt
-            .block_on(libsql::Database::open_with_opts(db_path, opts))
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
-        let conn = db
-            .connect()
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let fut = libsql::v2::Database::open_with_sync(db_path, sync_url, sync_auth);
+        let result = rt.block_on(fut);
+        let db = result.or_else(|err| cx.throw_error(err.to_string()))?;
+        let fut = db.connect();
+        let result = rt.block_on(fut);
+        let conn = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let db = Database::new(db, conn, rt);
         Ok(cx.boxed(db))
     }
 
     fn js_close(mut cx: FunctionContext) -> JsResult<JsUndefined> {
-        let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
-        db.db.close();
+        //let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
+        //db.db.close();
         Ok(cx.undefined())
     }
 
@@ -67,23 +70,23 @@ impl Database {
     fn js_exec(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
-        db.conn
-            .execute(sql, ())
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let fut = db.conn.execute(&sql, ());
+        let result = db.rt.block_on(fut);
+        result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         Ok(cx.undefined())
     }
 
     fn js_prepare<'a>(mut cx: FunctionContext) -> JsResult<JsBox<Statement>> {
         let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
-        let stmt = db
-            .conn
-            .prepare(sql)
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let fut = db.conn.prepare(&sql);
+        let result = db.rt.block_on(fut);
+        let stmt = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let stmt = Statement {
             conn: db.conn.clone(),
             stmt: stmt,
             raw: RefCell::new(false),
+            rt: db.rt.handle().clone(),
         };
         Ok(cx.boxed(stmt))
     }
@@ -97,9 +100,10 @@ fn from_libsql_error(err: libsql::Error) -> String {
 }
 
 struct Statement {
-    conn: Arc<libsql::Connection>,
-    stmt: libsql::Statement,
+    conn: Arc<libsql::v2::Connection>,
+    stmt: libsql::v2::Statement,
     raw: RefCell<bool>,
+    rt: tokio::runtime::Handle,
 }
 
 unsafe impl<'a> Sync for Statement {}
@@ -154,10 +158,9 @@ impl Statement {
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, params)?;
         stmt.stmt.reset();
-        let changes = stmt
-            .stmt
-            .execute(&params)
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let fut = stmt.stmt.execute(&params);
+        let result = stmt.rt.block_on(fut);
+        let changes = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let last_insert_rowid = stmt.conn.last_insert_rowid();
         let info = cx.empty_object();
         let changes = cx.number(changes as f64);
@@ -174,10 +177,9 @@ impl Statement {
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, params)?;
 
-        let rows = stmt
-            .stmt
-            .query(&params)
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let fut = stmt.stmt.query(&params);
+        let result = stmt.rt.block_on(fut);
+        let mut rows = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let result = match rows
             .next()
             .or_else(|err| cx.throw_error(from_libsql_error(err)))?
@@ -211,12 +213,11 @@ impl Statement {
         }
         let params = libsql::Params::Positional(params);
         stmt.stmt.reset();
-        let rows = stmt
-            .stmt
-            .query(&params)
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let fut = stmt.stmt.query(&params);
+        let result = stmt.rt.block_on(fut);
+        let rows = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let rows = Rows {
-            rows,
+            rows: RefCell::new(rows),
             raw: *stmt.raw.borrow(),
         };
         Ok(cx.boxed(rows).upcast())
@@ -246,7 +247,7 @@ impl Statement {
 }
 
 struct Rows {
-    rows: libsql::Rows,
+    rows: RefCell<libsql::v2::Rows>,
     raw: bool,
 }
 
@@ -255,19 +256,20 @@ impl Finalize for Rows {}
 impl Rows {
     fn js_next(mut cx: FunctionContext) -> JsResult<JsValue> {
         let rows = cx.this().downcast_or_throw::<JsBox<Rows>, _>(&mut cx)?;
+        let raw = rows.raw;
+        let mut rows = rows.rows.borrow_mut();
         match rows
-            .rows
             .next()
             .or_else(|err| cx.throw_error(from_libsql_error(err)))?
         {
             Some(row) => {
-                if rows.raw {
+                if raw {
                     let mut result = cx.empty_array();
-                    convert_row_raw(&mut cx, &mut result, &rows.rows, &row)?;
+                    convert_row_raw(&mut cx, &mut result, &rows, &row)?;
                     Ok(result.upcast())
                 } else {
                     let mut result = cx.empty_object();
-                    convert_row(&mut cx, &mut result, &rows.rows, &row)?;
+                    convert_row(&mut cx, &mut result, &rows, &row)?;
                     Ok(result.upcast())
                 }
             }
@@ -319,13 +321,15 @@ fn convert_params_object(
 fn convert_row(
     cx: &mut FunctionContext,
     result: &mut JsObject,
-    rows: &libsql::rows::Rows,
-    row: &libsql::rows::Row,
+    rows: &libsql::v2::Rows,
+    row: &libsql::v2::Row,
 ) -> NeonResult<()> {
     for idx in 0..rows.column_count() {
-        let v = row.get_value(idx).or_else(|err| cx.throw_error(from_libsql_error(err)))?;
-        let column_name = rows.column_name(idx);
-        let key = cx.string(column_name.unwrap());
+        let v = row
+            .get_value(idx)
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let column_name = rows.column_name(idx).unwrap();
+        let key = cx.string(column_name);
         let v: Handle<'_, JsValue> = match v {
             libsql::Value::Null => cx.null().upcast(),
             libsql::Value::Integer(v) => cx.number(v as f64).upcast(),
@@ -341,11 +345,13 @@ fn convert_row(
 fn convert_row_raw(
     cx: &mut FunctionContext,
     result: &mut JsArray,
-    rows: &libsql::rows::Rows,
-    row: &libsql::rows::Row,
+    rows: &libsql::v2::Rows,
+    row: &libsql::v2::Row,
 ) -> NeonResult<()> {
     for idx in 0..rows.column_count() {
-        let v = row.get_value(idx).or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let v = row
+            .get_value(idx)
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let v: Handle<'_, JsValue> = match v {
             libsql::Value::Null => cx.null().upcast(),
             libsql::Value::Integer(v) => cx.number(v as f64).upcast(),
