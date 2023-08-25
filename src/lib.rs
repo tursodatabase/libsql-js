@@ -173,13 +173,12 @@ impl Statement {
             .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, params)?;
-        stmt.stmt.reset();
 
         let rows = stmt
             .stmt
             .query(&params)
             .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
-        match rows
+        let result = match rows
             .next()
             .or_else(|err| cx.throw_error(from_libsql_error(err)))?
         {
@@ -195,7 +194,9 @@ impl Statement {
                 }
             }
             None => Ok(cx.undefined().upcast()),
-        }
+        };
+        stmt.stmt.reset();
+        result
     }
 
     fn js_rows(mut cx: FunctionContext) -> JsResult<JsValue> {
