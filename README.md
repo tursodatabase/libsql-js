@@ -7,8 +7,9 @@ This source repository contains libSQL API bindings for Node, which aims to be c
 
 ## Features
 
-* Local databases, like SQLite
-* Embedded replica mode that syncs from remote server to local file
+* In-memory databases and local database files, like SQLite
+* Remote database access to libSQL server
+* In-app replica that syncs with a libSQL server
 
 ## Installing
 
@@ -45,9 +46,7 @@ and then run:
 $ node hello.js
 ```
 
-#### Connecting to a database
-
-Local database file:
+#### Connecting to a local database file
 
 ```javascript
 import Database from 'libsql-experimental';
@@ -55,7 +54,7 @@ import Database from 'libsql-experimental';
 const db = new Database('hello.db');
 ````
 
-Remote libSQL server:
+#### Connecting to a Remote libSQL server
 
 ```javascript
 import Database from 'libsql-experimental';
@@ -70,7 +69,7 @@ const opts = {
 const db = new Database(url, opts);
 ```
 
-#### Embedded replica
+#### Creating an in-app replica and syncing it
 
 ```javascript
 import libsql_experimental as libsql
