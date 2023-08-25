@@ -165,7 +165,7 @@ class Database {
    * Closes the database connection.
    */
   close() {
-    databaseSync.call(this.db);
+    databaseClose.call(this.db);
   }
 
   defaultSafeIntegers(...args) {
