@@ -164,9 +164,10 @@ test.serial("errors", async (t) => {
 const connect = async () => {
   const provider = process.env.PROVIDER;
   if (provider === "libsql") {
+    const database = process.env.LIBSQL_DATABASE ?? "hello.db";
     const x = await import("libsql-experimental");
     const options = {};
-    const db = new x.default("hello.db", options);
+    const db = new x.default(database, options);
     return db;
   }
   if (provider == "sqlite") {
