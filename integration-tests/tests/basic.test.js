@@ -2,6 +2,7 @@ import test from "ava";
 
 test.beforeEach(async (t) => {
   const db = await connect();
+  db.exec("DROP TABLE IF EXISTS users");
   db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
   db.exec(
     "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.org')"
@@ -14,7 +15,13 @@ test.beforeEach(async (t) => {
   };
 });
 
-test("Statement.run() [positional]", async (t) => {
+test.after.always(async (t) => {
+  if (t.context.db != undefined) {
+    t.context.db.close();
+  }
+});
+
+test.serial("Statement.run() [positional]", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("INSERT INTO users(name, email) VALUES (?, ?)");
@@ -23,7 +30,7 @@ test("Statement.run() [positional]", async (t) => {
   t.is(info.lastInsertRowid, 3);
 });
 
-test("Statement.get() [positional]", async (t) => {
+test.serial("Statement.get() [positional]", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
@@ -33,7 +40,7 @@ test("Statement.get() [positional]", async (t) => {
   t.is(stmt.get(2).name, "Bob");
 });
 
-test("Statement.get() [named]", async (t) => {
+test.serial("Statement.get() [named]", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT * FROM users WHERE id = :id");
@@ -42,21 +49,21 @@ test("Statement.get() [named]", async (t) => {
   t.is(stmt.get({ id: 2 }).name, "Bob");
 });
 
-test("Statement.get() [raw]", async (t) => {
+test.serial("Statement.get() [raw]", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
   t.deepEqual(stmt.raw().get(1), [1, "Alice", "alice@example.org"]);
 });
 
-test("Statement.iterate() [empty]", async (t) => {
+test.serial("Statement.iterate() [empty]", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT * FROM users WHERE id = 0");
   t.is(stmt.iterate().next().done, true);
 });
 
-test("Statement.iterate()", async (t) => {
+test.serial("Statement.iterate()", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT * FROM users");
@@ -67,7 +74,7 @@ test("Statement.iterate()", async (t) => {
   }
 });
 
-test("Statement.all()", async (t) => {
+test.serial("Statement.all()", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT * FROM users");
@@ -78,7 +85,7 @@ test("Statement.all()", async (t) => {
   t.deepEqual(stmt.all(), expected);
 });
 
-test("Statement.all() [raw]", async (t) => {
+test.serial("Statement.all() [raw]", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT * FROM users");
@@ -89,7 +96,7 @@ test("Statement.all() [raw]", async (t) => {
   t.deepEqual(stmt.raw().all(), expected);
 });
 
-test("Statement.columns()", async (t) => {
+test.serial("Statement.columns()", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
@@ -118,7 +125,7 @@ test("Statement.columns()", async (t) => {
   ]);
 });
 
-test("Database.transaction()", async (t) => {
+test.serial("Database.transaction()", async (t) => {
   const db = t.context.db;
 
   const insert = db.prepare(
@@ -141,7 +148,7 @@ test("Database.transaction()", async (t) => {
   t.is(stmt.get(5).name, "Junior");
 });
 
-test("errors", async (t) => {
+test.serial("errors", async (t) => {
   const db = t.context.db;
 
   const syntax_error = await t.throws(() => {
@@ -159,13 +166,13 @@ const connect = async () => {
   if (provider === "libsql") {
     const x = await import("libsql-experimental");
     const options = {};
-    const db = new x.default(":memory:", options);
+    const db = new x.default("hello.db", options);
     return db;
   }
   if (provider == "sqlite") {
     const x = await import("better-sqlite3");
     const options = {};
-    const db = x.default(":memory:", options);
+    const db = x.default("hello.db", options);
     return db;
   }
   throw new Error("Unknown provider: " + provider);
