@@ -28,9 +28,13 @@ impl Database {
 
     fn js_open(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
+        let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
         let rt = tokio::runtime::Runtime::new().or_else(|err| cx.throw_error(err.to_string()))?;
-        let db = libsql::v2::Database::open(db_path.clone())
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let db = if is_remote_path(&db_path) {
+            libsql::v2::Database::open_remote(db_path.clone(), auth_token)
+        } else {
+            libsql::v2::Database::open(db_path.clone())
+        }.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let fut = db.connect();
         let result = rt.block_on(fut);
         let conn = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
@@ -90,6 +94,12 @@ impl Database {
         };
         Ok(cx.boxed(stmt))
     }
+}
+
+fn is_remote_path(path: &str) -> bool {
+    path.starts_with("libsql://")
+    || path.starts_with("http://")
+    || path.starts_with("https://")
 }
 
 fn from_libsql_error(err: libsql::Error) -> String {

@@ -37,7 +37,8 @@ class Database {
       const syncAuth = opts.syncAuth ?? "";
       this.db = databaseOpenWithRpcSync(path, opts.syncUrl, syncAuth);
     } else {
-      this.db = databaseOpen(path);
+      const authToken = opts?.authToken ?? "";
+      this.db = databaseOpen(path, authToken);
     }
     this.memory = false;
     this.readonly = false;

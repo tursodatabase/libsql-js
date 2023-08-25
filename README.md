@@ -47,11 +47,28 @@ $ node hello.js
 
 #### Connecting to a database
 
+Local database file:
+
 ```javascript
 import Database from 'libsql-experimental';
 
 const db = new Database('hello.db');
 ````
+
+Remote libSQL server:
+
+```javascript
+import Database from 'libsql-experimental';
+
+const url = process.env.LIBSQL_URL;
+const authToken = process.env.LIBSQL_AUTH_TOKEN;
+
+const opts = {
+  authToken: authToken,
+};
+
+const db = new Database(url, opts);
+```
 
 #### Embedded replica
 
