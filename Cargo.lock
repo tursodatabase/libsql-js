@@ -519,6 +519,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "443144c8cdadd93ebf52ddb4056d257f5b52c04d3c804e657d19eb73fc33668b"
 
 [[package]]
+name = "hrana-client-proto"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f16b4e41e289da3fd60e64f245246a97e78fab7b3788c6d8147b3ae7d9f5e533"
+dependencies = [
+ "anyhow",
+ "base64",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "http"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -539,6 +551,12 @@ dependencies = [
  "http",
  "pin-project-lite",
 ]
+
+[[package]]
+name = "http-range-header"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "add0ab9360ddbd88cfeb3bd9574a1d85cfdfa14db10b3e21d3700dbc4328758f"
 
 [[package]]
 name = "httparse"
@@ -680,12 +698,20 @@ dependencies = [
 [[package]]
 name = "libsql"
 version = "0.1.6"
-source = "git+https://github.com/libsql/libsql/?rev=fa76af21b90f1b40d542e67158289588500d2b00#fa76af21b90f1b40d542e67158289588500d2b00"
+source = "git+https://github.com/libsql/libsql/?rev=0b28b0b005a1122ae372f8f799589f1689c1c10b#0b28b0b005a1122ae372f8f799589f1689c1c10b"
 dependencies = [
+ "async-trait",
+ "base64",
+ "crossbeam-channel",
  "futures",
+ "hrana-client-proto",
+ "hyper",
+ "hyper-rustls",
  "libsql-sys",
  "libsql_replication",
  "parking_lot",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",
@@ -704,7 +730,7 @@ dependencies = [
 [[package]]
 name = "libsql-sys"
 version = "0.2.11"
-source = "git+https://github.com/libsql/libsql/?rev=fa76af21b90f1b40d542e67158289588500d2b00#fa76af21b90f1b40d542e67158289588500d2b00"
+source = "git+https://github.com/libsql/libsql/?rev=0b28b0b005a1122ae372f8f799589f1689c1c10b#0b28b0b005a1122ae372f8f799589f1689c1c10b"
 dependencies = [
  "bindgen",
  "cc",
@@ -716,7 +742,7 @@ dependencies = [
 [[package]]
 name = "libsql_replication"
 version = "0.0.2"
-source = "git+https://github.com/libsql/libsql/?rev=fa76af21b90f1b40d542e67158289588500d2b00#fa76af21b90f1b40d542e67158289588500d2b00"
+source = "git+https://github.com/libsql/libsql/?rev=0b28b0b005a1122ae372f8f799589f1689c1c10b#0b28b0b005a1122ae372f8f799589f1689c1c10b"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -739,7 +765,8 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-stream",
- "tonic",
+ "tonic 0.9.2 (git+https://github.com/hyperium/tonic)",
+ "tonic-web",
  "tower",
  "tracing",
  "uuid",
@@ -1582,6 +1609,24 @@ dependencies = [
 [[package]]
 name = "tonic"
 version = "0.9.2"
+source = "git+https://github.com/hyperium/tonic?branch=lucio/grpc-web-client#2c14e674c1e308da0256c62e588a0f3848e870a5"
+dependencies = [
+ "base64",
+ "bytes",
+ "futures-util",
+ "http",
+ "http-body",
+ "percent-encoding",
+ "pin-project",
+ "tokio-stream",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
+name = "tonic"
+version = "0.9.2"
 source = "git+https://github.com/hyperium/tonic#21a9b7b129353fd1a3eedcd9bb22df69e139d7fd"
 dependencies = [
  "async-stream",
@@ -1611,6 +1656,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tonic-web"
+version = "0.9.2"
+source = "git+https://github.com/hyperium/tonic?branch=lucio/grpc-web-client#2c14e674c1e308da0256c62e588a0f3848e870a5"
+dependencies = [
+ "base64",
+ "bytes",
+ "futures-core",
+ "http",
+ "http-body",
+ "hyper",
+ "pin-project",
+ "tokio-stream",
+ "tonic 0.9.2 (git+https://github.com/hyperium/tonic?branch=lucio/grpc-web-client)",
+ "tower-http",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
 name = "tower"
 version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1628,6 +1693,24 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
+]
+
+[[package]]
+name = "tower-http"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55ae70283aba8d2a8b411c695c437fe25b8b5e44e23e780662002fc72fb47a82"
+dependencies = [
+ "bitflags 2.3.3",
+ "bytes",
+ "futures-core",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-range-header",
+ "pin-project-lite",
+ "tower-layer",
+ "tower-service",
 ]
 
 [[package]]

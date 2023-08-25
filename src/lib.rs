@@ -325,7 +325,7 @@ fn convert_row(
     for idx in 0..rows.column_count() {
         let v = row.get_value(idx).or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let column_name = rows.column_name(idx);
-        let key = cx.string(column_name);
+        let key = cx.string(column_name.unwrap());
         let v: Handle<'_, JsValue> = match v {
             libsql::Value::Null => cx.null().upcast(),
             libsql::Value::Integer(v) => cx.number(v as f64).upcast(),

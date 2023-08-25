@@ -11,7 +11,7 @@ exclude = ["index.node"]
 crate-type = ["cdylib"]
 
 [dependencies]
-libsql = { git = "https://github.com/libsql/libsql/", rev = "fa76af21b90f1b40d542e67158289588500d2b00" }
+libsql = { git = "https://github.com/libsql/libsql/", rev = "0b28b0b005a1122ae372f8f799589f1689c1c10b" }
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
 
 [dependencies.neon]
@@ -21,3 +21,4 @@ features = ["napi-6"]
 
 [patch.crates-io]
 tonic = { git = "https://github.com/hyperium/tonic" }
+tonic-web = { git = "https://github.com/hyperium/tonic", branch = "lucio/grpc-web-client" }
