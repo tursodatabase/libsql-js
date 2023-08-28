@@ -1,4 +1,5 @@
 use neon::prelude::*;
+use neon::types::JsPromise;
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -71,7 +72,7 @@ impl Database {
         Ok(cx.undefined())
     }
 
-    fn js_exec(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    fn js_exec_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let fut = db.conn.execute(&sql, ());
@@ -80,7 +81,32 @@ impl Database {
         Ok(cx.undefined())
     }
 
-    fn js_prepare<'a>(mut cx: FunctionContext) -> JsResult<JsBox<Statement>> {
+    fn js_exec_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        let sql = cx.argument::<JsString>(0)?.value(&mut cx);
+        let (deferred, promise) = cx.promise();
+        let channel = cx.channel();
+        let conn = db.conn.clone();
+        db.rt.spawn(async move {
+            let fut = conn.execute(&sql, ());
+            match fut.await {
+                Ok(_) => {
+                    deferred.settle_with(&channel, |mut cx| {
+                        Ok(cx.undefined())
+                    });
+                }
+                Err(err) => {
+                    deferred.settle_with(&channel, |mut cx| {
+                        cx.throw_error(from_libsql_error(err))?;
+                        Ok(cx.undefined())
+                    });
+                },
+            }
+        });
+        Ok(promise)
+    }
+
+    fn js_prepare_sync<'a>(mut cx: FunctionContext) -> JsResult<JsBox<Statement>> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let fut = db.conn.prepare(&sql);
@@ -88,18 +114,46 @@ impl Database {
         let stmt = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let stmt = Statement {
             conn: db.conn.clone(),
-            stmt: stmt,
+            stmt: Arc::new(stmt),
             raw: RefCell::new(false),
             rt: db.rt.handle().clone(),
         };
         Ok(cx.boxed(stmt))
     }
+
+    fn js_prepare_async<'a>(mut cx: FunctionContext) -> JsResult<JsPromise> {
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        let sql = cx.argument::<JsString>(0)?.value(&mut cx);
+        let (deferred, promise) = cx.promise();
+        let channel = cx.channel();
+        let rt = db.rt.handle().clone();
+        let conn = db.conn.clone();
+        db.rt.spawn(async move {
+            let fut = conn.prepare(&sql);
+            match fut.await {
+                Ok(stmt) => {
+                    let stmt = Statement {
+                        conn: conn.clone(),
+                        stmt: Arc::new(stmt),
+                        raw: RefCell::new(false),
+                        rt: rt,
+                    };
+                    deferred.settle_with(&channel, |mut cx| Ok(cx.boxed(stmt)));
+                }
+                Err(err) => {
+                    deferred.settle_with(&channel, |mut cx| {
+                        cx.throw_error(from_libsql_error(err))?;
+                        Ok(cx.undefined())
+                    });
+                },
+            }
+        });
+        Ok(promise)
+    }
 }
 
 fn is_remote_path(path: &str) -> bool {
-    path.starts_with("libsql://")
-    || path.starts_with("http://")
-    || path.starts_with("https://")
+    path.starts_with("libsql://") || path.starts_with("http://") || path.starts_with("https://")
 }
 
 fn from_libsql_error(err: libsql::Error) -> String {
@@ -111,7 +165,7 @@ fn from_libsql_error(err: libsql::Error) -> String {
 
 struct Statement {
     conn: Arc<libsql::v2::Connection>,
-    stmt: libsql::v2::Statement,
+    stmt: Arc<libsql::v2::Statement>,
     raw: RefCell<bool>,
     rt: tokio::runtime::Handle,
 }
@@ -205,7 +259,7 @@ impl Statement {
         result
     }
 
-    fn js_rows(mut cx: FunctionContext) -> JsResult<JsValue> {
+    fn js_rows_sync(mut cx: FunctionContext) -> JsResult<JsValue> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let mut params = vec![];
         for i in 0..cx.len() {
@@ -223,6 +277,44 @@ impl Statement {
             raw: *stmt.raw.borrow(),
         };
         Ok(cx.boxed(rows).upcast())
+    }
+
+    fn js_rows_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
+        let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
+        let mut params = vec![];
+        for i in 0..cx.len() {
+            let v = cx.argument::<JsValue>(i)?;
+            let v = js_value_to_value(&mut cx, v)?;
+            params.push(v);
+        }
+        let params = libsql::Params::Positional(params);
+        stmt.stmt.reset();
+        let (deferred, promise) = cx.promise();
+        let channel = cx.channel();
+        let rt = stmt.rt.clone();
+        let raw = *stmt.raw.borrow();
+        let stmt = stmt.stmt.clone();
+        rt.spawn(async move {
+            let fut = stmt.query(&params);
+            match fut.await {
+                Ok(rows) => {
+                    deferred.settle_with(&channel, move |mut cx| {
+                        let rows = Rows {
+                            rows: RefCell::new(rows),
+                            raw,
+                        };
+                        Ok(cx.boxed(rows))
+                    });
+                }
+                Err(err) => {
+                    deferred.settle_with(&channel, |mut cx| {
+                        cx.throw_error(from_libsql_error(err))?;
+                        Ok(cx.undefined())
+                    });
+                },
+            }
+        });
+        Ok(promise)
     }
 
     fn js_columns(mut cx: FunctionContext) -> JsResult<JsValue> {
@@ -370,12 +462,15 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("databaseOpenWithRpcSync", Database::js_open_with_rpc_sync)?;
     cx.export_function("databaseClose", Database::js_close)?;
     cx.export_function("databaseSync", Database::js_sync)?;
-    cx.export_function("databaseExec", Database::js_exec)?;
-    cx.export_function("databasePrepare", Database::js_prepare)?;
+    cx.export_function("databaseExecSync", Database::js_exec_sync)?;
+    cx.export_function("databaseExecAsync", Database::js_exec_async)?;
+    cx.export_function("databasePrepareSync", Database::js_prepare_sync)?;
+    cx.export_function("databasePrepareAsync", Database::js_prepare_async)?;
     cx.export_function("statementRaw", Statement::js_raw)?;
     cx.export_function("statementRun", Statement::js_run)?;
     cx.export_function("statementGet", Statement::js_get)?;
-    cx.export_function("statementRows", Statement::js_rows)?;
+    cx.export_function("statementRowsSync", Statement::js_rows_sync)?;
+    cx.export_function("statementRowsAsync", Statement::js_rows_async)?;
     cx.export_function("statementColumns", Statement::js_columns)?;
     cx.export_function("rowsNext", Rows::js_next)?;
     Ok(())

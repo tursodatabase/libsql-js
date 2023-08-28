@@ -21,6 +21,15 @@ test.after.always(async (t) => {
   }
 });
 
+test.serial("Statement.prepare() error", async (t) => {
+  const db = t.context.db;
+
+  const syntax_error = t.throws(() => {
+    return db.prepare("SYNTAX ERROR");
+  });
+  t.is(syntax_error.message, 'near "SYNTAX": syntax error');
+});
+
 test.serial("Statement.run() [positional]", async (t) => {
   const db = t.context.db;
 
