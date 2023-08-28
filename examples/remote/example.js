@@ -9,6 +9,10 @@ const opts = {
 
 const db = new Database(url, opts);
 
+db.exec("CREATE TABLE IF NOT EXISTS users (id INT PRIMARY KEY, name TEXT, email TEXT)");
+db.exec("INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.org')");
+db.exec("INSERT INTO users (id, name, email) VALUES (2, 'Bob', 'bob@example.com')");
+
 const row = db.prepare("SELECT * FROM users WHERE id = ?").get(1);
 
 console.log(`Name: ${row.name}, email: ${row.email}`);
