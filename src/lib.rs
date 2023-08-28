@@ -64,7 +64,7 @@ impl Database {
     }
 
     fn js_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
-        let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
         db.rt
             .block_on(db.db.sync())
             .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
@@ -72,7 +72,7 @@ impl Database {
     }
 
     fn js_exec(mut cx: FunctionContext) -> JsResult<JsUndefined> {
-        let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let fut = db.conn.execute(&sql, ());
         let result = db.rt.block_on(fut);
@@ -81,7 +81,7 @@ impl Database {
     }
 
     fn js_prepare<'a>(mut cx: FunctionContext) -> JsResult<JsBox<Statement>> {
-        let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let fut = db.conn.prepare(&sql);
         let result = db.rt.block_on(fut);
@@ -148,9 +148,7 @@ fn js_value_to_value(
 
 impl Statement {
     fn js_raw(mut cx: FunctionContext) -> JsResult<JsNull> {
-        let stmt = cx
-            .this()
-            .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
+        let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let raw = cx.argument::<JsBoolean>(0)?;
         let raw = raw.value(&mut cx);
         stmt.set_raw(raw);
@@ -162,9 +160,7 @@ impl Statement {
     }
 
     fn js_run(mut cx: FunctionContext) -> JsResult<JsValue> {
-        let stmt = cx
-            .this()
-            .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
+        let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, params)?;
         stmt.stmt.reset();
@@ -181,9 +177,7 @@ impl Statement {
     }
 
     fn js_get(mut cx: FunctionContext) -> JsResult<JsValue> {
-        let stmt = cx
-            .this()
-            .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
+        let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, params)?;
 
@@ -212,9 +206,7 @@ impl Statement {
     }
 
     fn js_rows(mut cx: FunctionContext) -> JsResult<JsValue> {
-        let stmt = cx
-            .this()
-            .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
+        let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let mut params = vec![];
         for i in 0..cx.len() {
             let v = cx.argument::<JsValue>(i)?;
@@ -234,9 +226,7 @@ impl Statement {
     }
 
     fn js_columns(mut cx: FunctionContext) -> JsResult<JsValue> {
-        let stmt = cx
-            .this()
-            .downcast_or_throw::<JsBox<Statement>, _>(&mut cx)?;
+        let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let result = cx.empty_array();
         for (i, col) in stmt.stmt.columns().iter().enumerate() {
             let column = cx.empty_object();
@@ -265,7 +255,7 @@ impl Finalize for Rows {}
 
 impl Rows {
     fn js_next(mut cx: FunctionContext) -> JsResult<JsValue> {
-        let rows = cx.this().downcast_or_throw::<JsBox<Rows>, _>(&mut cx)?;
+        let rows: Handle<'_, JsBox<Rows>> = cx.this()?;
         let raw = rows.raw;
         let mut rows = rows.rows.borrow_mut();
         match rows
