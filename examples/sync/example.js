@@ -1,6 +1,9 @@
 import Database from "libsql-experimental";
 
 const url = process.env.LIBSQL_URL;
+if (!url) {
+  throw new Error("Environment variable LIBSQL_URL is not set.");
+}
 const authToken = process.env.LIBSQL_AUTH_TOKEN;
 
 const options = { syncUrl: url, authToken: authToken };
