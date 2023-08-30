@@ -34,8 +34,14 @@ class Database {
    */
   constructor(path, opts) {
     if (opts && opts.syncUrl) {
-      const syncAuth = opts.syncAuth ?? "";
-      this.db = databaseOpenWithRpcSync(path, opts.syncUrl, syncAuth);
+      var authToken = "";
+      if (opts.syncAuth) {
+          console.warn("Warning: The `syncAuth` option is deprecated, please use `authToken` option instead.");
+          authToken = opts.syncAuth;
+      } else if (opts.authToken) {
+          authToken = opts.authToken;
+      }
+      this.db = databaseOpenWithRpcSync(path, opts.syncUrl, authToken);
     } else {
       const authToken = opts?.authToken ?? "";
       this.db = databaseOpen(path, authToken);
