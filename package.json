@@ -14,7 +14,8 @@
   "types": "types/index.d.ts",
   "files": [
     "index.js",
-    "promise.js"
+    "promise.js",
+    "types/index.d.ts"
   ],
   "exports": {
     ".": "./index.js",
