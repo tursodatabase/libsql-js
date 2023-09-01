@@ -140,4 +140,4 @@ Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in libSQL by you, shall be licensed as MIT, without any additional
 terms or conditions.
 
-[MIT license]: https://github.com/libsql/libsql-experimental-node/blob/main/LICENSE.md
+[MIT license]: https://github.com/libsql/libsql-experimental-node/blob/main/LICENSE
