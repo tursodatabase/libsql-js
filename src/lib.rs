@@ -7,6 +7,7 @@ struct Database {
     db: libsql::v2::Database,
     conn: Arc<libsql::v2::Connection>,
     rt: tokio::runtime::Runtime,
+    default_safe_integers: RefCell<bool>,
 }
 
 unsafe impl Sync for Database {}
@@ -24,6 +25,7 @@ impl Database {
             db,
             conn: Arc::new(conn),
             rt,
+            default_safe_integers: RefCell::new(false),
         }
     }
 
@@ -116,6 +118,7 @@ impl Database {
             conn: db.conn.clone(),
             stmt: Arc::new(stmt),
             raw: RefCell::new(false),
+            safe_ints: *db.default_safe_integers.borrow(),
             rt: db.rt.handle().clone(),
         };
         Ok(cx.boxed(stmt))
@@ -126,6 +129,7 @@ impl Database {
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let (deferred, promise) = cx.promise();
         let channel = cx.channel();
+        let safe_ints = *db.default_safe_integers.borrow();
         let rt = db.rt.handle().clone();
         let conn = db.conn.clone();
         db.rt.spawn(async move {
@@ -136,6 +140,7 @@ impl Database {
                         conn: conn.clone(),
                         stmt: Arc::new(stmt),
                         raw: RefCell::new(false),
+                        safe_ints,
                         rt: rt,
                     };
                     deferred.settle_with(&channel, |mut cx| Ok(cx.boxed(stmt)));
@@ -150,6 +155,19 @@ impl Database {
         });
         Ok(promise)
     }
+
+    fn js_default_safe_integers(mut cx: FunctionContext) -> JsResult<JsNull> {
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        let toggle = cx.argument::<JsBoolean>(0)?;
+        let toggle = toggle.value(&mut cx);
+        db.set_default_safe_integers(toggle);
+        Ok(cx.null())
+    }
+
+    fn set_default_safe_integers(&self, toggle: bool) {
+        self.default_safe_integers.replace(toggle);
+    }
+
 }
 
 fn is_remote_path(path: &str) -> bool {
@@ -167,6 +185,7 @@ struct Statement {
     conn: Arc<libsql::v2::Connection>,
     stmt: Arc<libsql::v2::Statement>,
     raw: RefCell<bool>,
+    safe_ints: bool,
     rt: tokio::runtime::Handle,
 }
 
@@ -245,11 +264,11 @@ impl Statement {
             Some(row) => {
                 if *stmt.raw.borrow() {
                     let mut result = cx.empty_array();
-                    convert_row_raw(&mut cx, &mut result, &rows, &row)?;
+                    convert_row_raw(&mut cx, stmt.safe_ints, &mut result, &rows, &row)?;
                     Ok(result.upcast())
                 } else {
                     let mut result = cx.empty_object();
-                    convert_row(&mut cx, &mut result, &rows, &row)?;
+                    convert_row(&mut cx, stmt.safe_ints, &mut result, &rows, &row)?;
                     Ok(result.upcast())
                 }
             }
@@ -275,6 +294,7 @@ impl Statement {
         let rows = Rows {
             rows: RefCell::new(rows),
             raw: *stmt.raw.borrow(),
+            safe_ints: stmt.safe_ints,
         };
         Ok(cx.boxed(rows).upcast())
     }
@@ -293,6 +313,7 @@ impl Statement {
         let channel = cx.channel();
         let rt = stmt.rt.clone();
         let raw = *stmt.raw.borrow();
+        let safe_ints = stmt.safe_ints;
         let stmt = stmt.stmt.clone();
         rt.spawn(async move {
             let fut = stmt.query(&params);
@@ -302,6 +323,7 @@ impl Statement {
                         let rows = Rows {
                             rows: RefCell::new(rows),
                             raw,
+                            safe_ints,
                         };
                         Ok(cx.boxed(rows))
                     });
@@ -341,6 +363,7 @@ impl Statement {
 struct Rows {
     rows: RefCell<libsql::v2::Rows>,
     raw: bool,
+    safe_ints: bool,
 }
 
 impl Finalize for Rows {}
@@ -349,6 +372,7 @@ impl Rows {
     fn js_next(mut cx: FunctionContext) -> JsResult<JsValue> {
         let rows: Handle<'_, JsBox<Rows>> = cx.this()?;
         let raw = rows.raw;
+        let safe_ints = rows.safe_ints;
         let mut rows = rows.rows.borrow_mut();
         match rows
             .next()
@@ -357,11 +381,11 @@ impl Rows {
             Some(row) => {
                 if raw {
                     let mut result = cx.empty_array();
-                    convert_row_raw(&mut cx, &mut result, &rows, &row)?;
+                    convert_row_raw(&mut cx, safe_ints, &mut result, &rows, &row)?;
                     Ok(result.upcast())
                 } else {
                     let mut result = cx.empty_object();
-                    convert_row(&mut cx, &mut result, &rows, &row)?;
+                    convert_row(&mut cx, safe_ints, &mut result, &rows, &row)?;
                     Ok(result.upcast())
                 }
             }
@@ -412,6 +436,7 @@ fn convert_params_object(
 
 fn convert_row(
     cx: &mut FunctionContext,
+    safe_ints: bool,
     result: &mut JsObject,
     rows: &libsql::v2::Rows,
     row: &libsql::v2::Row,
@@ -424,7 +449,13 @@ fn convert_row(
         let key = cx.string(column_name);
         let v: Handle<'_, JsValue> = match v {
             libsql::Value::Null => cx.null().upcast(),
-            libsql::Value::Integer(v) => cx.number(v as f64).upcast(),
+            libsql::Value::Integer(v) => {
+                if safe_ints {
+                    neon::types::JsBigInt::from_i64(cx, v).upcast()
+                } else {
+                    cx.number(v as f64).upcast()
+                }
+            },
             libsql::Value::Real(v) => cx.number(v).upcast(),
             libsql::Value::Text(v) => cx.string(v).upcast(),
             libsql::Value::Blob(_v) => todo!("unsupported type"),
@@ -436,6 +467,7 @@ fn convert_row(
 
 fn convert_row_raw(
     cx: &mut FunctionContext,
+    safe_ints: bool,
     result: &mut JsArray,
     rows: &libsql::v2::Rows,
     row: &libsql::v2::Row,
@@ -446,7 +478,13 @@ fn convert_row_raw(
             .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let v: Handle<'_, JsValue> = match v {
             libsql::Value::Null => cx.null().upcast(),
-            libsql::Value::Integer(v) => cx.number(v as f64).upcast(),
+            libsql::Value::Integer(v) => {
+                if safe_ints {
+                    neon::types::JsBigInt::from_i64(cx, v).upcast()
+                } else {
+                    cx.number(v as f64).upcast()
+                }
+            },
             libsql::Value::Real(v) => cx.number(v).upcast(),
             libsql::Value::Text(v) => cx.string(v).upcast(),
             libsql::Value::Blob(_v) => todo!("unsupported type"),
@@ -466,6 +504,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("databaseExecAsync", Database::js_exec_async)?;
     cx.export_function("databasePrepareSync", Database::js_prepare_sync)?;
     cx.export_function("databasePrepareAsync", Database::js_prepare_async)?;
+    cx.export_function("databaseDefaultSafeIntegers", Database::js_default_safe_integers)?;
     cx.export_function("statementRaw", Statement::js_raw)?;
     cx.export_function("statementRun", Statement::js_run)?;
     cx.export_function("statementGet", Statement::js_get)?;

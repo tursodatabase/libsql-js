@@ -14,6 +14,7 @@ const {
   databaseSync,
   databaseExecSync,
   databasePrepareSync,
+  databaseDefaultSafeIntegers,
   statementRaw,
   statementGet,
   statementRun,
@@ -166,8 +167,12 @@ class Database {
     databaseClose.call(this.db);
   }
 
-  defaultSafeIntegers(...args) {
-    throw new Error("not implemented");
+  /**
+   * Toggle 64-bit integer support.
+   */
+  defaultSafeIntegers(toggle) {
+    databaseDefaultSafeIntegers.call(this.db, toggle || true);
+    return this;
   }
 
   unsafeMode(...args) {
