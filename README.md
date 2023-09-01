@@ -3,7 +3,7 @@
 [![npm](https://badge.fury.io/js/libsql-experimental.svg)](https://badge.fury.io/js/libsql-experimental)
 
 [libSQL](https://github.com/libsql/libsql) is an open source, open contribution fork of SQLite.
-This source repository contains libSQL API bindings for Node, which aims to be compatible with [better-sqlite3](https://github.com/WiseLibs/better-sqlite3/).
+This source repository contains libSQL API bindings for Node, which aims to be compatible with [better-sqlite3](https://github.com/WiseLibs/better-sqlite3/), but with opt-in promise API.
 
 ## Features
 
