@@ -11,7 +11,7 @@ exclude = ["index.node"]
 crate-type = ["cdylib"]
 
 [dependencies]
-libsql = { git = "https://github.com/libsql/libsql/", rev = "3e75012192fedaa8e2c7faa9f02610c1bae1cc07" }
+libsql = { git = "https://github.com/libsql/libsql/", rev = "d36276eab153a88aee724268bc01a648619abe9a" }
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
 
 [dependencies.neon]

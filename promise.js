@@ -10,6 +10,7 @@ if (0) {
 const {
   databaseOpen,
   databaseOpenWithRpcSync,
+  databaseInTransaction,
   databaseClose,
   databaseSync,
   databaseExecAsync,
@@ -51,7 +52,15 @@ class Database {
     this.readonly = false;
     this.name = "";
     this.open = true;
-    this.inTransaction = false;
+
+    const db = this.db;
+    Object.defineProperties(this, {
+      inTransaction: {
+        get() {
+          return databaseInTransaction(db);
+        }
+      },
+    });
   }
 
   sync() {
@@ -78,15 +87,15 @@ class Database {
     if (typeof fn !== "function")
       throw new TypeError("Expected first argument to be a function");
 
-    return (...bindParameters) => {
+    return async (...bindParameters) => {
       // TODO: Use libsql transaction API.
-      this.exec("BEGIN");
+      await this.exec("BEGIN");
       try {
         const result = fn(...bindParameters);
-        this.exec("COMMIT");
+        await this.exec("COMMIT");
         return result;
       } catch (err) {
-        this.exec("ROLLBACK");
+        await this.exec("ROLLBACK");
         throw err;
       }
     };

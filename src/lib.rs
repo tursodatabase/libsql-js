@@ -60,6 +60,12 @@ impl Database {
         Ok(cx.boxed(db))
     }
 
+    fn js_in_transaction(mut cx: FunctionContext) -> JsResult<JsValue> {
+        let db = cx.argument::<JsBox<Database>>(0)?;
+        let result = !db.conn.is_autocommit();
+        Ok(cx.boolean(result).upcast())
+    }
+
     fn js_close(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         //let db = cx.this().downcast_or_throw::<JsBox<Database>, _>(&mut cx)?;
         //db.db.close();
@@ -498,6 +504,7 @@ fn convert_row_raw(
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("databaseOpen", Database::js_open)?;
     cx.export_function("databaseOpenWithRpcSync", Database::js_open_with_rpc_sync)?;
+    cx.export_function("databaseInTransaction", Database::js_in_transaction)?;
     cx.export_function("databaseClose", Database::js_close)?;
     cx.export_function("databaseSync", Database::js_sync)?;
     cx.export_function("databaseExecSync", Database::js_exec_sync)?;

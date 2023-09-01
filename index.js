@@ -10,6 +10,7 @@ if (0) {
 const {
   databaseOpen,
   databaseOpenWithRpcSync,
+  databaseInTransaction,
   databaseClose,
   databaseSync,
   databaseExecSync,
@@ -46,7 +47,15 @@ class Database {
     this.readonly = false;
     this.name = "";
     this.open = true;
-    this.inTransaction = false;
+
+    const db = this.db;
+    Object.defineProperties(this, {
+      inTransaction: {
+        get() {
+          return databaseInTransaction(db);
+        }
+      },
+    });
   }
 
   sync() {

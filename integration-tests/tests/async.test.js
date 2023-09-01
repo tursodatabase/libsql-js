@@ -148,14 +148,17 @@ test.serial("Database.transaction()", async (t) => {
   );
 
   const insertMany = db.transaction((users) => {
+    t.is(db.inTransaction, true);
     for (const user of users) insert.run(user);
   });
 
-  insertMany([
+  t.is(db.inTransaction, false);
+  await insertMany([
     { name: "Joey", email: "joey@example.org" },
     { name: "Sally", email: "sally@example.org" },
     { name: "Junior", email: "junior@example.org" },
   ]);
+  t.is(db.inTransaction, false);
 
   const stmt = await db.prepare("SELECT * FROM users WHERE id = ?");
   t.is(stmt.get(3).name, "Joey");
