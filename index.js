@@ -40,7 +40,8 @@ class Database {
       const authToken = opts?.authToken ?? "";
       this.db = databaseOpen(path, authToken);
     }
-    this.memory = false;
+    // TODO: Use a libSQL API for this?
+    this.memory = path === ":memory:";
     this.readonly = false;
     this.name = "";
     this.open = true;

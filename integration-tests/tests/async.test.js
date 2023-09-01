@@ -21,6 +21,11 @@ test.after.always(async (t) => {
   }
 });
 
+test.serial("Open in-memory database", async (t) => {
+  const db = await connect(":memory:");
+  t.is(db.memory, true);
+});
+
 test.serial("Statement.prepare() error", async (t) => {
   const db = t.context.db;
 
@@ -171,9 +176,10 @@ test.serial("errors", async (t) => {
   t.is(no_such_table_error.message, "no such table: missing_table");
 });
 
-const connect = async () => {
+const connect = async (path_opt) => {
+  const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;
-  const database = process.env.LIBSQL_DATABASE ?? "hello.db";
+  const database = process.env.LIBSQL_DATABASE ?? path;
   const x = await import("libsql-experimental/promise");
   const options = {};
   const db = new x.default(database, options);
