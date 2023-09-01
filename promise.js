@@ -12,12 +12,12 @@ const {
   databaseOpenWithRpcSync,
   databaseClose,
   databaseSync,
-  databaseExecSync,
-  databasePrepareSync,
+  databaseExecAsync,
+  databasePrepareAsync,
   statementRaw,
   statementGet,
   statementRun,
-  statementRowsSync,
+  statementRowsAsync,
   statementColumns,
   rowsNext,
 } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
@@ -34,8 +34,14 @@ class Database {
    */
   constructor(path, opts) {
     if (opts && opts.syncUrl) {
-      const syncAuth = opts.syncAuth ?? "";
-      this.db = databaseOpenWithRpcSync(path, opts.syncUrl, syncAuth);
+      var authToken = "";
+      if (opts.syncAuth) {
+          console.warn("Warning: The `syncAuth` option is deprecated, please use `authToken` option instead.");
+          authToken = opts.syncAuth;
+      } else if (opts.authToken) {
+          authToken = opts.authToken;
+      }
+      this.db = databaseOpenWithRpcSync(path, opts.syncUrl, authToken);
     } else {
       const authToken = opts?.authToken ?? "";
       this.db = databaseOpen(path, authToken);
@@ -57,8 +63,9 @@ class Database {
    * @param {string} sql - The SQL statement string to prepare.
    */
   prepare(sql) {
-    const stmt = databasePrepareSync.call(this.db, sql);
-    return new Statement(stmt);
+    return databasePrepareAsync.call(this.db, sql).then((stmt) => {
+      return new Statement(stmt);
+    });
   }
 
   /**
@@ -155,7 +162,7 @@ class Database {
    * @param {string} sql - The SQL statement string to execute.
    */
   exec(sql) {
-    databaseExecSync.call(this.db, sql);
+    return databaseExecAsync.call(this.db, sql);
   }
 
   /**
@@ -221,8 +228,8 @@ class Statement {
    *
    * @param bindParameters - The bind parameters for executing the statement.
    */
-  iterate(...bindParameters) {
-    const rows = statementRowsSync.call(this.stmt, ...bindParameters);
+  async iterate(...bindParameters) {
+    const rows = await statementRowsAsync.call(this.stmt, ...bindParameters);
     const iter = {
       next() {
         const row = rowsNext.call(rows);
@@ -243,9 +250,10 @@ class Statement {
    *
    * @param bindParameters - The bind parameters for executing the statement.
    */
-  all(...bindParameters) {
+  async all(...bindParameters) {
     const result = [];
-    for (const row of this.iterate(...bindParameters)) {
+    const it = await this.iterate(...bindParameters);
+    for (const row of it) {
       result.push(row);
     }
     return result;

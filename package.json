@@ -12,6 +12,14 @@
   ],
   "main": "index.js",
   "types": "types/index.d.ts",
+  "files": [
+    "index.js",
+    "promise.js"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./promise": "./promise.js"
+  },
   "scripts": {
     "test": "cargo test",
     "debug": "cargo build --message-format=json | neon dist",
