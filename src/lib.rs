@@ -241,7 +241,7 @@ impl Statement {
     fn js_run(mut cx: FunctionContext) -> JsResult<JsValue> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let params = cx.argument::<JsValue>(0)?;
-        let params = convert_params(&mut cx, params)?;
+        let params = convert_params(&mut cx, &stmt, params)?;
         stmt.stmt.reset();
         let fut = stmt.stmt.execute(&params);
         let result = stmt.rt.block_on(fut);
@@ -258,7 +258,7 @@ impl Statement {
     fn js_get(mut cx: FunctionContext) -> JsResult<JsValue> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let params = cx.argument::<JsValue>(0)?;
-        let params = convert_params(&mut cx, params)?;
+        let params = convert_params(&mut cx, &stmt, params)?;
         let safe_ints = *stmt.safe_ints.borrow();
         let fut = stmt.stmt.query(&params);
         let result = stmt.rt.block_on(fut);
@@ -412,13 +412,13 @@ impl Rows {
     }
 }
 
-fn convert_params(cx: &mut FunctionContext, v: Handle<'_, JsValue>) -> NeonResult<libsql::Params> {
+fn convert_params(cx: &mut FunctionContext, stmt: &Statement, v: Handle<'_, JsValue>) -> NeonResult<libsql::Params> {
     if v.is_a::<JsArray, _>(cx) {
         let v = v.downcast_or_throw::<JsArray, _>(cx)?;
         convert_params_array(cx, v)
     } else {
         let v = v.downcast_or_throw::<JsObject, _>(cx)?;
-        convert_params_object(cx, v)
+        convert_params_object(cx, stmt, v)
     }
 }
 
@@ -437,6 +437,7 @@ fn convert_params_array(
 
 fn convert_params_object(
     cx: &mut FunctionContext,
+    stmt: &Statement,
     v: Handle<'_, JsObject>,
 ) -> NeonResult<libsql::Params> {
     let mut params = vec![];
@@ -446,8 +447,8 @@ fn convert_params_object(
         let key = key.downcast_or_throw::<JsString, _>(cx)?;
         let v = v.get(cx, key)?;
         let v = js_value_to_value(cx, v)?;
-        let key = key.value(cx);
-        params.push((format!(":{}", key), v));
+        let name = stmt.stmt.parameter_name((i + 1) as i32).unwrap().to_string();
+        params.push((name, v));
     }
     Ok(libsql::Params::Named(params))
 }
