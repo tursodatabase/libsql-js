@@ -15,11 +15,13 @@ const {
   databaseSync,
   databaseExecAsync,
   databasePrepareAsync,
+  databaseDefaultSafeIntegers,
   statementRaw,
   statementGet,
   statementRun,
   statementRowsAsync,
   statementColumns,
+  statementSafeIntegers,
   rowsNext,
 } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
 
@@ -182,8 +184,12 @@ class Database {
     databaseClose.call(this.db);
   }
 
-  defaultSafeIntegers(...args) {
-    throw new Error("not implemented");
+  /**
+   * Toggle 64-bit integer support.
+   */
+  defaultSafeIntegers(toggle) {
+    databaseDefaultSafeIntegers.call(this.db, toggle || true);
+    return this;
   }
 
   unsafeMode(...args) {
@@ -275,6 +281,15 @@ class Statement {
   columns() {
     return statementColumns.call(this.stmt);
   }
+
+  /**
+   * Toggle 64-bit integer support.
+   */
+  safeIntegers(toggle) {
+    statementSafeIntegers.call(this.stmt, toggle || true);
+    return this;
+  }
+
 }
 
 module.exports = Database;

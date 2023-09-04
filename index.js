@@ -21,6 +21,7 @@ const {
   statementRun,
   statementRowsSync,
   statementColumns,
+  statementSafeIntegers,
   rowsNext,
 } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
 
@@ -277,6 +278,14 @@ class Statement {
    */
   columns() {
     return statementColumns.call(this.stmt);
+  }
+
+  /**
+   * Toggle 64-bit integer support.
+   */
+  safeIntegers(toggle) {
+    statementSafeIntegers.call(this.stmt, toggle || true);
+    return this;
   }
 }
 

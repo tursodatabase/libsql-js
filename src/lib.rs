@@ -124,7 +124,7 @@ impl Database {
             conn: db.conn.clone(),
             stmt: Arc::new(stmt),
             raw: RefCell::new(false),
-            safe_ints: *db.default_safe_integers.borrow(),
+            safe_ints: RefCell::new(*db.default_safe_integers.borrow()),
             rt: db.rt.handle().clone(),
         };
         Ok(cx.boxed(stmt))
@@ -146,7 +146,7 @@ impl Database {
                         conn: conn.clone(),
                         stmt: Arc::new(stmt),
                         raw: RefCell::new(false),
-                        safe_ints,
+                        safe_ints: RefCell::new(safe_ints),
                         rt: rt,
                     };
                     deferred.settle_with(&channel, |mut cx| Ok(cx.boxed(stmt)));
@@ -191,7 +191,7 @@ struct Statement {
     conn: Arc<libsql::v2::Connection>,
     stmt: Arc<libsql::v2::Statement>,
     raw: RefCell<bool>,
-    safe_ints: bool,
+    safe_ints: RefCell<bool>,
     rt: tokio::runtime::Handle,
 }
 
@@ -259,7 +259,7 @@ impl Statement {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, params)?;
-
+        let safe_ints = *stmt.safe_ints.borrow();
         let fut = stmt.stmt.query(&params);
         let result = stmt.rt.block_on(fut);
         let mut rows = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
@@ -270,11 +270,11 @@ impl Statement {
             Some(row) => {
                 if *stmt.raw.borrow() {
                     let mut result = cx.empty_array();
-                    convert_row_raw(&mut cx, stmt.safe_ints, &mut result, &rows, &row)?;
+                    convert_row_raw(&mut cx, safe_ints, &mut result, &rows, &row)?;
                     Ok(result.upcast())
                 } else {
                     let mut result = cx.empty_object();
-                    convert_row(&mut cx, stmt.safe_ints, &mut result, &rows, &row)?;
+                    convert_row(&mut cx, safe_ints, &mut result, &rows, &row)?;
                     Ok(result.upcast())
                 }
             }
@@ -300,7 +300,7 @@ impl Statement {
         let rows = Rows {
             rows: RefCell::new(rows),
             raw: *stmt.raw.borrow(),
-            safe_ints: stmt.safe_ints,
+            safe_ints: *stmt.safe_ints.borrow(),
         };
         Ok(cx.boxed(rows).upcast())
     }
@@ -319,7 +319,7 @@ impl Statement {
         let channel = cx.channel();
         let rt = stmt.rt.clone();
         let raw = *stmt.raw.borrow();
-        let safe_ints = stmt.safe_ints;
+        let safe_ints = *stmt.safe_ints.borrow();
         let stmt = stmt.stmt.clone();
         rt.spawn(async move {
             let fut = stmt.query(&params);
@@ -363,6 +363,18 @@ impl Statement {
             result.set(&mut cx, i as u32, column)?;
         }
         Ok(result.upcast())
+    }
+
+    fn js_safe_integers(mut cx: FunctionContext) -> JsResult<JsNull> {
+        let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
+        let toggle = cx.argument::<JsBoolean>(0)?;
+        let toggle = toggle.value(&mut cx);
+        stmt.set_safe_integers(toggle);
+        Ok(cx.null())
+    }
+
+    fn set_safe_integers(&self, toggle: bool) {
+        self.safe_ints.replace(toggle);
     }
 }
 
@@ -518,6 +530,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("statementRowsSync", Statement::js_rows_sync)?;
     cx.export_function("statementRowsAsync", Statement::js_rows_async)?;
     cx.export_function("statementColumns", Statement::js_columns)?;
+    cx.export_function("statementSafeIntegers", Statement::js_safe_integers)?;
     cx.export_function("rowsNext", Rows::js_next)?;
     Ok(())
 }

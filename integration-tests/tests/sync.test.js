@@ -110,10 +110,21 @@ test.serial("Statement.all() [raw]", async (t) => {
   t.deepEqual(stmt.raw().all(), expected);
 });
 
-test.serial("Statement.all() [64-bit integers]", async (t) => {
+test.serial("Statement.all() [default safe integers]", async (t) => {
   const db = t.context.db;
   db.defaultSafeIntegers();
   const stmt = db.prepare("SELECT * FROM users");
+  const expected = [
+    [1n, "Alice", "alice@example.org"],
+    [2n, "Bob", "bob@example.com"],
+  ];
+  t.deepEqual(stmt.raw().all(), expected);
+});
+
+test.serial("Statement.all() [statement safe integers]", async (t) => {
+  const db = t.context.db;
+  const stmt = db.prepare("SELECT * FROM users");
+  stmt.safeIntegers();
   const expected = [
     [1n, "Alice", "alice@example.org"],
     [2n, "Bob", "bob@example.com"],
