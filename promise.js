@@ -7,6 +7,8 @@ if (0) {
   require("./.targets");
 }
 
+const SqliteError = require("./sqlite-error");
+
 const {
   databaseOpen,
   databaseOpenWithRpcSync,
@@ -77,6 +79,8 @@ class Database {
   prepare(sql) {
     return databasePrepareAsync.call(this.db, sql).then((stmt) => {
       return new Statement(stmt);
+    }).catch((err) => {
+      throw new SqliteError(err.message, ""); // TODO: SQLite error code
     });
   }
 
@@ -174,7 +178,9 @@ class Database {
    * @param {string} sql - The SQL statement string to execute.
    */
   exec(sql) {
-    return databaseExecAsync.call(this.db, sql);
+    return databaseExecAsync.call(this.db, sql).catch((err) => {
+      throw new SqliteError(err.message, ""); // TODO: SQLite error code
+    });
   }
 
   /**
@@ -298,3 +304,4 @@ class Statement {
 }
 
 module.exports = Database;
+module.exports.SqliteError = SqliteError;

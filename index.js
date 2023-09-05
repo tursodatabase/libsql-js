@@ -25,6 +25,8 @@ const {
   rowsNext,
 } = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
 
+const SqliteError = require("./sqlite-error");
+
 /**
  * Database represents a connection that can prepare and execute SQL statements.
  */
@@ -75,8 +77,12 @@ class Database {
    * @param {string} sql - The SQL statement string to prepare.
    */
   prepare(sql) {
-    const stmt = databasePrepareSync.call(this.db, sql);
-    return new Statement(stmt);
+    try {
+      const stmt = databasePrepareSync.call(this.db, sql);
+      return new Statement(stmt);  
+    } catch (err) {
+      throw new SqliteError(err.message, ""); // TODO: SQLite error code
+    }
   }
 
   /**
@@ -173,7 +179,11 @@ class Database {
    * @param {string} sql - The SQL statement string to execute.
    */
   exec(sql) {
-    databaseExecSync.call(this.db, sql);
+    try {
+      databaseExecSync.call(this.db, sql);
+    } catch (err) {
+      throw new SqliteError(err.message, ""); // TODO: SQLite error code
+    }
   }
 
   /**
@@ -295,3 +305,4 @@ class Statement {
 }
 
 module.exports = Database;
+module.exports.SqliteError = SqliteError;

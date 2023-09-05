@@ -1,7 +1,7 @@
 import test from "ava";
 
 test.beforeEach(async (t) => {
-  const db = await connect();
+  const [db, errorType] = await connect();
   await db.exec("DROP TABLE IF EXISTS users");
   await db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
   await db.exec(
@@ -12,6 +12,7 @@ test.beforeEach(async (t) => {
   );
   t.context = {
     db,
+    errorType
   };
 });
 
@@ -22,17 +23,19 @@ test.after.always(async (t) => {
 });
 
 test.serial("Open in-memory database", async (t) => {
-  const db = await connect(":memory:");
+  const [db] = await connect(":memory:");
   t.is(db.memory, true);
 });
 
 test.serial("Statement.prepare() error", async (t) => {
   const db = t.context.db;
 
-  const syntax_error = await t.throwsAsync(async () => {
+  await t.throwsAsync(async () => {
     return await db.prepare("SYNTAX ERROR");
+  }, {
+    instanceOf: t.context.errorType,
+    message: 'near "SYNTAX": syntax error'
   });
-  t.is(syntax_error.message, 'near "SYNTAX": syntax error');
 });
 
 test.serial("Statement.run() [positional]", async (t) => {
@@ -234,14 +237,18 @@ test.serial("Database.transaction()", async (t) => {
 test.serial("errors", async (t) => {
   const db = t.context.db;
 
-  const syntax_error = await t.throwsAsync(async () => {
+  await t.throwsAsync(async () => {
     await db.exec("SYNTAX ERROR");
+  }, {
+    instanceOf: t.context.errorType,
+    message: 'near "SYNTAX": syntax error'
   });
-  t.is(syntax_error.message, 'near "SYNTAX": syntax error');
-  const no_such_table_error = await t.throwsAsync(async () => {
+  await t.throwsAsync(async () => {
     await db.exec("SELECT * FROM missing_table");
+  }, {
+    instanceOf: t.context.errorType,
+    message: "no such table: missing_table"
   });
-  t.is(no_such_table_error.message, "no such table: missing_table");
 });
 
 const connect = async (path_opt) => {
@@ -251,5 +258,5 @@ const connect = async (path_opt) => {
   const x = await import("libsql-experimental/promise");
   const options = {};
   const db = new x.default(database, options);
-  return db;
+  return [db, x.SqliteError];
 };

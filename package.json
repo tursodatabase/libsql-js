@@ -14,6 +14,7 @@
   "types": "types/index.d.ts",
   "files": [
     "index.js",
+    "sqlite-error.js",
     "promise.js",
     "types/index.d.ts"
   ],
