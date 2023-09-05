@@ -687,8 +687,8 @@ dependencies = [
 
 [[package]]
 name = "libsql"
-version = "0.1.6"
-source = "git+https://github.com/libsql/libsql/?rev=bf371292d6f2af1643feae88f48ebecb38f5bd09#bf371292d6f2af1643feae88f48ebecb38f5bd09"
+version = "0.1.7"
+source = "git+https://github.com/libsql/libsql/?rev=322f7d0151e1a70df2c69139b6ad2edb181d5ff5#322f7d0151e1a70df2c69139b6ad2edb181d5ff5"
 dependencies = [
  "async-trait",
  "base64",
@@ -720,8 +720,8 @@ dependencies = [
 
 [[package]]
 name = "libsql-sys"
-version = "0.2.11"
-source = "git+https://github.com/libsql/libsql/?rev=bf371292d6f2af1643feae88f48ebecb38f5bd09#bf371292d6f2af1643feae88f48ebecb38f5bd09"
+version = "0.2.12"
+source = "git+https://github.com/libsql/libsql/?rev=322f7d0151e1a70df2c69139b6ad2edb181d5ff5#322f7d0151e1a70df2c69139b6ad2edb181d5ff5"
 dependencies = [
  "bindgen",
  "cc",
@@ -732,8 +732,8 @@ dependencies = [
 
 [[package]]
 name = "libsql_replication"
-version = "0.0.2"
-source = "git+https://github.com/libsql/libsql/?rev=bf371292d6f2af1643feae88f48ebecb38f5bd09#bf371292d6f2af1643feae88f48ebecb38f5bd09"
+version = "0.0.3"
+source = "git+https://github.com/libsql/libsql/?rev=322f7d0151e1a70df2c69139b6ad2edb181d5ff5#322f7d0151e1a70df2c69139b6ad2edb181d5ff5"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -1056,9 +1056,9 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.11.9"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b82eaa1d779e9a4bc1c3217db8ffbeabaae1dca241bf70183242128d48681cd"
+checksum = "aa8473a65b88506c106c28ae905ca4a2b83a2993640467a41bb3080627ddfd2c"
 dependencies = [
  "bytes",
  "prost-derive",
@@ -1066,15 +1066,15 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.11.9"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5d2d8d10f3c6ded6da8b05b5fb3b8a5082514344d56c9f871412d29b4e075b4"
+checksum = "56075c27b20ae524d00f247b8a4dc333e5784f889fe63099f8e626bc8d73486c"
 dependencies = [
  "anyhow",
  "itertools",
  "proc-macro2 1.0.66",
  "quote 1.0.33",
- "syn 1.0.109",
+ "syn 2.0.29",
 ]
 
 [[package]]
@@ -1583,8 +1583,9 @@ dependencies = [
 
 [[package]]
 name = "tonic"
-version = "0.9.2"
-source = "git+https://github.com/hyperium/tonic#2325e3293b8a54f3412a8c9a5fcac064fa82db56"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5469afaf78a11265c343a88969045c1568aa8ecc6c787dbf756e92e70f199861"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -1599,7 +1600,6 @@ dependencies = [
  "percent-encoding",
  "pin-project",
  "prost",
- "rustls",
  "rustls-native-certs",
  "rustls-pemfile",
  "tokio",
@@ -1614,8 +1614,9 @@ dependencies = [
 
 [[package]]
 name = "tonic-web"
-version = "0.9.2"
-source = "git+https://github.com/hyperium/tonic#2325e3293b8a54f3412a8c9a5fcac064fa82db56"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "605028b8adec50b03ee93c1cf6a9dd0d861f508d82fbda569f4a813b411862c1"
 dependencies = [
  "base64",
  "bytes",
@@ -1974,6 +1975,16 @@ name = "windows_x86_64_msvc"
 version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538"
+
+[[patch.unused]]
+name = "tonic"
+version = "0.9.2"
+source = "git+https://github.com/hyperium/tonic#2325e3293b8a54f3412a8c9a5fcac064fa82db56"
+
+[[patch.unused]]
+name = "tonic-web"
+version = "0.9.2"
+source = "git+https://github.com/hyperium/tonic#2325e3293b8a54f3412a8c9a5fcac064fa82db56"
 
 [[patch.unused]]
 name = "tower-http"
