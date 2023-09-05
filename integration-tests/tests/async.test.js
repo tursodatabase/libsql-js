@@ -156,7 +156,20 @@ test.serial("Statement.all() [statement safe integers]", async (t) => {
 test.serial("Statement.columns()", async (t) => {
   const db = t.context.db;
 
-  const stmt = await db.prepare("SELECT * FROM users WHERE id = ?");
+  var stmt = undefined;
+
+  stmt = await db.prepare("SELECT 1");
+  t.deepEqual(stmt.columns(), [
+    {
+      column: null,
+      database: null,
+      name: '1',
+      table: null,
+      type: null,
+    },
+  ]);
+
+  stmt = await db.prepare("SELECT * FROM users WHERE id = ?");
   t.deepEqual(stmt.columns(), [
     {
       column: "id",

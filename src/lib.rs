@@ -351,14 +351,30 @@ impl Statement {
         for (i, col) in stmt.stmt.columns().iter().enumerate() {
             let column = cx.empty_object();
             let column_name = cx.string(col.name());
-            column.set(&mut cx, "column", column_name)?;
-            let column_origin_name = cx.string(col.origin_name().unwrap());
-            column.set(&mut cx, "name", column_origin_name)?;
-            let column_table_name = cx.string(col.table_name().unwrap());
+            column.set(&mut cx, "name", column_name)?;
+            let column_origin_name: Handle<'_, JsValue> = if let Some(origin_name) = col.origin_name() {
+                cx.string(origin_name).upcast()
+            } else {
+                cx.null().upcast()
+            };
+            column.set(&mut cx, "column", column_origin_name)?;
+            let column_table_name: Handle<'_, JsValue> = if let Some(table_name) = col.table_name() {
+                cx.string(table_name).upcast()
+            } else {
+                cx.null().upcast()
+            };
             column.set(&mut cx, "table", column_table_name)?;
-            let column_database_name = cx.string(col.database_name().unwrap());
+            let column_database_name: Handle<'_, JsValue> = if let Some(database_name) = col.database_name() {
+                cx.string(database_name).upcast()
+            } else {
+                cx.null().upcast()
+            };
             column.set(&mut cx, "database", column_database_name)?;
-            let column_decl_type = cx.string(col.decl_type().unwrap());
+            let column_decl_type: Handle<'_, JsValue> = if let Some(decl_type) = col.decl_type() {
+                cx.string(decl_type).upcast()
+            } else {
+                cx.null().upcast()
+            };
             column.set(&mut cx, "type", column_decl_type)?;
             result.set(&mut cx, i as u32, column)?;
         }
