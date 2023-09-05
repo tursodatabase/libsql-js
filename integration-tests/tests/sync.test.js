@@ -69,6 +69,9 @@ test.serial("Statement.get() [named]", async (t) => {
 
   var stmt = undefined;
 
+  stmt = db.prepare("SELECT :b, :a");
+  t.deepEqual(stmt.raw().get({ a: 'a', b: 'b' }), ['b', 'a']);
+
   stmt = db.prepare("SELECT * FROM users WHERE id = :id");
   t.is(stmt.get({ id: 0 }), undefined);
   t.is(stmt.get({ id: 1 }).name, "Alice");

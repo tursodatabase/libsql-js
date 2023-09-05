@@ -460,13 +460,11 @@ fn convert_params_object(
     v: Handle<'_, JsObject>,
 ) -> NeonResult<libsql::Params> {
     let mut params = vec![];
-    let keys = v.get_own_property_names(cx)?;
-    for i in 0..keys.len(cx) {
-        let key: Handle<'_, JsValue> = keys.get(cx, i)?;
-        let key = key.downcast_or_throw::<JsString, _>(cx)?;
-        let v = v.get(cx, key)?;
+    for idx in 0..stmt.stmt.parameter_count() {
+        let name = stmt.stmt.parameter_name((idx + 1) as i32).unwrap();
+        let name = name.to_string();
+        let v = v.get(cx, &name[1..])?;
         let v = js_value_to_value(cx, v)?;
-        let name = stmt.stmt.parameter_name((i + 1) as i32).unwrap().to_string();
         params.push((name, v));
     }
     Ok(libsql::Params::Named(params))
