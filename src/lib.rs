@@ -544,7 +544,7 @@ fn convert_row(
             },
             libsql::Value::Real(v) => cx.number(v).upcast(),
             libsql::Value::Text(v) => cx.string(v).upcast(),
-            libsql::Value::Blob(_v) => todo!("unsupported type"),
+            libsql::Value::Blob(v) => JsArrayBuffer::from_slice(cx, &v)?.upcast()
         };
         result.set(cx, key, v)?;
     }
@@ -573,7 +573,7 @@ fn convert_row_raw(
             },
             libsql::Value::Real(v) => cx.number(v).upcast(),
             libsql::Value::Text(v) => cx.string(v).upcast(),
-            libsql::Value::Blob(_v) => todo!("unsupported blob type"),
+            libsql::Value::Blob(v) => JsArrayBuffer::from_slice(cx, &v)?.upcast()
         };
         result.set(cx, idx as u32, v)?;
     }
