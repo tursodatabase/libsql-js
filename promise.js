@@ -225,10 +225,14 @@ class Statement {
    * Executes the SQL statement and returns an info object.
    */
   run(...bindParameters) {
-    if (bindParameters.length == 1 && typeof bindParameters[0] === "object") {
-      return statementRun.call(this.stmt, bindParameters[0]);
-    } else {
-      return statementRun.call(this.stmt, bindParameters.flat());
+    try {
+      if (bindParameters.length == 1 && typeof bindParameters[0] === "object") {
+        return statementRun.call(this.stmt, bindParameters[0]);
+      } else {
+        return statementRun.call(this.stmt, bindParameters.flat());
+      }
+    } catch (err) {
+      throw new SqliteError(err.message, ""); // TODO: SQLite error code
     }
   }
 
