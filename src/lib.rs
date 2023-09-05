@@ -1,4 +1,4 @@
-use neon::prelude::*;
+use neon::{prelude::*, types::JsBigInt};
 use neon::types::JsPromise;
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -248,8 +248,11 @@ fn js_value_to_value(
         let v = v.downcast_or_throw::<JsString, _>(cx)?;
         let v = v.value(cx);
         Ok(libsql::Value::Text(v))
+    } else if v.is_a::<JsBigInt, _>(cx) {
+        let v = v.downcast_or_throw::<JsBigInt, _>(cx)?;
+        let v = v.to_i64(cx).or_throw(cx)?;
+        Ok(libsql::Value::Integer(v))
     } else {
-        println!("value: {:?}", v);
         todo!("unsupported type");
     }
 }
