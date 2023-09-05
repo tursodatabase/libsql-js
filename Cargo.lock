@@ -688,7 +688,6 @@ dependencies = [
 [[package]]
 name = "libsql"
 version = "0.1.7"
-source = "git+https://github.com/libsql/libsql/?rev=322f7d0151e1a70df2c69139b6ad2edb181d5ff5#322f7d0151e1a70df2c69139b6ad2edb181d5ff5"
 dependencies = [
  "async-trait",
  "base64",
@@ -721,7 +720,6 @@ dependencies = [
 [[package]]
 name = "libsql-sys"
 version = "0.2.12"
-source = "git+https://github.com/libsql/libsql/?rev=322f7d0151e1a70df2c69139b6ad2edb181d5ff5#322f7d0151e1a70df2c69139b6ad2edb181d5ff5"
 dependencies = [
  "bindgen",
  "cc",
@@ -733,7 +731,6 @@ dependencies = [
 [[package]]
 name = "libsql_replication"
 version = "0.0.3"
-source = "git+https://github.com/libsql/libsql/?rev=322f7d0151e1a70df2c69139b6ad2edb181d5ff5#322f7d0151e1a70df2c69139b6ad2edb181d5ff5"
 dependencies = [
  "anyhow",
  "bytemuck",

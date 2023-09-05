@@ -80,7 +80,11 @@ impl Database {
 
     fn js_close(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        for stmt in db.stmts.lock().unwrap().iter() {
+            stmt.finalize();
+        }
         db.stmts.lock().unwrap().clear();
+        db.conn.borrow().as_ref().unwrap().close();
         db.conn.replace(None);
         Ok(cx.undefined())
     }
