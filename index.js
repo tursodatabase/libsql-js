@@ -191,6 +191,7 @@ class Database {
    */
   close() {
     databaseClose.call(this.db);
+    this.open = false;
   }
 
   /**
