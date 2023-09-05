@@ -2,11 +2,20 @@ use neon::prelude::*;
 use neon::types::JsPromise;
 use std::cell::RefCell;
 use std::sync::Arc;
+use once_cell::sync::OnceCell;
+use tokio::runtime::Runtime;
+
+fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
+    static RUNTIME: OnceCell<Runtime> = OnceCell::new();
+
+    RUNTIME
+        .get_or_try_init(Runtime::new)
+        .or_else(|err| cx.throw_error(&err.to_string()))
+}
 
 struct Database {
     db: libsql::v2::Database,
     conn: Arc<libsql::v2::Connection>,
-    rt: tokio::runtime::Runtime,
     default_safe_integers: RefCell<bool>,
 }
 
@@ -19,12 +28,10 @@ impl Database {
     fn new(
         db: libsql::v2::Database,
         conn: libsql::v2::Connection,
-        rt: tokio::runtime::Runtime,
     ) -> Self {
         Database {
             db,
             conn: Arc::new(conn),
-            rt,
             default_safe_integers: RefCell::new(false),
         }
     }
@@ -32,7 +39,7 @@ impl Database {
     fn js_open(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
-        let rt = tokio::runtime::Runtime::new().or_else(|err| cx.throw_error(err.to_string()))?;
+        let rt = runtime(&mut cx)?;
         let db = if is_remote_path(&db_path) {
             libsql::v2::Database::open_remote(db_path.clone(), auth_token)
         } else {
@@ -41,7 +48,7 @@ impl Database {
         let fut = db.connect();
         let result = rt.block_on(fut);
         let conn = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
-        let db = Database::new(db, conn, rt);
+        let db = Database::new(db, conn);
         Ok(cx.boxed(db))
     }
 
@@ -49,14 +56,14 @@ impl Database {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
-        let rt = tokio::runtime::Runtime::new().or_else(|err| cx.throw_error(err.to_string()))?;
+        let rt = runtime(&mut cx)?;
         let fut = libsql::v2::Database::open_with_sync(db_path, sync_url, sync_auth);
         let result = rt.block_on(fut);
         let db = result.or_else(|err| cx.throw_error(err.to_string()))?;
         let fut = db.connect();
         let result = rt.block_on(fut);
         let conn = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
-        let db = Database::new(db, conn, rt);
+        let db = Database::new(db, conn);
         Ok(cx.boxed(db))
     }
 
@@ -74,9 +81,8 @@ impl Database {
 
     fn js_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
-        db.rt
-            .block_on(db.db.sync())
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let rt = runtime(&mut cx)?;
+        rt.block_on(db.db.sync()).or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         Ok(cx.undefined())
     }
 
@@ -84,7 +90,8 @@ impl Database {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let fut = db.conn.execute(&sql, ());
-        let result = db.rt.block_on(fut);
+        let rt = runtime(&mut cx)?;
+        let result = rt.block_on(fut);
         result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         Ok(cx.undefined())
     }
@@ -95,7 +102,8 @@ impl Database {
         let (deferred, promise) = cx.promise();
         let channel = cx.channel();
         let conn = db.conn.clone();
-        db.rt.spawn(async move {
+        let rt = runtime(&mut cx)?;
+        rt.spawn(async move {
             let fut = conn.execute(&sql, ());
             match fut.await {
                 Ok(_) => {
@@ -118,14 +126,14 @@ impl Database {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let fut = db.conn.prepare(&sql);
-        let result = db.rt.block_on(fut);
+        let rt = runtime(&mut cx)?;
+        let result = rt.block_on(fut);
         let stmt = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let stmt = Statement {
             conn: db.conn.clone(),
             stmt: Arc::new(stmt),
             raw: RefCell::new(false),
             safe_ints: RefCell::new(*db.default_safe_integers.borrow()),
-            rt: db.rt.handle().clone(),
         };
         Ok(cx.boxed(stmt))
     }
@@ -136,9 +144,9 @@ impl Database {
         let (deferred, promise) = cx.promise();
         let channel = cx.channel();
         let safe_ints = *db.default_safe_integers.borrow();
-        let rt = db.rt.handle().clone();
+        let rt = runtime(&mut cx)?;
         let conn = db.conn.clone();
-        db.rt.spawn(async move {
+        rt.spawn(async move {
             let fut = conn.prepare(&sql);
             match fut.await {
                 Ok(stmt) => {
@@ -147,7 +155,6 @@ impl Database {
                         stmt: Arc::new(stmt),
                         raw: RefCell::new(false),
                         safe_ints: RefCell::new(safe_ints),
-                        rt: rt,
                     };
                     deferred.settle_with(&channel, |mut cx| Ok(cx.boxed(stmt)));
                 }
@@ -192,7 +199,6 @@ struct Statement {
     stmt: Arc<libsql::v2::Statement>,
     raw: RefCell<bool>,
     safe_ints: RefCell<bool>,
-    rt: tokio::runtime::Handle,
 }
 
 unsafe impl<'a> Sync for Statement {}
@@ -205,9 +211,9 @@ fn js_value_to_value(
     v: Handle<'_, JsValue>,
 ) -> NeonResult<libsql::Value> {
     if v.is_a::<JsNull, _>(cx) {
-        todo!("null");
+        Ok(libsql::Value::Null)
     } else if v.is_a::<JsUndefined, _>(cx) {
-        todo!("undefined");
+        Ok(libsql::Value::Null)
     } else if v.is_a::<JsArray, _>(cx) {
         todo!("array");
     } else if v.is_a::<JsBoolean, _>(cx) {
@@ -221,6 +227,7 @@ fn js_value_to_value(
         let v = v.value(cx);
         Ok(libsql::Value::Text(v))
     } else {
+        println!("value: {:?}", v);
         todo!("unsupported type");
     }
 }
@@ -247,7 +254,8 @@ impl Statement {
         let params = convert_params(&mut cx, &stmt, params)?;
         stmt.stmt.reset();
         let fut = stmt.stmt.execute(&params);
-        let result = stmt.rt.block_on(fut);
+        let rt = runtime(&mut cx)?;
+        let result = rt.block_on(fut);
         let changes = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let last_insert_rowid = stmt.conn.last_insert_rowid();
         let info = cx.empty_object();
@@ -264,7 +272,8 @@ impl Statement {
         let params = convert_params(&mut cx, &stmt, params)?;
         let safe_ints = *stmt.safe_ints.borrow();
         let fut = stmt.stmt.query(&params);
-        let result = stmt.rt.block_on(fut);
+        let rt = runtime(&mut cx)?;
+        let result = rt.block_on(fut);
         let mut rows = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let result = match rows
             .next()
@@ -293,7 +302,8 @@ impl Statement {
         let params = convert_params(&mut cx, &stmt, params)?;
         stmt.stmt.reset();
         let fut = stmt.stmt.query(&params);
-        let result = stmt.rt.block_on(fut);
+        let rt = runtime(&mut cx)?;
+        let result = rt.block_on(fut);
         let rows = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let rows = Rows {
             rows: RefCell::new(rows),
@@ -310,7 +320,7 @@ impl Statement {
         stmt.stmt.reset();
         let (deferred, promise) = cx.promise();
         let channel = cx.channel();
-        let rt = stmt.rt.clone();
+        let rt = runtime(&mut cx)?;
         let raw = *stmt.raw.borrow();
         let safe_ints = *stmt.safe_ints.borrow();
         let stmt = stmt.stmt.clone();
@@ -515,7 +525,7 @@ fn convert_row_raw(
             },
             libsql::Value::Real(v) => cx.number(v).upcast(),
             libsql::Value::Text(v) => cx.string(v).upcast(),
-            libsql::Value::Blob(_v) => todo!("unsupported type"),
+            libsql::Value::Blob(_v) => todo!("unsupported blob type"),
         };
         result.set(cx, idx as u32, v)?;
     }

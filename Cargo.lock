@@ -714,6 +714,7 @@ version = "0.0.1"
 dependencies = [
  "libsql",
  "neon",
+ "once_cell",
  "tokio",
 ]
 
