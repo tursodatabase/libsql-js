@@ -243,7 +243,7 @@ fn js_value_to_value(
     } else if v.is_a::<JsNumber, _>(cx) {
         let v = v.downcast_or_throw::<JsNumber, _>(cx)?;
         let v = v.value(cx);
-        Ok(libsql::Value::Integer(v as i64))
+        Ok(libsql::Value::Real(v))
     } else if v.is_a::<JsString, _>(cx) {
         let v = v.downcast_or_throw::<JsString, _>(cx)?;
         let v = v.value(cx);
