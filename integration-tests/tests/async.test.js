@@ -153,6 +153,16 @@ test.serial("Statement.all() [statement safe integers]", async (t) => {
   t.deepEqual(await stmt.raw().all(), expected);
 });
 
+test.serial("Statement.raw() [failure]", async (t) => {
+  const db = t.context.db;
+  const stmt = await db.prepare("INSERT INTO users (id, name, email) VALUES (?, ?, ?)");
+  await t.throws(() => {
+    stmt.raw()
+  }, {
+    message: 'The raw() method is only for statements that return data'
+  });
+});
+
 test.serial("Statement.columns()", async (t) => {
   const db = t.context.db;
 

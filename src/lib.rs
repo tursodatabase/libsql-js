@@ -228,6 +228,9 @@ fn js_value_to_value(
 impl Statement {
     fn js_raw(mut cx: FunctionContext) -> JsResult<JsNull> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
+        if stmt.stmt.columns().len() == 0 {
+            return cx.throw_error("The raw() method is only for statements that return data");
+        }
         let raw = cx.argument::<JsBoolean>(0)?;
         let raw = raw.value(&mut cx);
         stmt.set_raw(raw);
