@@ -1653,8 +1653,9 @@ dependencies = [
 
 [[package]]
 name = "tower-http"
-version = "0.4.3"
-source = "git+https://github.com/tower-rs/tower-http?branch=lucio/grpc-defaults#d4d621f36e52bcd77ccb261c69df3456f4b54e66"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61c5bb1d698276a2443e5ecfabc1008bf15a36c12e6a7176e7bf089ea9131140"
 dependencies = [
  "bitflags 2.4.0",
  "bytes",
@@ -1973,3 +1974,8 @@ name = "windows_x86_64_msvc"
 version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538"
+
+[[patch.unused]]
+name = "tower-http"
+version = "0.4.3"
+source = "git+https://github.com/tower-rs/tower-http?branch=lucio/grpc-defaults#d4d621f36e52bcd77ccb261c69df3456f4b54e66"
