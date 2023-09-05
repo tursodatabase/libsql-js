@@ -2,8 +2,10 @@ import test from "ava";
 
 test.beforeEach(async (t) => {
   const [db, errorType] = await connect();
-  db.exec("DROP TABLE IF EXISTS users");
-  db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
+  db.exec(`
+      DROP TABLE IF EXISTS users;
+      CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)
+  `);
   db.exec(
     "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.org')"
   );

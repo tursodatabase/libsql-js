@@ -97,10 +97,17 @@ impl Database {
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let conn = db.conn.borrow();
         let conn = conn.as_ref().unwrap().clone();
-        let fut = conn.execute(&sql, ());
-        let rt = runtime(&mut cx)?;
-        let result = rt.block_on(fut);
-        result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let stmts = sql.split(";");
+        for stmt in stmts {
+            let stmt = stmt.trim();
+            if stmt.is_empty() {
+                continue;
+            }
+            let fut = conn.execute(&stmt, ());
+            let rt = runtime(&mut cx)?;
+            let result = rt.block_on(fut);
+            result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        }
         Ok(cx.undefined())
     }
 
@@ -113,20 +120,27 @@ impl Database {
         let conn = conn.as_ref().unwrap().clone();
         let rt = runtime(&mut cx)?;
         rt.spawn(async move {
-            let fut = conn.execute(&sql, ());
-            match fut.await {
-                Ok(_) => {
-                    deferred.settle_with(&channel, |mut cx| {
-                        Ok(cx.undefined())
-                    });
+            let stmts = sql.split(";");
+            for stmt in stmts {
+                let stmt = stmt.trim();
+                if stmt.is_empty() {
+                    continue;
                 }
-                Err(err) => {
-                    deferred.settle_with(&channel, |mut cx| {
-                        cx.throw_error(from_libsql_error(err))?;
-                        Ok(cx.undefined())
-                    });
-                },
-            }
+                let fut = conn.execute(&stmt, ());
+                match fut.await {
+                    Ok(_) => {} // keep going
+                    Err(err) => {
+                        deferred.settle_with(&channel, |mut cx| {
+                            cx.throw_error(from_libsql_error(err))?;
+                            Ok(cx.undefined())
+                        });
+                        return;
+                    },
+                }
+            }    
+            deferred.settle_with(&channel, |mut cx| {
+                Ok(cx.undefined())
+            });
         });
         Ok(promise)
     }
