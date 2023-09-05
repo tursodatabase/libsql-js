@@ -94,6 +94,8 @@ test.serial("Statement.iterate() [empty]", async (t) => {
 
   const stmt = db.prepare("SELECT * FROM users WHERE id = 0");
   t.is(stmt.iterate().next().done, true);
+  t.is(stmt.iterate([]).next().done, true);
+  t.is(stmt.iterate({}).next().done, true);
 });
 
 test.serial("Statement.iterate()", async (t) => {

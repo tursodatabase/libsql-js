@@ -286,13 +286,8 @@ impl Statement {
 
     fn js_rows_sync(mut cx: FunctionContext) -> JsResult<JsValue> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
-        let mut params = vec![];
-        for i in 0..cx.len() {
-            let v = cx.argument::<JsValue>(i)?;
-            let v = js_value_to_value(&mut cx, v)?;
-            params.push(v);
-        }
-        let params = libsql::Params::Positional(params);
+        let params = cx.argument::<JsValue>(0)?;
+        let params = convert_params(&mut cx, &stmt, params)?;
         stmt.stmt.reset();
         let fut = stmt.stmt.query(&params);
         let result = stmt.rt.block_on(fut);
@@ -307,13 +302,8 @@ impl Statement {
 
     fn js_rows_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
-        let mut params = vec![];
-        for i in 0..cx.len() {
-            let v = cx.argument::<JsValue>(i)?;
-            let v = js_value_to_value(&mut cx, v)?;
-            params.push(v);
-        }
-        let params = libsql::Params::Positional(params);
+        let params = cx.argument::<JsValue>(0)?;
+        let params = convert_params(&mut cx, &stmt, params)?;
         stmt.stmt.reset();
         let (deferred, promise) = cx.promise();
         let channel = cx.channel();

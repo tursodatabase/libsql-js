@@ -219,7 +219,7 @@ class Statement {
    * Executes the SQL statement and returns an info object.
    */
   run(...bindParameters) {
-    if (typeof bindParameters[0] === "object" && bindParameters[0] !== null) {
+    if (bindParameters.length == 1 && typeof bindParameters[0] === "object") {
       return statementRun.call(this.stmt, bindParameters[0]);
     } else {
       return statementRun.call(this.stmt, bindParameters.flat());
@@ -232,7 +232,7 @@ class Statement {
    * @param bindParameters - The bind parameters for executing the statement.
    */
   get(...bindParameters) {
-    if (typeof bindParameters[0] === "object" && bindParameters[0] !== null) {
+    if (bindParameters.length == 1 && typeof bindParameters[0] === "object") {
       return statementGet.call(this.stmt, bindParameters[0]);
     } else {
       return statementGet.call(this.stmt, bindParameters.flat());
@@ -245,7 +245,12 @@ class Statement {
    * @param bindParameters - The bind parameters for executing the statement.
    */
   async iterate(...bindParameters) {
-    const rows = await statementRowsAsync.call(this.stmt, ...bindParameters);
+    var rows = undefined;
+    if (bindParameters.length == 1 && typeof bindParameters[0] === "object") {
+      rows = await statementRowsAsync.call(this.stmt, bindParameters[0]);
+    } else {
+      rows = await statementRowsAsync.call(this.stmt, bindParameters.flat());
+    }
     const iter = {
       next() {
         const row = rowsNext.call(rows);
