@@ -237,6 +237,17 @@ test.serial("Database.transaction()", async (t) => {
   t.is(stmt.get(5).name, "Junior");
 });
 
+test.serial("values", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("SELECT ?").raw();
+  t.deepEqual(stmt.get(1), [1]);
+  t.deepEqual(stmt.get(Number.MIN_VALUE), [Number.MIN_VALUE]);
+  t.deepEqual(stmt.get(Number.MAX_VALUE), [Number.MAX_VALUE]);
+  t.deepEqual(stmt.get(Number.MAX_SAFE_INTEGER), [Number.MAX_SAFE_INTEGER]);
+  t.deepEqual(stmt.get(9007199254740991n), [9007199254740991]);
+});
+
 test.serial("errors", async (t) => {
   const db = t.context.db;
 
