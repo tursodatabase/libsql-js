@@ -1,3 +1,4 @@
+use neon::types::buffer::TypedArray;
 use neon::{prelude::*, types::JsBigInt};
 use neon::types::JsPromise;
 use std::cell::RefCell;
@@ -270,6 +271,10 @@ fn js_value_to_value(
         let v = v.downcast_or_throw::<JsBigInt, _>(cx)?;
         let v = v.to_i64(cx).or_throw(cx)?;
         Ok(libsql::Value::Integer(v))
+    } else if v.is_a::<JsUint8Array, _>(cx) {
+        let v = v.downcast_or_throw::<JsUint8Array, _>(cx)?;
+        let v = v.as_slice(cx);
+        Ok(libsql::Value::Blob(v.to_vec()))
     } else {
         todo!("unsupported type");
     }
