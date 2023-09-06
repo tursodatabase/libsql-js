@@ -1,4 +1,4 @@
-# libSQL API for Node
+# libSQL API for JavaScript/TypeScript
 
 [![npm](https://badge.fury.io/js/libsql.svg)](https://badge.fury.io/js/libsql)
 
@@ -15,10 +15,26 @@ Please note you are currently encouraged to use the [libSQL SDK](https://github.
 
 ## Installing
 
-You can install the package with `npm`:
+You can install the package with:
+
+**Node:**
 
 ```sh
 npm i libsql
+```
+
+**Bun:**
+
+```sh
+bun add libsql
+```
+
+**Deno:**
+
+Use the `npm:` prefix for package import:
+
+```typescript
+import Database from 'npm:libsql';
 ```
 
 ## Documentation
