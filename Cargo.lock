@@ -689,7 +689,7 @@ dependencies = [
 name = "libsql"
 version = "0.0.1"
 dependencies = [
- "libsql 0.1.7",
+ "libsql 0.1.8",
  "neon",
  "once_cell",
  "tokio",
@@ -697,8 +697,9 @@ dependencies = [
 
 [[package]]
 name = "libsql"
-version = "0.1.7"
-source = "git+https://github.com/libsql/libsql/?rev=eab63c00301746daef28134bc1dceb4758c2df40#eab63c00301746daef28134bc1dceb4758c2df40"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33b338b21c151cd923d619146adc7e5364197794381cebb3270c31338da6736e"
 dependencies = [
  "async-trait",
  "base64",
@@ -720,8 +721,9 @@ dependencies = [
 
 [[package]]
 name = "libsql-sys"
-version = "0.2.12"
-source = "git+https://github.com/libsql/libsql/?rev=eab63c00301746daef28134bc1dceb4758c2df40#eab63c00301746daef28134bc1dceb4758c2df40"
+version = "0.2.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d929d2eb9b6ecfc88c95ef2155df675136cd6323cdf7721240a894a8210648d3"
 dependencies = [
  "bindgen",
  "cc",
@@ -732,8 +734,9 @@ dependencies = [
 
 [[package]]
 name = "libsql_replication"
-version = "0.0.3"
-source = "git+https://github.com/libsql/libsql/?rev=eab63c00301746daef28134bc1dceb4758c2df40#eab63c00301746daef28134bc1dceb4758c2df40"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bd143d93ffc33a234b1386bdcaaa7bc8478c2105a0e588b3983cc5ec322e20a"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -1975,18 +1978,3 @@ name = "windows_x86_64_msvc"
 version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538"
-
-[[patch.unused]]
-name = "tonic"
-version = "0.9.2"
-source = "git+https://github.com/hyperium/tonic#2325e3293b8a54f3412a8c9a5fcac064fa82db56"
-
-[[patch.unused]]
-name = "tonic-web"
-version = "0.9.2"
-source = "git+https://github.com/hyperium/tonic#2325e3293b8a54f3412a8c9a5fcac064fa82db56"
-
-[[patch.unused]]
-name = "tower-http"
-version = "0.4.3"
-source = "git+https://github.com/tower-rs/tower-http?branch=lucio/grpc-defaults#d4d621f36e52bcd77ccb261c69df3456f4b54e66"
