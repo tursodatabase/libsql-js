@@ -23,7 +23,7 @@ const {
   statementColumns,
   statementSafeIntegers,
   rowsNext,
-} = load(__dirname) || require(`@libsql/experimental-${currentTarget()}`);
+} = load(__dirname) || require(`@libsql/${currentTarget()}`);
 
 const SqliteError = require("./sqlite-error");
 
