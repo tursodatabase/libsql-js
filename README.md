@@ -5,11 +5,13 @@
 [libSQL](https://github.com/libsql/libsql) is an open source, open contribution fork of SQLite.
 This source repository contains libSQL API bindings for Node, which aims to be compatible with [better-sqlite3](https://github.com/WiseLibs/better-sqlite3/), but with opt-in promise API.
 
+Please note you are currently encouraged to use the [libSQL SDK](https://github.com/libsql/libsql-client-ts) as it is more mature at this point and also supports serverless applications that only can use `fetch()`.
+
 ## Features
 
-* In-memory databases and local database files, like SQLite
-* Remote database access to libSQL server
-* In-app replica that syncs with a libSQL server
+* In-memory and local libSQL/SQLite databases
+* Remote libSQL databases
+* Embedded, in-app replica that syncs with a remote libSQL database
 
 ## Installing
 
