@@ -19,8 +19,3 @@ tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
 version = "1.0.0-alpha.4"
 default-features = false
 features = ["napi-6"]
-
-[patch.crates-io]
-tonic = { git = "https://github.com/hyperium/tonic" }
-tonic-web = { git = "https://github.com/hyperium/tonic" }
-tower-http = { git = "https://github.com/tower-rs/tower-http", branch = "lucio/grpc-defaults" }
