@@ -1,4 +1,4 @@
-import Database from "libsql-experimental";
+import Database from "libsql";
 
 const url = process.env.LIBSQL_URL;
 if (!url) {

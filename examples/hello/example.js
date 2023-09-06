@@ -1,4 +1,4 @@
-import Database from "libsql-experimental";
+import Database from "libsql";
 
 const db = new Database(":memory:");
 

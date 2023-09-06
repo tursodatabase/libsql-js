@@ -1,7 +1,6 @@
 {
   "dependencies": {
-    "@libsql/experimental-darwin-arm64": "^0.0.10",
-    "libsql-experimental": "^0.0.10",
+    "libsql": "^0.1.0",
     "drizzle-orm": "^0.27.2"
   },
   "devDependencies": {

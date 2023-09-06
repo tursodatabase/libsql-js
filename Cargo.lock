@@ -687,6 +687,16 @@ dependencies = [
 
 [[package]]
 name = "libsql"
+version = "0.0.1"
+dependencies = [
+ "libsql 0.1.7",
+ "neon",
+ "once_cell",
+ "tokio",
+]
+
+[[package]]
+name = "libsql"
 version = "0.1.7"
 source = "git+https://github.com/libsql/libsql/?rev=eab63c00301746daef28134bc1dceb4758c2df40#eab63c00301746daef28134bc1dceb4758c2df40"
 dependencies = [
@@ -706,16 +716,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "libsql-experimental"
-version = "0.0.1"
-dependencies = [
- "libsql",
- "neon",
- "once_cell",
- "tokio",
 ]
 
 [[package]]

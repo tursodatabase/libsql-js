@@ -1,6 +1,6 @@
 # libSQL API for Node
 
-[![npm](https://badge.fury.io/js/libsql-experimental.svg)](https://badge.fury.io/js/libsql-experimental)
+[![npm](https://badge.fury.io/js/libsql.svg)](https://badge.fury.io/js/libsql)
 
 [libSQL](https://github.com/libsql/libsql) is an open source, open contribution fork of SQLite.
 This source repository contains libSQL API bindings for Node, which aims to be compatible with [better-sqlite3](https://github.com/WiseLibs/better-sqlite3/), but with opt-in promise API.
@@ -16,7 +16,7 @@ This source repository contains libSQL API bindings for Node, which aims to be c
 You can install the package with `npm`:
 
 ```sh
-npm i libsql-experimental
+npm i libsql
 ```
 
 ## Documentation
@@ -28,7 +28,7 @@ npm i libsql-experimental
 To try out your first libsql program, type the following in `hello.js`:
 
 ```javascript
-import Database from 'libsql-experimental';
+import Database from 'libsql';
 
 const db = new Database(':memory:');
 
@@ -46,10 +46,10 @@ and then run:
 $ node hello.js
 ```
 
-To use the promise API, import `libsql-experimental/promise`:
+To use the promise API, import `libsql/promise`:
 
 ```javascript
-import Database from 'libsql-experimental/promise';
+import Database from 'libsql/promise';
 
 const db = new Database(':memory:');
 
@@ -65,7 +65,7 @@ console.log(`Name: ${row.name}, email: ${row.email}`);
 #### Connecting to a local database file
 
 ```javascript
-import Database from 'libsql-experimental';
+import Database from 'libsql';
 
 const db = new Database('hello.db');
 ````
@@ -73,7 +73,7 @@ const db = new Database('hello.db');
 #### Connecting to a Remote libSQL server
 
 ```javascript
-import Database from 'libsql-experimental';
+import Database from 'libsql';
 
 const url = process.env.LIBSQL_URL;
 const authToken = process.env.LIBSQL_AUTH_TOKEN;
@@ -88,7 +88,7 @@ const db = new Database(url, opts);
 #### Creating an in-app replica and syncing it
 
 ```javascript
-import libsql_experimental as libsql
+import libsql
 
 const opts = { syncUrl: "<url>", authToken: "<optional auth token>" };
 const db = new Database('hello.db', opts);
@@ -126,7 +126,7 @@ You can then run the integration tests with:
 ```console
 npm link
 cd integration-tests
-npm link libsql-experimental
+npm link libsql
 npm test
 ```
 
@@ -140,4 +140,4 @@ Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in libSQL by you, shall be licensed as MIT, without any additional
 terms or conditions.
 
-[MIT license]: https://github.com/libsql/libsql-experimental-node/blob/main/LICENSE
+[MIT license]: https://github.com/libsql/libsql-node/blob/main/LICENSE

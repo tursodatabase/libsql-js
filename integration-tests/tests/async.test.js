@@ -257,7 +257,7 @@ const connect = async (path_opt) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;
   const database = process.env.LIBSQL_DATABASE ?? path;
-  const x = await import("libsql-experimental/promise");
+  const x = await import("libsql/promise");
   const options = {};
   const db = new x.default(database, options);
   return [db, x.SqliteError];

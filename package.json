@@ -1,5 +1,5 @@
 {
-  "name": "libsql-experimental",
+  "name": "libsql",
   "version": "0.0.39",
   "description": "",
   "os": [
@@ -35,21 +35,21 @@
   "license": "MIT",
   "neon": {
     "targets": {
-      "aarch64-apple-darwin": "@libsql/experimental-darwin-arm64",
-      "x86_64-unknown-linux-gnu": "@libsql/experimental-linux-x64-gnu"
+      "aarch64-apple-darwin": "@libsql/darwin-arm64",
+      "x86_64-unknown-linux-gnu": "@libsql/linux-x64-gnu"
     }
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/libsql/libsql-experimental.git"
+    "url": "git+https://github.com/libsql/libsql.git"
   },
   "keywords": [
     "libsql"
   ],
   "bugs": {
-    "url": "https://github.com/libsql/libsql-experimental/issues"
+    "url": "https://github.com/libsql/libsql/issues"
   },
-  "homepage": "https://github.com/libsql/libsql-experimental",
+  "homepage": "https://github.com/libsql/libsql",
   "devDependencies": {
     "@neon-rs/cli": "^0.0.4"
   },
@@ -57,7 +57,7 @@
     "@neon-rs/load": "^0.0.4"
   },
   "optionalDependencies": {
-    "@libsql-experimental/darwin-arm64": "0.0.1",
-    "@libsql-experimental/linux-x64-gnu": "0.0.1"
+    "@libsql/darwin-arm64": "0.0.1",
+    "@libsql/linux-x64-gnu": "0.0.1"
   }
 }

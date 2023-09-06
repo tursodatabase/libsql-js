@@ -1,5 +1,5 @@
 [package]
-name = "libsql-experimental"
+name = "libsql"
 version = "0.0.1"
 description = ""
 authors = ["Pekka Enberg <penberg@iki.fi>"]
