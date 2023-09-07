@@ -16,9 +16,9 @@ fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
 }
 
 struct Database {
-    db: libsql::v2::Database,
-    conn: RefCell<Option<Arc<libsql::v2::Connection>>>,
-    stmts: Arc<Mutex<Vec<Arc<libsql::v2::Statement>>>>,
+    db: libsql::Database,
+    conn: RefCell<Option<Arc<libsql::Connection>>>,
+    stmts: Arc<Mutex<Vec<Arc<libsql::Statement>>>>,
     default_safe_integers: RefCell<bool>,
 }
 
@@ -29,8 +29,8 @@ impl Finalize for Database {}
 
 impl Database {
     fn new(
-        db: libsql::v2::Database,
-        conn: libsql::v2::Connection,
+        db: libsql::Database,
+        conn: libsql::Connection,
     ) -> Self {
         Database {
             db,
@@ -45,9 +45,9 @@ impl Database {
         let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
         let rt = runtime(&mut cx)?;
         let db = if is_remote_path(&db_path) {
-            libsql::v2::Database::open_remote(db_path.clone(), auth_token)
+            libsql::Database::open_remote(db_path.clone(), auth_token)
         } else {
-            libsql::v2::Database::open(db_path.clone())
+            libsql::Database::open(db_path.clone())
         }.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let fut = db.connect();
         let result = rt.block_on(fut);
@@ -61,7 +61,7 @@ impl Database {
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
         let rt = runtime(&mut cx)?;
-        let fut = libsql::v2::Database::open_with_sync(db_path, sync_url, sync_auth);
+        let fut = libsql::Database::open_with_sync(db_path, sync_url, sync_auth);
         let result = rt.block_on(fut);
         let db = result.or_else(|err| cx.throw_error(err.to_string()))?;
         let fut = db.connect();
@@ -236,8 +236,8 @@ fn from_libsql_error(err: libsql::Error) -> String {
 }
 
 struct Statement {
-    conn: Weak<libsql::v2::Connection>,
-    stmt: Weak<libsql::v2::Statement>,
+    conn: Weak<libsql::Connection>,
+    stmt: Weak<libsql::Statement>,
     raw: RefCell<bool>,
     safe_ints: RefCell<bool>,
 }
@@ -452,7 +452,7 @@ impl Statement {
 }
 
 struct Rows {
-    rows: RefCell<libsql::v2::Rows>,
+    rows: RefCell<libsql::Rows>,
     raw: bool,
     safe_ints: bool,
 }
@@ -529,8 +529,8 @@ fn convert_row(
     cx: &mut FunctionContext,
     safe_ints: bool,
     result: &mut JsObject,
-    rows: &libsql::v2::Rows,
-    row: &libsql::v2::Row,
+    rows: &libsql::Rows,
+    row: &libsql::Row,
 ) -> NeonResult<()> {
     for idx in 0..rows.column_count() {
         let v = row
@@ -560,8 +560,8 @@ fn convert_row_raw(
     cx: &mut FunctionContext,
     safe_ints: bool,
     result: &mut JsArray,
-    rows: &libsql::v2::Rows,
-    row: &libsql::v2::Row,
+    rows: &libsql::Rows,
+    row: &libsql::Row,
 ) -> NeonResult<()> {
     for idx in 0..rows.column_count() {
         let v = row
