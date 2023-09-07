@@ -117,25 +117,18 @@ impl Database {
         let conn = conn.as_ref().unwrap().clone();
         let rt = runtime(&mut cx)?;
         rt.spawn(async move {
-            let stmts = sql.split(';');
-            for stmt in stmts {
-                let stmt = stmt.trim();
-                if stmt.is_empty() {
-                    continue;
+            let fut = conn.execute_batch(&sql);
+            match fut.await {
+                Ok(_) => {
+                    deferred.settle_with(&channel, |mut cx| Ok(cx.undefined()));
                 }
-                let fut = conn.execute(stmt, ());
-                match fut.await {
-                    Ok(_) => {} // keep going
-                    Err(err) => {
-                        deferred.settle_with(&channel, |mut cx| {
-                            cx.throw_error(from_libsql_error(err))?;
-                            Ok(cx.undefined())
-                        });
-                        return;
-                    }
+                Err(err) => {
+                    deferred.settle_with(&channel, |mut cx| {
+                        cx.throw_error(from_libsql_error(err))?;
+                        Ok(cx.undefined())
+                    });
                 }
             }
-            deferred.settle_with(&channel, |mut cx| Ok(cx.undefined()));
         });
         Ok(promise)
     }
