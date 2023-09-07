@@ -102,17 +102,10 @@ impl Database {
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         let conn = db.conn.borrow();
         let conn = conn.as_ref().unwrap().clone();
-        let stmts = sql.split(";");
-        for stmt in stmts {
-            let stmt = stmt.trim();
-            if stmt.is_empty() {
-                continue;
-            }
-            let fut = conn.execute(&stmt, ());
-            let rt = runtime(&mut cx)?;
-            let result = rt.block_on(fut);
-            result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
-        }
+        let fut = conn.execute_batch(&sql);
+        let rt = runtime(&mut cx)?;
+        let result = rt.block_on(fut);
+        result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         Ok(cx.undefined())
     }
 
