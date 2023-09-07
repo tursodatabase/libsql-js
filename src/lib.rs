@@ -1,11 +1,11 @@
 use neon::types::buffer::TypedArray;
-use neon::{prelude::*, types::JsBigInt};
 use neon::types::JsPromise;
+use neon::{prelude::*, types::JsBigInt};
+use once_cell::sync::OnceCell;
 use std::cell::RefCell;
 use std::sync::Arc;
-use once_cell::sync::OnceCell;
+use std::sync::{Mutex, Weak};
 use tokio::runtime::Runtime;
-use std::sync::{Weak, Mutex};
 
 fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
     static RUNTIME: OnceCell<Runtime> = OnceCell::new();
@@ -28,10 +28,7 @@ unsafe impl Send for Database {}
 impl Finalize for Database {}
 
 impl Database {
-    fn new(
-        db: libsql::Database,
-        conn: libsql::Connection,
-    ) -> Self {
+    fn new(db: libsql::Database, conn: libsql::Connection) -> Self {
         Database {
             db,
             conn: RefCell::new(Some(Arc::new(conn))),
@@ -48,7 +45,8 @@ impl Database {
             libsql::Database::open_remote(db_path.clone(), auth_token)
         } else {
             libsql::Database::open(db_path.clone())
-        }.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        }
+        .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let fut = db.connect();
         let result = rt.block_on(fut);
         let conn = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
@@ -93,7 +91,8 @@ impl Database {
     fn js_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let rt = runtime(&mut cx)?;
-        rt.block_on(db.db.sync()).or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        rt.block_on(db.db.sync())
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         Ok(cx.undefined())
     }
 
@@ -133,12 +132,10 @@ impl Database {
                             Ok(cx.undefined())
                         });
                         return;
-                    },
+                    }
                 }
-            }    
-            deferred.settle_with(&channel, |mut cx| {
-                Ok(cx.undefined())
-            });
+            }
+            deferred.settle_with(&channel, |mut cx| Ok(cx.undefined()));
         });
         Ok(promise)
     }
@@ -197,7 +194,7 @@ impl Database {
                         cx.throw_error(from_libsql_error(err))?;
                         Ok(cx.undefined())
                     });
-                },
+                }
             }
         });
         Ok(promise)
@@ -214,7 +211,6 @@ impl Database {
     fn set_default_safe_integers(&self, toggle: bool) {
         self.default_safe_integers.replace(toggle);
     }
-
 }
 
 fn is_remote_path(path: &str) -> bool {
@@ -388,7 +384,7 @@ impl Statement {
                         cx.throw_error(from_libsql_error(err))?;
                         Ok(cx.undefined())
                     });
-                },
+                }
             }
         });
         Ok(promise)
@@ -402,23 +398,26 @@ impl Statement {
             let column = cx.empty_object();
             let column_name = cx.string(col.name());
             column.set(&mut cx, "name", column_name)?;
-            let column_origin_name: Handle<'_, JsValue> = if let Some(origin_name) = col.origin_name() {
-                cx.string(origin_name).upcast()
-            } else {
-                cx.null().upcast()
-            };
+            let column_origin_name: Handle<'_, JsValue> =
+                if let Some(origin_name) = col.origin_name() {
+                    cx.string(origin_name).upcast()
+                } else {
+                    cx.null().upcast()
+                };
             column.set(&mut cx, "column", column_origin_name)?;
-            let column_table_name: Handle<'_, JsValue> = if let Some(table_name) = col.table_name() {
+            let column_table_name: Handle<'_, JsValue> = if let Some(table_name) = col.table_name()
+            {
                 cx.string(table_name).upcast()
             } else {
                 cx.null().upcast()
             };
             column.set(&mut cx, "table", column_table_name)?;
-            let column_database_name: Handle<'_, JsValue> = if let Some(database_name) = col.database_name() {
-                cx.string(database_name).upcast()
-            } else {
-                cx.null().upcast()
-            };
+            let column_database_name: Handle<'_, JsValue> =
+                if let Some(database_name) = col.database_name() {
+                    cx.string(database_name).upcast()
+                } else {
+                    cx.null().upcast()
+                };
             column.set(&mut cx, "database", column_database_name)?;
             let column_decl_type: Handle<'_, JsValue> = if let Some(decl_type) = col.decl_type() {
                 cx.string(decl_type).upcast()
@@ -478,7 +477,11 @@ impl Rows {
     }
 }
 
-fn convert_params(cx: &mut FunctionContext, stmt: &Statement, v: Handle<'_, JsValue>) -> NeonResult<libsql::Params> {
+fn convert_params(
+    cx: &mut FunctionContext,
+    stmt: &Statement,
+    v: Handle<'_, JsValue>,
+) -> NeonResult<libsql::Params> {
     if v.is_a::<JsArray, _>(cx) {
         let v = v.downcast_or_throw::<JsArray, _>(cx)?;
         convert_params_array(cx, v)
@@ -539,10 +542,10 @@ fn convert_row(
                 } else {
                     cx.number(v as f64).upcast()
                 }
-            },
+            }
             libsql::Value::Real(v) => cx.number(v).upcast(),
             libsql::Value::Text(v) => cx.string(v).upcast(),
-            libsql::Value::Blob(v) => JsArrayBuffer::from_slice(cx, &v)?.upcast()
+            libsql::Value::Blob(v) => JsArrayBuffer::from_slice(cx, &v)?.upcast(),
         };
         result.set(cx, key, v)?;
     }
@@ -568,10 +571,10 @@ fn convert_row_raw(
                 } else {
                     cx.number(v as f64).upcast()
                 }
-            },
+            }
             libsql::Value::Real(v) => cx.number(v).upcast(),
             libsql::Value::Text(v) => cx.string(v).upcast(),
-            libsql::Value::Blob(v) => JsArrayBuffer::from_slice(cx, &v)?.upcast()
+            libsql::Value::Blob(v) => JsArrayBuffer::from_slice(cx, &v)?.upcast(),
         };
         result.set(cx, idx as u32, v)?;
     }
@@ -589,7 +592,10 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("databaseExecAsync", Database::js_exec_async)?;
     cx.export_function("databasePrepareSync", Database::js_prepare_sync)?;
     cx.export_function("databasePrepareAsync", Database::js_prepare_async)?;
-    cx.export_function("databaseDefaultSafeIntegers", Database::js_default_safe_integers)?;
+    cx.export_function(
+        "databaseDefaultSafeIntegers",
+        Database::js_default_safe_integers,
+    )?;
     cx.export_function("statementRaw", Statement::js_raw)?;
     cx.export_function("statementRun", Statement::js_run)?;
     cx.export_function("statementGet", Statement::js_get)?;
