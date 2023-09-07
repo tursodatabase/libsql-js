@@ -117,13 +117,13 @@ impl Database {
         let conn = conn.as_ref().unwrap().clone();
         let rt = runtime(&mut cx)?;
         rt.spawn(async move {
-            let stmts = sql.split(";");
+            let stmts = sql.split(';');
             for stmt in stmts {
                 let stmt = stmt.trim();
                 if stmt.is_empty() {
                     continue;
                 }
-                let fut = conn.execute(&stmt, ());
+                let fut = conn.execute(stmt, ());
                 match fut.await {
                     Ok(_) => {} // keep going
                     Err(err) => {
@@ -155,7 +155,7 @@ impl Database {
             stmts.push(stmt.clone());
         }
         let stmt = Statement {
-            conn: Arc::downgrade(&conn),
+            conn: Arc::downgrade(conn),
             stmt: Arc::downgrade(&stmt),
             raw: RefCell::new(false),
             safe_ints: RefCell::new(*db.default_safe_integers.borrow()),
@@ -272,7 +272,7 @@ fn js_value_to_value(
 impl Statement {
     fn js_raw(mut cx: FunctionContext) -> JsResult<JsNull> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
-        if stmt.stmt.upgrade().unwrap().columns().len() == 0 {
+        if stmt.stmt.upgrade().unwrap().columns().is_empty() {
             return cx.throw_error("The raw() method is only for statements that return data");
         }
         let raw = cx.argument::<JsBoolean>(0)?;
@@ -365,7 +365,6 @@ impl Statement {
         let rt = runtime(&mut cx)?;
         let raw = *stmt.raw.borrow();
         let safe_ints = *stmt.safe_ints.borrow();
-        let stmt = stmt.stmt.clone();
         rt.spawn(async move {
             let fut = raw_stmt.query(&params);
             match fut.await {
