@@ -51,7 +51,7 @@
   },
   "homepage": "https://github.com/libsql/libsql",
   "devDependencies": {
-    "@neon-rs/cli": "^0.0.4"
+    "@neon-rs/cli": "^0.0.165"
   },
   "dependencies": {
     "@neon-rs/load": "^0.0.4"

@@ -11,6 +11,20 @@ const db = new Database("hello.db", options);
 
 db.sync();
 
-const row = db.prepare("SELECT * FROM users WHERE id = ?").get(1);
+var rows = undefined;
 
-console.log(`Name: ${row.name}, email: ${row.email}`);
+console.log("After sync:");
+
+rows = db.prepare("SELECT * FROM users").all();
+for (const row of rows) {
+    console.log(row);
+}
+
+db.exec("INSERT INTO users VALUES (4, 'Pekka Enberg')");
+
+console.log("After write:");
+
+rows = db.prepare("SELECT * FROM users").all();
+for (const row of rows) {
+    console.log(row);
+}

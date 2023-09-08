@@ -698,7 +698,7 @@ dependencies = [
 name = "libsql"
 version = "0.0.1"
 dependencies = [
- "libsql 0.1.7",
+ "libsql 0.1.11",
  "neon",
  "once_cell",
  "tokio",
@@ -706,12 +706,13 @@ dependencies = [
 
 [[package]]
 name = "libsql"
-version = "0.1.7"
-source = "git+https://github.com/libsql/libsql/?rev=1bb6afe8246d3fb59f82c9e8b3d4532b33bb8473#1bb6afe8246d3fb59f82c9e8b3d4532b33bb8473"
+version = "0.1.11"
+source = "git+https://github.com/libsql/libsql/?rev=07c18dacfe43095a8f47ac85ccf3f02be9ba1b3d#07c18dacfe43095a8f47ac85ccf3f02be9ba1b3d"
 dependencies = [
  "async-trait",
  "base64",
  "bincode",
+ "bitflags 2.4.0",
  "crossbeam-channel",
  "futures",
  "hrana-client-proto",
@@ -731,7 +732,7 @@ dependencies = [
 [[package]]
 name = "libsql-sys"
 version = "0.2.13"
-source = "git+https://github.com/libsql/libsql/?rev=1bb6afe8246d3fb59f82c9e8b3d4532b33bb8473#1bb6afe8246d3fb59f82c9e8b3d4532b33bb8473"
+source = "git+https://github.com/libsql/libsql/?rev=07c18dacfe43095a8f47ac85ccf3f02be9ba1b3d#07c18dacfe43095a8f47ac85ccf3f02be9ba1b3d"
 dependencies = [
  "bindgen",
  "cc",
@@ -742,8 +743,8 @@ dependencies = [
 
 [[package]]
 name = "libsql_replication"
-version = "0.0.3"
-source = "git+https://github.com/libsql/libsql/?rev=1bb6afe8246d3fb59f82c9e8b3d4532b33bb8473#1bb6afe8246d3fb59f82c9e8b3d4532b33bb8473"
+version = "0.0.5"
+source = "git+https://github.com/libsql/libsql/?rev=07c18dacfe43095a8f47ac85ccf3f02be9ba1b3d#07c18dacfe43095a8f47ac85ccf3f02be9ba1b3d"
 dependencies = [
  "anyhow",
  "bincode",

@@ -3,9 +3,8 @@ use neon::types::JsPromise;
 use neon::{prelude::*, types::JsBigInt};
 use once_cell::sync::OnceCell;
 use std::cell::RefCell;
-use std::sync::Arc;
-use std::sync::{Mutex, Weak};
-use tokio::runtime::Runtime;
+use std::sync::{Arc, Weak};
+use tokio::{runtime::Runtime, sync::Mutex};
 
 fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
     static RUNTIME: OnceCell<Runtime> = OnceCell::new();
@@ -18,7 +17,7 @@ fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
 struct Database {
     db: libsql::Database,
     conn: RefCell<Option<Arc<libsql::Connection>>>,
-    stmts: Arc<Mutex<Vec<Arc<libsql::Statement>>>>,
+    stmts: Arc<Mutex<Vec<Arc<Mutex<libsql::Statement>>>>>,
     default_safe_integers: RefCell<bool>,
 }
 
@@ -40,16 +39,15 @@ impl Database {
     fn js_open(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
-        let rt = runtime(&mut cx)?;
         let db = if is_remote_path(&db_path) {
             libsql::Database::open_remote(db_path.clone(), auth_token)
         } else {
             libsql::Database::open(db_path.clone())
         }
         .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
-        let fut = db.connect();
-        let result = rt.block_on(fut);
-        let conn = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let conn = db
+            .connect()
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let db = Database::new(db, conn);
         Ok(cx.boxed(db))
     }
@@ -59,12 +57,12 @@ impl Database {
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
         let rt = runtime(&mut cx)?;
-        let fut = libsql::Database::open_with_sync(db_path, sync_url, sync_auth);
+        let fut = libsql::Database::open_with_remote_sync(db_path, sync_url, sync_auth);
         let result = rt.block_on(fut);
         let db = result.or_else(|err| cx.throw_error(err.to_string()))?;
-        let fut = db.connect();
-        let result = rt.block_on(fut);
-        let conn = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        let conn = db
+            .connect()
+            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let db = Database::new(db, conn);
         Ok(cx.boxed(db))
     }
@@ -79,10 +77,11 @@ impl Database {
 
     fn js_close(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
-        for stmt in db.stmts.lock().unwrap().iter() {
+        for stmt in db.stmts.blocking_lock().iter() {
+            let mut stmt = stmt.blocking_lock();
             stmt.finalize();
         }
-        db.stmts.lock().unwrap().clear();
+        db.stmts.blocking_lock().clear();
         db.conn.borrow().as_ref().unwrap().close();
         db.conn.replace(None);
         Ok(cx.undefined())
@@ -142,9 +141,9 @@ impl Database {
         let rt = runtime(&mut cx)?;
         let result = rt.block_on(fut);
         let stmt = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
-        let stmt = Arc::new(stmt);
+        let stmt = Arc::new(Mutex::new(stmt));
         {
-            let mut stmts = db.stmts.lock().unwrap();
+            let mut stmts = db.stmts.blocking_lock();
             stmts.push(stmt.clone());
         }
         let stmt = Statement {
@@ -169,9 +168,9 @@ impl Database {
             let fut = conn.prepare(&sql);
             match fut.await {
                 Ok(stmt) => {
-                    let stmt = Arc::new(stmt);
+                    let stmt = Arc::new(Mutex::new(stmt));
                     {
-                        let mut stmts = stmts.lock().unwrap();
+                        let mut stmts = stmts.lock().await;
                         stmts.push(stmt.clone());
                     }
                     let stmt = Statement {
@@ -212,14 +211,14 @@ fn is_remote_path(path: &str) -> bool {
 
 fn from_libsql_error(err: libsql::Error) -> String {
     match err {
-        libsql::Error::PrepareFailed(_, _, err) => err,
+        libsql::Error::SqliteFailure(_, err) => err,
         _ => err.to_string(),
     }
 }
 
 struct Statement {
     conn: Weak<libsql::Connection>,
-    stmt: Weak<libsql::Statement>,
+    stmt: Weak<Mutex<libsql::Statement>>,
     raw: RefCell<bool>,
     safe_ints: RefCell<bool>,
 }
@@ -265,7 +264,9 @@ fn js_value_to_value(
 impl Statement {
     fn js_raw(mut cx: FunctionContext) -> JsResult<JsNull> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
-        if stmt.stmt.upgrade().unwrap().columns().is_empty() {
+        let raw_stmt = stmt.stmt.upgrade().unwrap();
+        let raw_stmt = raw_stmt.blocking_lock();
+        if raw_stmt.columns().is_empty() {
             return cx.throw_error("The raw() method is only for statements that return data");
         }
         let raw = cx.argument::<JsBoolean>(0)?;
@@ -283,6 +284,7 @@ impl Statement {
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, &stmt, params)?;
         let raw_stmt = stmt.stmt.upgrade().unwrap();
+        let mut raw_stmt = raw_stmt.blocking_lock();
         raw_stmt.reset();
         let fut = raw_stmt.execute(&params);
         let rt = runtime(&mut cx)?;
@@ -304,6 +306,7 @@ impl Statement {
         let params = convert_params(&mut cx, &stmt, params)?;
         let safe_ints = *stmt.safe_ints.borrow();
         let raw_stmt = stmt.stmt.upgrade().unwrap();
+        let mut raw_stmt = raw_stmt.blocking_lock();
         let fut = raw_stmt.query(&params);
         let rt = runtime(&mut cx)?;
         let result = rt.block_on(fut);
@@ -333,11 +336,13 @@ impl Statement {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, &stmt, params)?;
-        let raw_stmt = stmt.stmt.upgrade().unwrap();
-        raw_stmt.reset();
-        let fut = raw_stmt.query(&params);
         let rt = runtime(&mut cx)?;
-        let result = rt.block_on(fut);
+        let raw_stmt = stmt.stmt.upgrade().unwrap();
+        let result = rt.block_on(async move {
+            let mut raw_stmt = raw_stmt.lock().await;
+            raw_stmt.reset();
+            raw_stmt.query(&params).await
+        });
         let rows = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let rows = Rows {
             rows: RefCell::new(rows),
@@ -352,15 +357,21 @@ impl Statement {
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, &stmt, params)?;
         let raw_stmt = stmt.stmt.upgrade().unwrap();
-        raw_stmt.reset();
+        {
+            let mut raw_stmt = raw_stmt.blocking_lock();
+            raw_stmt.reset();
+        }
         let (deferred, promise) = cx.promise();
         let channel = cx.channel();
         let rt = runtime(&mut cx)?;
         let raw = *stmt.raw.borrow();
         let safe_ints = *stmt.safe_ints.borrow();
         rt.spawn(async move {
-            let fut = raw_stmt.query(&params);
-            match fut.await {
+            let result = {
+                let mut raw_stmt = raw_stmt.lock().await;
+                raw_stmt.query(&params).await
+            };
+            match result {
                 Ok(rows) => {
                     deferred.settle_with(&channel, move |mut cx| {
                         let rows = Rows {
@@ -385,7 +396,8 @@ impl Statement {
     fn js_columns(mut cx: FunctionContext) -> JsResult<JsValue> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let result = cx.empty_array();
-        let raw_stmt = stmt.stmt.upgrade().unwrap();
+        let stmt = stmt.stmt.upgrade().unwrap();
+        let raw_stmt = stmt.blocking_lock();
         for (i, col) in raw_stmt.columns().iter().enumerate() {
             let column = cx.empty_object();
             let column_name = cx.string(col.name());
@@ -502,7 +514,8 @@ fn convert_params_object(
     v: Handle<'_, JsObject>,
 ) -> NeonResult<libsql::Params> {
     let mut params = vec![];
-    let raw_stmt = stmt.stmt.upgrade().unwrap();
+    let stmt = stmt.stmt.upgrade().unwrap();
+    let raw_stmt = stmt.blocking_lock();
     for idx in 0..raw_stmt.parameter_count() {
         let name = raw_stmt.parameter_name((idx + 1) as i32).unwrap();
         let name = name.to_string();
