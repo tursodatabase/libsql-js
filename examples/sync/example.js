@@ -20,9 +20,8 @@ const comment = reader.question("Enter your comment: ");
 
 console.log(comment);
 
-db.exec("INSERT INTO guest_book_entries (comment) VALUES ('" + comment + "')");
-//const stmt = db.prepare("INSERT INTO guest_book_entries (comment) VALUES (?)");
-//stmt.run(comment);
+const stmt = db.prepare("INSERT INTO guest_book_entries (comment) VALUES (?)");
+stmt.run(comment);
 
 db.sync();
 

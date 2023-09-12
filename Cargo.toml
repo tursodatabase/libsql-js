@@ -11,7 +11,7 @@ exclude = ["index.node"]
 crate-type = ["cdylib"]
 
 [dependencies]
-libsql = { git = "https://github.com/libsql/libsql/", rev = "a483c7859d164fa6cc7cb44201193bd836db3142" }
+libsql = { git = "https://github.com/libsql/libsql/", rev = "c95b60fcdf93c428634500c5cf18677e3b28e59a" }
 once_cell = "1.18.0"
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
 
