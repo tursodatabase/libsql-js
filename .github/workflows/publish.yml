@@ -43,7 +43,7 @@ jobs:
     name: Builds (other platforms)
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-gnu]
+        target: [x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl]
     runs-on: ubuntu-latest
     permissions:
       contents: write
