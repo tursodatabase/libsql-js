@@ -1,4 +1,5 @@
 import Database from "libsql";
+import reader from "readline-sync";
 
 const url = process.env.LIBSQL_URL;
 if (!url) {
@@ -11,20 +12,22 @@ const db = new Database("hello.db", options);
 
 db.sync();
 
-var rows = undefined;
+db.exec("CREATE TABLE IF NOT EXISTS guest_book_entries (comment TEXT)");
 
-console.log("After sync:");
+db.sync();
 
-rows = db.prepare("SELECT * FROM users").all();
+const comment = reader.question("Enter your comment: ");
+
+console.log(comment);
+
+db.exec("INSERT INTO guest_book_entries (comment) VALUES ('" + comment + "')");
+//const stmt = db.prepare("INSERT INTO guest_book_entries (comment) VALUES (?)");
+//stmt.run(comment);
+
+db.sync();
+
+console.log("Guest book entries:");
+const rows = db.prepare("SELECT * FROM guest_book_entries").all();
 for (const row of rows) {
-    console.log(row);
-}
-
-db.exec("INSERT INTO users VALUES (4, 'Pekka Enberg')");
-
-console.log("After write:");
-
-rows = db.prepare("SELECT * FROM users").all();
-for (const row of rows) {
-    console.log(row);
+    console.log(" - " + row.comment);
 }
