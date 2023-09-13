@@ -14,7 +14,7 @@ const {
   databaseOpenWithRpcSync,
   databaseInTransaction,
   databaseClose,
-  databaseSync,
+  databaseSyncAsync,
   databaseExecAsync,
   databasePrepareAsync,
   databaseDefaultSafeIntegers,
@@ -68,7 +68,7 @@ class Database {
   }
 
   sync() {
-    databaseSync.call(this.db);
+    databaseSyncAsync.call(this.db);
   }
 
   /**
