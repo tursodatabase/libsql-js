@@ -1,10 +1,17 @@
 "use strict";
 
 const { load, currentTarget } = require("@neon-rs/load");
+const { familySync, GLIBC } = require("detect-libc");
 
 // Static requires for bundlers.
 if (0) {
   require("./.targets");
+}
+
+let target = currentTarget();
+
+if (target == "linux-x64-musl" && familySync() == GLIBC) {
+  target = "linux-x64-gnu";
 }
 
 const {
@@ -23,7 +30,7 @@ const {
   statementColumns,
   statementSafeIntegers,
   rowsNext,
-} = load(__dirname) || require(`@libsql/${currentTarget()}`);
+} = load(__dirname) || require(`@libsql/${target}`);
 
 const SqliteError = require("./sqlite-error");
 
