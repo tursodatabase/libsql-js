@@ -15,7 +15,7 @@ fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
 }
 
 struct Database {
-    db: libsql::Database,
+    db: Arc<Mutex<libsql::Database>>,
     conn: RefCell<Option<Arc<libsql::Connection>>>,
     stmts: Arc<Mutex<Vec<Arc<Mutex<libsql::Statement>>>>>,
     default_safe_integers: RefCell<bool>,
@@ -29,7 +29,7 @@ impl Finalize for Database {}
 impl Database {
     fn new(db: libsql::Database, conn: libsql::Connection) -> Self {
         Database {
-            db,
+            db: Arc::new(Mutex::new(db)),
             conn: RefCell::new(Some(Arc::new(conn))),
             stmts: Arc::new(Mutex::new(vec![])),
             default_safe_integers: RefCell::new(false),
@@ -87,12 +87,38 @@ impl Database {
         Ok(cx.undefined())
     }
 
-    fn js_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    fn js_sync_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        let db = db.db.clone();
         let rt = runtime(&mut cx)?;
-        rt.block_on(db.db.sync())
-            .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
+        rt.block_on(async move {
+            let db = db.lock().await;
+            db.sync().await
+        }).or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         Ok(cx.undefined())
+    }
+
+    fn js_sync_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        let (deferred, promise) = cx.promise();
+        let channel = cx.channel();
+        let db = db.db.clone();
+        let rt = runtime(&mut cx)?;
+        rt.spawn(async move {
+            let result = db.lock().await.sync().await;
+            match result {
+                Ok(_) => {
+                    deferred.settle_with(&channel, |mut cx| Ok(cx.undefined()));
+                }
+                Err(err) => {
+                    deferred.settle_with(&channel, |mut cx| {
+                        cx.throw_error(from_libsql_error(err))?;
+                        Ok(cx.undefined())
+                    });
+                }
+            }
+        });
+        Ok(promise)
     }
 
     fn js_exec_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
@@ -592,7 +618,8 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("databaseOpenWithRpcSync", Database::js_open_with_rpc_sync)?;
     cx.export_function("databaseInTransaction", Database::js_in_transaction)?;
     cx.export_function("databaseClose", Database::js_close)?;
-    cx.export_function("databaseSync", Database::js_sync)?;
+    cx.export_function("databaseSyncSync", Database::js_sync_sync)?;
+    cx.export_function("databaseSyncAsync", Database::js_sync_async)?;
     cx.export_function("databaseExecSync", Database::js_exec_sync)?;
     cx.export_function("databaseExecAsync", Database::js_exec_async)?;
     cx.export_function("databasePrepareSync", Database::js_prepare_sync)?;

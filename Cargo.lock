@@ -706,7 +706,7 @@ dependencies = [
 [[package]]
 name = "libsql"
 version = "0.1.11"
-source = "git+https://github.com/libsql/libsql/?rev=c95b60fcdf93c428634500c5cf18677e3b28e59a#c95b60fcdf93c428634500c5cf18677e3b28e59a"
+source = "git+https://github.com/libsql/libsql/?rev=0e524b476cd1bba16d62c935dd2a7cf66bce4418#0e524b476cd1bba16d62c935dd2a7cf66bce4418"
 dependencies = [
  "async-trait",
  "base64",
@@ -740,8 +740,8 @@ dependencies = [
 
 [[package]]
 name = "libsql-sys"
-version = "0.2.13"
-source = "git+https://github.com/libsql/libsql/?rev=c95b60fcdf93c428634500c5cf18677e3b28e59a#c95b60fcdf93c428634500c5cf18677e3b28e59a"
+version = "0.2.14"
+source = "git+https://github.com/libsql/libsql/?rev=0e524b476cd1bba16d62c935dd2a7cf66bce4418#0e524b476cd1bba16d62c935dd2a7cf66bce4418"
 dependencies = [
  "bindgen",
  "cc",
@@ -753,7 +753,7 @@ dependencies = [
 [[package]]
 name = "libsql_replication"
 version = "0.0.5"
-source = "git+https://github.com/libsql/libsql/?rev=c95b60fcdf93c428634500c5cf18677e3b28e59a#c95b60fcdf93c428634500c5cf18677e3b28e59a"
+source = "git+https://github.com/libsql/libsql/?rev=0e524b476cd1bba16d62c935dd2a7cf66bce4418#0e524b476cd1bba16d62c935dd2a7cf66bce4418"
 dependencies = [
  "anyhow",
  "bincode",
