@@ -312,7 +312,7 @@ impl Statement {
         let raw_stmt = stmt.stmt.upgrade().unwrap();
         let mut raw_stmt = raw_stmt.blocking_lock();
         raw_stmt.reset();
-        let fut = raw_stmt.execute(&params);
+        let fut = raw_stmt.execute(params);
         let rt = runtime(&mut cx)?;
         let result = rt.block_on(fut);
         let changes = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
@@ -333,7 +333,7 @@ impl Statement {
         let safe_ints = *stmt.safe_ints.borrow();
         let raw_stmt = stmt.stmt.upgrade().unwrap();
         let mut raw_stmt = raw_stmt.blocking_lock();
-        let fut = raw_stmt.query(&params);
+        let fut = raw_stmt.query(params);
         let rt = runtime(&mut cx)?;
         let result = rt.block_on(fut);
         let mut rows = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
@@ -367,7 +367,7 @@ impl Statement {
         let result = rt.block_on(async move {
             let mut raw_stmt = raw_stmt.lock().await;
             raw_stmt.reset();
-            raw_stmt.query(&params).await
+            raw_stmt.query(params).await
         });
         let rows = result.or_else(|err| cx.throw_error(from_libsql_error(err)))?;
         let rows = Rows {
@@ -395,7 +395,7 @@ impl Statement {
         rt.spawn(async move {
             let result = {
                 let mut raw_stmt = raw_stmt.lock().await;
-                raw_stmt.query(&params).await
+                raw_stmt.query(params).await
             };
             match result {
                 Ok(rows) => {
@@ -511,7 +511,7 @@ fn convert_params(
     cx: &mut FunctionContext,
     stmt: &Statement,
     v: Handle<'_, JsValue>,
-) -> NeonResult<libsql::Params> {
+) -> NeonResult<libsql::params::Params> {
     if v.is_a::<JsArray, _>(cx) {
         let v = v.downcast_or_throw::<JsArray, _>(cx)?;
         convert_params_array(cx, v)
@@ -524,21 +524,21 @@ fn convert_params(
 fn convert_params_array(
     cx: &mut FunctionContext,
     v: Handle<'_, JsArray>,
-) -> NeonResult<libsql::Params> {
+) -> NeonResult<libsql::params::Params> {
     let mut params = vec![];
     for i in 0..v.len(cx) {
         let v = v.get(cx, i)?;
         let v = js_value_to_value(cx, v)?;
         params.push(v);
     }
-    Ok(libsql::Params::Positional(params))
+    Ok(libsql::params::Params::Positional(params))
 }
 
 fn convert_params_object(
     cx: &mut FunctionContext,
     stmt: &Statement,
     v: Handle<'_, JsObject>,
-) -> NeonResult<libsql::Params> {
+) -> NeonResult<libsql::params::Params> {
     let mut params = vec![];
     let stmt = stmt.stmt.upgrade().unwrap();
     let raw_stmt = stmt.blocking_lock();
@@ -549,7 +549,7 @@ fn convert_params_object(
         let v = js_value_to_value(cx, v)?;
         params.push((name, v));
     }
-    Ok(libsql::Params::Named(params))
+    Ok(libsql::params::Params::Named(params))
 }
 
 fn convert_row(
