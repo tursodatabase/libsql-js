@@ -809,6 +809,7 @@ version = "0.0.1"
 dependencies = [
  "env_logger",
  "libsql",
+ "log",
  "neon",
  "once_cell",
  "tokio",

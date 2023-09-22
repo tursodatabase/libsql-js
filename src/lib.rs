@@ -5,6 +5,7 @@ use once_cell::sync::OnceCell;
 use std::cell::RefCell;
 use std::sync::{Arc, Weak};
 use tokio::{runtime::Runtime, sync::Mutex};
+use log::trace;
 
 fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
     static RUNTIME: OnceCell<Runtime> = OnceCell::new();
@@ -40,8 +41,10 @@ impl Database {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
         let db = if is_remote_path(&db_path) {
+            trace!("Opening remote database: {}", db_path);
             libsql::Database::open_remote(db_path.clone(), auth_token)
         } else {
+            trace!("Opening local database: {}", db_path);
             libsql::Database::open(db_path.clone())
         }
         .or_else(|err| cx.throw_error(from_libsql_error(err)))?;
@@ -56,6 +59,7 @@ impl Database {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
+        trace!("Opening local database with sync: database = {}, URL = {}", db_path, sync_url);
         let rt = runtime(&mut cx)?;
         let fut = libsql::Database::open_with_remote_sync(db_path, sync_url, sync_auth);
         let result = rt.block_on(fut);
@@ -76,6 +80,7 @@ impl Database {
     }
 
     fn js_close(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+        trace!("Closing database");
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         for stmt in db.stmts.blocking_lock().iter() {
             let mut stmt = stmt.blocking_lock();
@@ -88,6 +93,7 @@ impl Database {
     }
 
     fn js_sync_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+        trace!("Synchronizing database (sync)");
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let db = db.db.clone();
         let rt = runtime(&mut cx)?;
@@ -99,6 +105,7 @@ impl Database {
     }
 
     fn js_sync_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
+        trace!("Synchronizing database (async)");
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let (deferred, promise) = cx.promise();
         let channel = cx.channel();
@@ -124,6 +131,7 @@ impl Database {
     fn js_exec_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
+        trace!("Executing SQL statement (sync): {}", sql);
         let conn = db.conn.borrow();
         let conn = conn.as_ref().unwrap().clone();
         let fut = conn.execute_batch(&sql);
@@ -136,6 +144,7 @@ impl Database {
     fn js_exec_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
+        trace!("Executing SQL statement (async): {}", sql);
         let (deferred, promise) = cx.promise();
         let channel = cx.channel();
         let conn = db.conn.borrow();
@@ -161,6 +170,7 @@ impl Database {
     fn js_prepare_sync<'a>(mut cx: FunctionContext) -> JsResult<JsBox<Statement>> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
+        trace!("Preparing SQL statement (sync): {}", sql);
         let conn = db.conn.borrow();
         let conn = conn.as_ref().unwrap();
         let fut = conn.prepare(&sql);
@@ -184,6 +194,7 @@ impl Database {
     fn js_prepare_async<'a>(mut cx: FunctionContext) -> JsResult<JsPromise> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
+        trace!("Preparing SQL statement (async): {}", sql);
         let (deferred, promise) = cx.promise();
         let channel = cx.channel();
         let safe_ints = *db.default_safe_integers.borrow();
