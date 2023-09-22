@@ -614,6 +614,7 @@ fn convert_row_raw(
 
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
+    env_logger::init();
     cx.export_function("databaseOpen", Database::js_open)?;
     cx.export_function("databaseOpenWithRpcSync", Database::js_open_with_rpc_sync)?;
     cx.export_function("databaseInTransaction", Database::js_in_transaction)?;
