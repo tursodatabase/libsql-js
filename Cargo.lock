@@ -733,7 +733,7 @@ dependencies = [
 [[package]]
 name = "libsql"
 version = "0.1.11"
-source = "git+https://github.com/libsql/libsql/?rev=ed32b66b83302e54238b1ce174522a28b21d5d73#ed32b66b83302e54238b1ce174522a28b21d5d73"
+source = "git+https://github.com/libsql/libsql/?rev=2741ec540df56dd262da8f085abb7ec0af8a7d61#2741ec540df56dd262da8f085abb7ec0af8a7d61"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -786,7 +786,7 @@ dependencies = [
 [[package]]
 name = "libsql-sys"
 version = "0.2.14"
-source = "git+https://github.com/libsql/libsql/?rev=ed32b66b83302e54238b1ce174522a28b21d5d73#ed32b66b83302e54238b1ce174522a28b21d5d73"
+source = "git+https://github.com/libsql/libsql/?rev=2741ec540df56dd262da8f085abb7ec0af8a7d61#2741ec540df56dd262da8f085abb7ec0af8a7d61"
 dependencies = [
  "bindgen",
  "cc",
@@ -1699,9 +1699,9 @@ dependencies = [
 
 [[package]]
 name = "tonic-web"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "605028b8adec50b03ee93c1cf6a9dd0d861f508d82fbda569f4a813b411862c1"
+checksum = "2953fe95664e86519e0d1c4bdd65007d93bc47a59c9af512280977aa9e46b871"
 dependencies = [
  "base64",
  "bytes",
