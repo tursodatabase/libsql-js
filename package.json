@@ -4,7 +4,8 @@
   "description": "",
   "os": [
     "darwin",
-    "linux"
+    "linux",
+    "win32"
   ],
   "cpu": [
     "x64",
@@ -36,6 +37,9 @@
   "neon": {
     "targets": {
       "aarch64-apple-darwin": "@libsql/darwin-arm64",
+      "x86_64-apple-darwin": "@libsql/darwin-x64",
+      "aarch64-pc-windows-msvc": "@libsql/win32-arm64-msvc",
+      "x86_64-pc-windows-msvc": "@libsql/win32-x64-msvc",
       "x86_64-unknown-linux-gnu": "@libsql/linux-x64-gnu",
       "x86_64-unknown-linux-musl": "@libsql/linux-x64-musl"
     }
@@ -57,9 +61,5 @@
   "dependencies": {
     "@neon-rs/load": "^0.0.4",
     "detect-libc": "2.0.2"
-  },
-  "optionalDependencies": {
-    "@libsql/darwin-arm64": "0.0.1",
-    "@libsql/linux-x64-gnu": "0.0.1"
   }
 }

@@ -1,4 +1,4 @@
-name: publish
+name: CI
 
 env:
   NODE_VERSION: 18.x
@@ -6,8 +6,13 @@ env:
 
 on:
   push:
-    tags:
-      - v*
+    # Prevent duplicate runs of this workflow on our own internal PRs.
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    branches:
+      - main
 
 jobs:
   pack:
@@ -20,11 +25,12 @@ jobs:
         uses: neon-actions/pack@v0.1
         with:
           node-version: ${{ env.NODE_VERSION }}
-          github-release: true
+          github-release: false
 
   macos-builds:
     name: Builds (macOS)
     strategy:
+      fail-fast: false
       matrix:
         target: [x86_64-apple-darwin, aarch64-apple-darwin]
     runs-on: macos-arm64
@@ -37,11 +43,12 @@ jobs:
           target: ${{ matrix.target }}
           node-version: ${{ env.NODE_VERSION }}
           npm-publish: false
-          github-release: true
+          github-release: false
 
   windows-builds:
     name: Builds (Windows)
     strategy:
+      fail-fast: false
       matrix:
         target: [x86_64-pc-windows-msvc]
     runs-on: windows-latest
@@ -54,11 +61,12 @@ jobs:
           target: ${{ matrix.target }}
           node-version: ${{ env.NODE_VERSION }}
           npm-publish: false
-          github-release: true
+          github-release: false
 
   other-builds:
     name: Builds (other platforms)
     strategy:
+      fail-fast: false
       matrix:
         target: [x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl]
     runs-on: ubuntu-latest
@@ -72,20 +80,4 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           use-cross: true
           npm-publish: false
-          github-release: true
-
-  publish:
-    name: Publish
-    needs: [pack, macos-builds, windows-builds, other-builds]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Publish
-        uses: neon-actions/publish@v0.1
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          registry-url: ${{ env.NPM_REGISTRY }}
-          github-release: "*.tgz"
+          github-release: false
