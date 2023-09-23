@@ -12,6 +12,7 @@ This source repository contains libSQL API bindings for Node, which aims to be c
 * In-memory and local libSQL/SQLite databases
 * Remote libSQL databases
 * Embedded, in-app replica that syncs with a remote libSQL database
+* Supports Bun, Deno, and Node on macOS, Linux, and Windows.
 
 ## Installing
 
