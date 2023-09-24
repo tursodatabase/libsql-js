@@ -58,7 +58,7 @@
     "@neon-rs/cli": "^0.0.165"
   },
   "dependencies": {
-    "@neon-rs/load": "^0.0.165",
+    "@neon-rs/load": "^0.0.4",
     "detect-libc": "2.0.2"
   }
 }
