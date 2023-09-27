@@ -88,7 +88,6 @@ class Database {
       const stmt = databasePrepareSync.call(this.db, sql);
       return new Statement(stmt);  
     } catch (err) {
-      console.log(JSON.stringify(err));
       throw new SqliteError(err.message, err.code);
     }
   }
