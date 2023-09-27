@@ -243,13 +243,15 @@ test.serial("errors", async (t) => {
     await db.exec("SYNTAX ERROR");
   }, {
     instanceOf: t.context.errorType,
-    message: 'near "SYNTAX": syntax error'
+    message: 'near "SYNTAX": syntax error',
+    code: 'SQLITE_ERROR'
   });
   await t.throwsAsync(async () => {
     await db.exec("SELECT * FROM missing_table");
   }, {
     instanceOf: t.context.errorType,
-    message: "no such table: missing_table"
+    message: "no such table: missing_table",
+    code: 'SQLITE_ERROR'
   });
 });
 

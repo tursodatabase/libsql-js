@@ -80,7 +80,7 @@ class Database {
     return databasePrepareAsync.call(this.db, sql).then((stmt) => {
       return new Statement(stmt);
     }).catch((err) => {
-      throw new SqliteError(err.message, ""); // TODO: SQLite error code
+      throw new SqliteError(err.message, err.code);
     });
   }
 
@@ -179,7 +179,7 @@ class Database {
    */
   exec(sql) {
     return databaseExecAsync.call(this.db, sql).catch((err) => {
-      throw new SqliteError(err.message, ""); // TODO: SQLite error code
+      throw new SqliteError(err.message, err.code);
     });
   }
 
@@ -232,7 +232,7 @@ class Statement {
         return statementRun.call(this.stmt, bindParameters.flat());
       }
     } catch (err) {
-      throw new SqliteError(err.message, ""); // TODO: SQLite error code
+      throw new SqliteError(err.message, err.code);
     }
   }
 

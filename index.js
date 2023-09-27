@@ -88,7 +88,8 @@ class Database {
       const stmt = databasePrepareSync.call(this.db, sql);
       return new Statement(stmt);  
     } catch (err) {
-      throw new SqliteError(err.message, ""); // TODO: SQLite error code
+      console.log(JSON.stringify(err));
+      throw new SqliteError(err.message, err.code);
     }
   }
 
@@ -189,7 +190,7 @@ class Database {
     try {
       databaseExecSync.call(this.db, sql);
     } catch (err) {
-      throw new SqliteError(err.message, ""); // TODO: SQLite error code
+      throw new SqliteError(err.message, err.code);
     }
   }
 
@@ -243,7 +244,7 @@ class Statement {
         return statementRun.call(this.stmt, bindParameters.flat());
       }
     } catch (err) {
-      throw new SqliteError(err.message, ""); // TODO: SQLite error code
+      throw new SqliteError(err.message, err.code);
     }
   }
 
