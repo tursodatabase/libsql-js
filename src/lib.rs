@@ -730,7 +730,7 @@ fn convert_row_raw(
 
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt::try_init();
     cx.export_function("databaseOpen", Database::js_open)?;
     cx.export_function("databaseOpenWithRpcSync", Database::js_open_with_rpc_sync)?;
     cx.export_function("databaseInTransaction", Database::js_in_transaction)?;
