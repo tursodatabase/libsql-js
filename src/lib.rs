@@ -22,9 +22,6 @@ struct Database {
     default_safe_integers: RefCell<bool>,
 }
 
-unsafe impl Sync for Database {}
-unsafe impl Send for Database {}
-
 impl Finalize for Database {}
 
 impl Database {
@@ -367,9 +364,6 @@ struct Statement {
     raw: RefCell<bool>,
     safe_ints: RefCell<bool>,
 }
-
-unsafe impl<'a> Sync for Statement {}
-unsafe impl<'a> Send for Statement {}
 
 impl<'a> Finalize for Statement {}
 
