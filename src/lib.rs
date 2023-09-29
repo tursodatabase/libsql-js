@@ -17,7 +17,7 @@ fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
 
 struct Database {
     db: Arc<Mutex<libsql::Database>>,
-    conn: RefCell<Option<Arc<libsql::Connection>>>,
+    conn: RefCell<Option<Arc<Mutex<libsql::Connection>>>>,
     stmts: Arc<Mutex<Vec<Arc<Mutex<libsql::Statement>>>>>,
     default_safe_integers: RefCell<bool>,
 }
@@ -31,7 +31,7 @@ impl Database {
     fn new(db: libsql::Database, conn: libsql::Connection) -> Self {
         Database {
             db: Arc::new(Mutex::new(db)),
-            conn: RefCell::new(Some(Arc::new(conn))),
+            conn: RefCell::new(Some(Arc::new(Mutex::new(conn)))),
             stmts: Arc::new(Mutex::new(vec![])),
             default_safe_integers: RefCell::new(false),
         }
@@ -75,7 +75,7 @@ impl Database {
         let db = cx.argument::<JsBox<Database>>(0)?;
         let conn = db.conn.borrow();
         let conn = conn.as_ref().unwrap().clone();
-        let result = !conn.is_autocommit();
+        let result = !conn.blocking_lock().is_autocommit();
         Ok(cx.boolean(result).upcast())
     }
 
@@ -87,7 +87,8 @@ impl Database {
             stmt.finalize();
         }
         db.stmts.blocking_lock().clear();
-        db.conn.borrow().as_ref().unwrap().close();
+        let conn = db.get_conn();
+        conn.blocking_lock().close();
         db.conn.replace(None);
         Ok(cx.undefined())
     }
@@ -133,11 +134,11 @@ impl Database {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         trace!("Executing SQL statement (sync): {}", sql);
-        let conn = db.conn.borrow();
-        let conn = conn.as_ref().unwrap().clone();
-        let fut = conn.execute_batch(&sql);
+        let conn = db.get_conn();
         let rt = runtime(&mut cx)?;
-        let result = rt.block_on(fut);
+        let result = rt.block_on(async {
+            conn.lock().await.execute_batch(&sql).await
+        });
         result.or_else(|err| throw_libsql_error(&mut cx, err))?;
         Ok(cx.undefined())
     }
@@ -148,12 +149,10 @@ impl Database {
         trace!("Executing SQL statement (async): {}", sql);
         let (deferred, promise) = cx.promise();
         let channel = cx.channel();
-        let conn = db.conn.borrow();
-        let conn = conn.as_ref().unwrap().clone();
+        let conn = db.get_conn();
         let rt = runtime(&mut cx)?;
         rt.spawn(async move {
-            let fut = conn.execute_batch(&sql);
-            match fut.await {
+            match conn.lock().await.execute_batch(&sql).await {
                 Ok(_) => {
                     deferred.settle_with(&channel, |mut cx| Ok(cx.undefined()));
                 }
@@ -172,11 +171,11 @@ impl Database {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         trace!("Preparing SQL statement (sync): {}", sql);
-        let conn = db.conn.borrow();
-        let conn = conn.as_ref().unwrap();
-        let fut = conn.prepare(&sql);
+        let conn = db.get_conn();
         let rt = runtime(&mut cx)?;
-        let result = rt.block_on(fut);
+        let result = rt.block_on(async {
+            conn.lock().await.prepare(&sql).await
+        });
         let stmt = result.or_else(|err| throw_libsql_error(&mut cx, err))?;
         let stmt = Arc::new(Mutex::new(stmt));
         {
@@ -184,7 +183,7 @@ impl Database {
             stmts.push(stmt.clone());
         }
         let stmt = Statement {
-            conn: Arc::downgrade(conn),
+            conn: Arc::downgrade(&conn),
             stmt: Arc::downgrade(&stmt),
             raw: RefCell::new(false),
             safe_ints: RefCell::new(*db.default_safe_integers.borrow()),
@@ -200,11 +199,10 @@ impl Database {
         let channel = cx.channel();
         let safe_ints = *db.default_safe_integers.borrow();
         let rt = runtime(&mut cx)?;
-        let conn = db.conn.borrow().clone().unwrap();
+        let conn = db.get_conn();
         let stmts = db.stmts.clone();
         rt.spawn(async move {
-            let fut = conn.prepare(&sql);
-            match fut.await {
+            match conn.lock().await.prepare(&sql).await {
                 Ok(stmt) => {
                     let stmt = Arc::new(Mutex::new(stmt));
                     {
@@ -240,6 +238,11 @@ impl Database {
 
     fn set_default_safe_integers(&self, toggle: bool) {
         self.default_safe_integers.replace(toggle);
+    }
+
+    fn get_conn(&self) -> Arc<Mutex<libsql::Connection>> {
+        let conn = self.conn.borrow();
+        conn.as_ref().unwrap().clone()
     }
 }
 
@@ -359,7 +362,7 @@ pub fn convert_sqlite_code(code: u32) -> String {
     }
 }
 struct Statement {
-    conn: Weak<libsql::Connection>,
+    conn: Weak<Mutex<libsql::Connection>>,
     stmt: Weak<Mutex<libsql::Statement>>,
     raw: RefCell<bool>,
     safe_ints: RefCell<bool>,
@@ -433,7 +436,7 @@ impl Statement {
         let result = rt.block_on(fut);
         let changes = result.or_else(|err| throw_libsql_error(&mut cx, err))?;
         let raw_conn = stmt.conn.upgrade().unwrap();
-        let last_insert_rowid = raw_conn.last_insert_rowid();
+        let last_insert_rowid = raw_conn.blocking_lock().last_insert_rowid();
         let info = cx.empty_object();
         let changes = cx.number(changes as f64);
         info.set(&mut cx, "changes", changes)?;
