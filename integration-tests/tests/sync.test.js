@@ -1,7 +1,7 @@
 import test from "ava";
 
 test.beforeEach(async (t) => {
-  const [db, errorType] = await connect();
+  const [db, errorType, provider] = await connect();
   db.exec(`
       DROP TABLE IF EXISTS users;
       CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)
@@ -14,7 +14,8 @@ test.beforeEach(async (t) => {
   );
   t.context = {
     db,
-    errorType
+    errorType,
+    provider
   };
 });
 
@@ -253,20 +254,25 @@ test.serial("values", async (t) => {
 test.serial("errors", async (t) => {
   const db = t.context.db;
 
-  await t.throws(() => {
+  const syntaxError = await t.throws(() => {
     db.exec("SYNTAX ERROR");
   }, {
     instanceOf: t.context.errorType,
     message: 'near "SYNTAX": syntax error',
     code: 'SQLITE_ERROR'
   });
-  await t.throws(() => {
+  const noTableError = await t.throws(() => {
     db.exec("SELECT * FROM missing_table");
   }, {
     instanceOf: t.context.errorType,
     message: "no such table: missing_table",
     code: 'SQLITE_ERROR'
   });
+
+  if (t.context.provider === 'libsql') {
+    t.is(noTableError.rawCode, 1)
+    t.is(syntaxError.rawCode, 1)
+  }
 });
 
 const connect = async (path_opt) => {
@@ -277,13 +283,13 @@ const connect = async (path_opt) => {
     const x = await import("libsql");
     const options = {};
     const db = new x.default(database, options);
-    return [db, x.SqliteError];
+    return [db, x.SqliteError, provider];
   }
   if (provider == "sqlite") {
     const x = await import("better-sqlite3");
     const options = {};
     const db = x.default(path, options);
-    return [db, x.SqliteError];
+    return [db, x.SqliteError, provider];
   }
   throw new Error("Unknown provider: " + provider);
 };

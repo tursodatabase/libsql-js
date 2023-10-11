@@ -1,7 +1,7 @@
 'use strict';
 const descriptor = { value: 'SqliteError', writable: true, enumerable: false, configurable: true };
 
-function SqliteError(message, code) {
+function SqliteError(message, code, rawCode) {
         if (new.target !== SqliteError) {
                 return new SqliteError(message, code);
         }
@@ -13,6 +13,7 @@ function SqliteError(message, code) {
         Object.defineProperty(this, 'message', descriptor);
         Error.captureStackTrace(this, SqliteError);
         this.code = code;
+        this.rawCode = rawCode
 }
 Object.setPrototypeOf(SqliteError, Error);
 Object.setPrototypeOf(SqliteError.prototype, Error.prototype);
