@@ -105,7 +105,8 @@ declare class SqliteError extends Error {
     name: string;
     message: string;
     code: string;
-    constructor(message: string, code: string);
+    rawCode?: number;
+    constructor(message: string, code: string, rawCode?: number);
 }
 
 declare namespace Database {
