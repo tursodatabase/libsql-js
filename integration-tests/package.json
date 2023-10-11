@@ -10,6 +10,6 @@
   },
   "dependencies": {
     "better-sqlite3": "^8.4.0",
-    "libsql": "^0.1.0"
+    "libsql": ".."
   }
 }

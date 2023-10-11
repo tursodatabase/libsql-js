@@ -1,3 +1,4 @@
+use log::trace;
 use neon::types::buffer::TypedArray;
 use neon::types::JsPromise;
 use neon::{prelude::*, types::JsBigInt};
@@ -5,7 +6,6 @@ use once_cell::sync::OnceCell;
 use std::cell::RefCell;
 use std::sync::{Arc, Weak};
 use tokio::{runtime::Runtime, sync::Mutex};
-use log::trace;
 
 fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
     static RUNTIME: OnceCell<Runtime> = OnceCell::new();
@@ -56,7 +56,11 @@ impl Database {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
-        trace!("Opening local database with sync: database = {}, URL = {}", db_path, sync_url);
+        trace!(
+            "Opening local database with sync: database = {}, URL = {}",
+            db_path,
+            sync_url
+        );
         let rt = runtime(&mut cx)?;
         let fut = libsql::Database::open_with_remote_sync(db_path, sync_url, sync_auth);
         let result = rt.block_on(fut);
@@ -133,9 +137,7 @@ impl Database {
         trace!("Executing SQL statement (sync): {}", sql);
         let conn = db.get_conn();
         let rt = runtime(&mut cx)?;
-        let result = rt.block_on(async {
-            conn.lock().await.execute_batch(&sql).await
-        });
+        let result = rt.block_on(async { conn.lock().await.execute_batch(&sql).await });
         result.or_else(|err| throw_libsql_error(&mut cx, err))?;
         Ok(cx.undefined())
     }
@@ -170,9 +172,7 @@ impl Database {
         trace!("Preparing SQL statement (sync): {}", sql);
         let conn = db.get_conn();
         let rt = runtime(&mut cx)?;
-        let result = rt.block_on(async {
-            conn.lock().await.prepare(&sql).await
-        });
+        let result = rt.block_on(async { conn.lock().await.prepare(&sql).await });
         let stmt = result.or_else(|err| throw_libsql_error(&mut cx, err))?;
         let stmt = Arc::new(Mutex::new(stmt));
         {
@@ -252,6 +252,8 @@ fn throw_libsql_error<'a, C: Context<'a>, T>(cx: &mut C, err: libsql::Error) -> 
         libsql::Error::SqliteFailure(code, err) => {
             let err = err.to_string();
             let err = JsError::error(cx, err).unwrap();
+            let code_num = cx.number(code);
+            err.set(cx, "rawCode", code_num).unwrap();
             let code = cx.string(convert_sqlite_code(code as u32).to_string());
             err.set(cx, "code", code).unwrap();
             cx.throw(err)?

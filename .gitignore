@@ -2,3 +2,4 @@ target
 **/*.node
 **/node_modules
 dist
+integration-tests/*.db

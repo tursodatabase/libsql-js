@@ -239,20 +239,23 @@ test.serial("Database.transaction()", async (t) => {
 test.serial("errors", async (t) => {
   const db = t.context.db;
 
-  await t.throwsAsync(async () => {
+  const syntaxError = await t.throwsAsync(async () => {
     await db.exec("SYNTAX ERROR");
   }, {
     instanceOf: t.context.errorType,
     message: 'near "SYNTAX": syntax error',
     code: 'SQLITE_ERROR'
   });
-  await t.throwsAsync(async () => {
+
+  t.is(syntaxError.rawCode, 1)
+  const noTableError = await t.throwsAsync(async () => {
     await db.exec("SELECT * FROM missing_table");
   }, {
     instanceOf: t.context.errorType,
     message: "no such table: missing_table",
     code: 'SQLITE_ERROR'
   });
+  t.is(noTableError.rawCode, 1)
 });
 
 const connect = async (path_opt) => {
