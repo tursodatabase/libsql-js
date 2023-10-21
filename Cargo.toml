@@ -28,3 +28,7 @@ sqlite3-parser = { git = "https://github.com/LucioFranco/lemon-rs" }
 [profile.release]
 lto = true
 codegen-units = 1
+debug = false
+strip = true
+opt-level = "z"
+panic = "abort"
