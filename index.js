@@ -10,8 +10,16 @@ if (0) {
 
 let target = currentTarget();
 
-if (target == "linux-x64-musl" && familySync() == GLIBC) {
-  target = "linux-x64-gnu";
+// Workaround for Bun, which reports a musl target, but really wants glibc...
+if (familySync() == GLIBC) {
+  switch (target) {
+  case "linux-x64-musl":
+    target = "linux-x64-gnu";
+    break;
+  case "linux-arm64-musl":
+    target = "linux-arm64-gnu";
+    break;
+  }
 }
 
 const {
