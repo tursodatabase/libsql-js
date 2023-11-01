@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tracing-subscriber = "0.3"
-libsql = { git = "https://github.com/libsql/libsql/", rev = "523be13c79e465f452354c3400334269580aad8f" }
+libsql = { git = "https://github.com/libsql/libsql/", rev = "33f74a3dd3311ca8fa417353b4a53386375544d0" }
 log = "0.4.20"
 once_cell = "1.18.0"
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
@@ -21,9 +21,6 @@ tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
 version = "1.0.0-alpha.4"
 default-features = false
 features = ["napi-6"]
-
-[patch.crates-io]
-sqlite3-parser = { git = "https://github.com/LucioFranco/lemon-rs" }
 
 [profile.release]
 lto = true
