@@ -137,7 +137,7 @@ impl Database {
         trace!("Executing SQL statement (sync): {}", sql);
         let conn = db.get_conn();
         let rt = runtime(&mut cx)?;
-        let result = rt.block_on(async { conn.lock().await.execute_batch(&sql).await });
+        let result = rt.block_on(async { conn.lock().await.execute(&sql, ()).await });
         result.or_else(|err| throw_libsql_error(&mut cx, err))?;
         Ok(cx.undefined())
     }
@@ -269,7 +269,7 @@ fn throw_libsql_error<'a, C: Context<'a>, T>(cx: &mut C, err: libsql::Error) -> 
 }
 
 pub fn convert_sqlite_code(code: u32) -> String {
-    match code {
+    match code as i32 {
         libsql::ffi::SQLITE_OK => "SQLITE_OK".to_owned(),
         libsql::ffi::SQLITE_ERROR => "SQLITE_ERROR".to_owned(),
         libsql::ffi::SQLITE_INTERNAL => "SQLITE_INTERNAL".to_owned(),

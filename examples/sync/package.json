@@ -11,7 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "libsql": "^0.1.0",
+    "libsql": "../..",
     "readline-sync": "^1.4.10"
   }
 }
