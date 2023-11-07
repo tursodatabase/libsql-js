@@ -254,7 +254,7 @@ fn throw_libsql_error<'a, C: Context<'a>, T>(cx: &mut C, err: libsql::Error) -> 
             let err = JsError::error(cx, err).unwrap();
             let code_num = cx.number(code);
             err.set(cx, "rawCode", code_num).unwrap();
-            let code = cx.string(convert_sqlite_code(code as u32).to_string());
+            let code = cx.string(convert_sqlite_code(code).to_string());
             err.set(cx, "code", code).unwrap();
             cx.throw(err)?
         }
@@ -268,7 +268,7 @@ fn throw_libsql_error<'a, C: Context<'a>, T>(cx: &mut C, err: libsql::Error) -> 
     }
 }
 
-pub fn convert_sqlite_code(code: u32) -> String {
+pub fn convert_sqlite_code(code: i32) -> String {
     match code {
         libsql::ffi::SQLITE_OK => "SQLITE_OK".to_owned(),
         libsql::ffi::SQLITE_ERROR => "SQLITE_ERROR".to_owned(),
