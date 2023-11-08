@@ -1,4 +1,3 @@
-use log::trace;
 use neon::types::buffer::TypedArray;
 use neon::types::JsPromise;
 use neon::{prelude::*, types::JsBigInt};
@@ -6,6 +5,7 @@ use once_cell::sync::OnceCell;
 use std::cell::RefCell;
 use std::sync::{Arc, Weak};
 use tokio::{runtime::Runtime, sync::Mutex};
+use tracing::trace;
 
 fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
     static RUNTIME: OnceCell<Runtime> = OnceCell::new();
@@ -38,8 +38,10 @@ impl Database {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
         let db = if is_remote_path(&db_path) {
+            let version = version();
+
             trace!("Opening remote database: {}", db_path);
-            libsql::Database::open_remote(db_path.clone(), auth_token)
+            libsql::Database::open_remote_internal(db_path.clone(), auth_token, version)
         } else {
             trace!("Opening local database: {}", db_path);
             libsql::Database::open(db_path.clone())
@@ -56,13 +58,21 @@ impl Database {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
+
+        let version = version();
+
         trace!(
             "Opening local database with sync: database = {}, URL = {}",
             db_path,
             sync_url
         );
         let rt = runtime(&mut cx)?;
-        let fut = libsql::Database::open_with_remote_sync(db_path, sync_url, sync_auth);
+        let fut = libsql::Database::open_with_remote_sync_internal(
+            db_path,
+            sync_url,
+            sync_auth,
+            Some(version),
+        );
         let result = rt.block_on(fut);
         let db = result.or_else(|err| cx.throw_error(err.to_string()))?;
         let conn = db
@@ -753,4 +763,9 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("statementSafeIntegers", Statement::js_safe_integers)?;
     cx.export_function("rowsNext", Rows::js_next)?;
     Ok(())
+}
+
+fn version() -> String {
+    let ver = env!("CARGO_PKG_VERSION");
+    format!("libsql-js-{ver}")
 }
