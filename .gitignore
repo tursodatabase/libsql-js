@@ -3,3 +3,8 @@ target
 **/node_modules
 dist
 integration-tests/*.db
+examples/**/package-lock.json
+*.db
+**/client_wal_index
+bun.lockb
+

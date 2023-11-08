@@ -12,8 +12,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tracing-subscriber = "0.3"
-libsql = { git = "https://github.com/tursodatabase/libsql/", rev = "12a160fef8c4328680711d8b3710ba5ec785fc30" }
-log = "0.4.20"
+libsql = { git = "https://github.com/libsql/libsql/", rev = "4de573727ccd65225b9d4944d49cb61b89196e87" }
+tracing = "0.1"
 once_cell = "1.18.0"
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
 
