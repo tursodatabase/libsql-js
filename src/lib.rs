@@ -38,7 +38,7 @@ impl Database {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
         let db = if is_remote_path(&db_path) {
-            let version = version();
+            let version = version("remote");
 
             trace!("Opening remote database: {}", db_path);
             libsql::Database::open_remote_internal(db_path.clone(), auth_token, version)
@@ -59,7 +59,7 @@ impl Database {
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
 
-        let version = version();
+        let version = version("rpc");
 
         trace!(
             "Opening local database with sync: database = {}, URL = {}",
@@ -765,7 +765,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     Ok(())
 }
 
-fn version() -> String {
+fn version(protocol: &str) -> String {
     let ver = env!("CARGO_PKG_VERSION");
-    format!("libsql-js-{ver}")
+    format!("libsql-js-{protocol}-{ver}")
 }
