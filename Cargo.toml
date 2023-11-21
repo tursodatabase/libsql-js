@@ -1,6 +1,6 @@
 [package]
 name = "libsql-js"
-version = "0.2.0-pre.1"
+version = "0.2.0-pre.2"
 description = ""
 authors = ["Pekka Enberg <penberg@iki.fi>"]
 license = "MIT"
@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tracing-subscriber = "0.3"
-libsql = { git = "https://github.com/libsql/libsql/", rev = "244bfc507e7ed9a705f54b8982c11fac817e136e" }
+libsql = { git = "https://github.com/libsql/libsql/", rev = "8045a458e72f8622c57730f3a7ba87ce8e40b255" }
 tracing = "0.1"
 once_cell = "1.18.0"
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
