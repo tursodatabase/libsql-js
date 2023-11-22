@@ -3,7 +3,7 @@ use neon::types::JsPromise;
 use neon::{prelude::*, types::JsBigInt};
 use once_cell::sync::OnceCell;
 use std::cell::RefCell;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use tokio::{runtime::Runtime, sync::Mutex};
 use tracing::trace;
 
@@ -18,7 +18,6 @@ fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
 struct Database {
     db: Arc<Mutex<libsql::Database>>,
     conn: RefCell<Option<Arc<Mutex<libsql::Connection>>>>,
-    stmts: Arc<Mutex<Vec<Arc<Mutex<libsql::Statement>>>>>,
     default_safe_integers: RefCell<bool>,
 }
 
@@ -29,7 +28,6 @@ impl Database {
         Database {
             db: Arc::new(Mutex::new(db)),
             conn: RefCell::new(Some(Arc::new(Mutex::new(conn)))),
-            stmts: Arc::new(Mutex::new(vec![])),
             default_safe_integers: RefCell::new(false),
         }
     }
@@ -91,15 +89,11 @@ impl Database {
     }
 
     fn js_close(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+        // the conn will be closed when the last statement in discarded. In most situation that
+        // means immediately because you don't want to hold on a statement for longer that its
+        // database is alive.
         trace!("Closing database");
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
-        for stmt in db.stmts.blocking_lock().iter() {
-            let mut stmt = stmt.blocking_lock();
-            stmt.finalize();
-        }
-        db.stmts.blocking_lock().clear();
-        let conn = db.get_conn();
-        conn.blocking_lock().close();
         db.conn.replace(None);
         Ok(cx.undefined())
     }
@@ -185,13 +179,9 @@ impl Database {
         let result = rt.block_on(async { conn.lock().await.prepare(&sql).await });
         let stmt = result.or_else(|err| throw_libsql_error(&mut cx, err))?;
         let stmt = Arc::new(Mutex::new(stmt));
-        {
-            let mut stmts = db.stmts.blocking_lock();
-            stmts.push(stmt.clone());
-        }
         let stmt = Statement {
-            conn: Arc::downgrade(&conn),
-            stmt: Arc::downgrade(&stmt),
+            conn: conn.clone(),
+            stmt,
             raw: RefCell::new(false),
             safe_ints: RefCell::new(*db.default_safe_integers.borrow()),
         };
@@ -207,18 +197,13 @@ impl Database {
         let safe_ints = *db.default_safe_integers.borrow();
         let rt = runtime(&mut cx)?;
         let conn = db.get_conn();
-        let stmts = db.stmts.clone();
         rt.spawn(async move {
             match conn.lock().await.prepare(&sql).await {
                 Ok(stmt) => {
                     let stmt = Arc::new(Mutex::new(stmt));
-                    {
-                        let mut stmts = stmts.lock().await;
-                        stmts.push(stmt.clone());
-                    }
                     let stmt = Statement {
-                        conn: Arc::downgrade(&conn),
-                        stmt: Arc::downgrade(&stmt),
+                        conn: conn.clone(),
+                        stmt,
                         raw: RefCell::new(false),
                         safe_ints: RefCell::new(safe_ints),
                     };
@@ -371,8 +356,8 @@ pub fn convert_sqlite_code(code: i32) -> String {
     }
 }
 struct Statement {
-    conn: Weak<Mutex<libsql::Connection>>,
-    stmt: Weak<Mutex<libsql::Statement>>,
+    conn: Arc<Mutex<libsql::Connection>>,
+    stmt: Arc<Mutex<libsql::Statement>>,
     raw: RefCell<bool>,
     safe_ints: RefCell<bool>,
 }
@@ -415,8 +400,7 @@ fn js_value_to_value(
 impl Statement {
     fn js_raw(mut cx: FunctionContext) -> JsResult<JsNull> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
-        let raw_stmt = stmt.stmt.upgrade().unwrap();
-        let raw_stmt = raw_stmt.blocking_lock();
+        let raw_stmt = stmt.stmt.blocking_lock();
         if raw_stmt.columns().is_empty() {
             return cx.throw_error("The raw() method is only for statements that return data");
         }
@@ -434,14 +418,13 @@ impl Statement {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, &stmt, params)?;
-        let raw_stmt = stmt.stmt.upgrade().unwrap();
-        let mut raw_stmt = raw_stmt.blocking_lock();
+        let mut raw_stmt = stmt.stmt.blocking_lock();
         raw_stmt.reset();
         let fut = raw_stmt.execute(params);
         let rt = runtime(&mut cx)?;
         let result = rt.block_on(fut);
         let changes = result.or_else(|err| throw_libsql_error(&mut cx, err))?;
-        let raw_conn = stmt.conn.upgrade().unwrap();
+        let raw_conn = stmt.conn.clone();
         let last_insert_rowid = raw_conn.blocking_lock().last_insert_rowid();
         let info = cx.empty_object();
         let changes = cx.number(changes as f64);
@@ -456,8 +439,7 @@ impl Statement {
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, &stmt, params)?;
         let safe_ints = *stmt.safe_ints.borrow();
-        let raw_stmt = stmt.stmt.upgrade().unwrap();
-        let mut raw_stmt = raw_stmt.blocking_lock();
+        let mut raw_stmt = stmt.stmt.blocking_lock();
         let fut = raw_stmt.query(params);
         let rt = runtime(&mut cx)?;
         let result = rt.block_on(fut);
@@ -488,9 +470,8 @@ impl Statement {
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, &stmt, params)?;
         let rt = runtime(&mut cx)?;
-        let raw_stmt = stmt.stmt.upgrade().unwrap();
         let result = rt.block_on(async move {
-            let mut raw_stmt = raw_stmt.lock().await;
+            let mut raw_stmt = stmt.stmt.lock().await;
             raw_stmt.reset();
             raw_stmt.query(params).await
         });
@@ -507,9 +488,8 @@ impl Statement {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, &stmt, params)?;
-        let raw_stmt = stmt.stmt.upgrade().unwrap();
         {
-            let mut raw_stmt = raw_stmt.blocking_lock();
+            let mut raw_stmt = stmt.stmt.blocking_lock();
             raw_stmt.reset();
         }
         let (deferred, promise) = cx.promise();
@@ -517,6 +497,7 @@ impl Statement {
         let rt = runtime(&mut cx)?;
         let raw = *stmt.raw.borrow();
         let safe_ints = *stmt.safe_ints.borrow();
+        let raw_stmt = stmt.stmt.clone();
         rt.spawn(async move {
             let result = {
                 let mut raw_stmt = raw_stmt.lock().await;
@@ -547,8 +528,7 @@ impl Statement {
     fn js_columns(mut cx: FunctionContext) -> JsResult<JsValue> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let result = cx.empty_array();
-        let stmt = stmt.stmt.upgrade().unwrap();
-        let raw_stmt = stmt.blocking_lock();
+        let raw_stmt = stmt.stmt.blocking_lock();
         for (i, col) in raw_stmt.columns().iter().enumerate() {
             let column = cx.empty_object();
             let column_name = cx.string(col.name());
@@ -665,7 +645,7 @@ fn convert_params_object(
     v: Handle<'_, JsObject>,
 ) -> NeonResult<libsql::params::Params> {
     let mut params = vec![];
-    let stmt = stmt.stmt.upgrade().unwrap();
+    let stmt = &stmt.stmt;
     let raw_stmt = stmt.blocking_lock();
     for idx in 0..raw_stmt.parameter_count() {
         let name = raw_stmt.parameter_name((idx + 1) as i32).unwrap();
