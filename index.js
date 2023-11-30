@@ -213,7 +213,7 @@ class Database {
    * Toggle 64-bit integer support.
    */
   defaultSafeIntegers(toggle) {
-    databaseDefaultSafeIntegers.call(this.db, toggle || true);
+    databaseDefaultSafeIntegers.call(this.db, toggle ?? true);
     return this;
   }
 
@@ -236,7 +236,7 @@ class Statement {
    * @param raw Enable or disable raw mode. If you don't pass the parameter, raw mode is enabled.
    */
   raw(raw) {
-    statementRaw.call(this.stmt, raw || true);
+    statementRaw.call(this.stmt, raw ?? true);
     return this;
   }
 
@@ -319,7 +319,7 @@ class Statement {
    * Toggle 64-bit integer support.
    */
   safeIntegers(toggle) {
-    statementSafeIntegers.call(this.stmt, toggle || true);
+    statementSafeIntegers.call(this.stmt, toggle ?? true);
     return this;
   }
 }
