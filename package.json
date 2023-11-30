@@ -20,8 +20,14 @@
     "types/index.d.ts"
   ],
   "exports": {
-    ".": "./index.js",
-    "./promise": "./promise.js"
+    ".": {
+      "default": "./index.js",
+      "types": "./types/index.d.ts"
+    },
+    "./promise": {
+      "default": "./promise.js",
+      "types": "./types/index.d.ts"
+    }
   },
   "scripts": {
     "test": "cargo test",
