@@ -19,6 +19,7 @@ const {
   databasePrepareAsync,
   databaseDefaultSafeIntegers,
   statementRaw,
+  statementIsReader,
   statementGet,
   statementRun,
   statementRowsAsync,
@@ -219,6 +220,10 @@ class Statement {
   raw(raw) {
     statementRaw.call(this.stmt, raw || true);
     return this;
+  }
+
+  get reader() {
+    return statementIsReader.call(this.stmt);
   }
 
   /**

@@ -414,6 +414,12 @@ impl Statement {
         self.raw.replace(raw);
     }
 
+    fn js_is_reader(cx: FunctionContext) -> JsResult<JsBoolean> {
+        let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
+        let raw_stmt = stmt.stmt.blocking_lock();
+        Ok(!raw_stmt.columns().is_empty())
+    }
+
     fn js_run(mut cx: FunctionContext) -> JsResult<JsValue> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let params = cx.argument::<JsValue>(0)?;
@@ -735,6 +741,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
         Database::js_default_safe_integers,
     )?;
     cx.export_function("statementRaw", Statement::js_raw)?;
+    cx.export_function("statementIsReader", Statement::js_is_reader)?;
     cx.export_function("statementRun", Statement::js_run)?;
     cx.export_function("statementGet", Statement::js_get)?;
     cx.export_function("statementRowsSync", Statement::js_rows_sync)?;
