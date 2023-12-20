@@ -70,6 +70,7 @@ impl Database {
             sync_url,
             sync_auth,
             Some(version),
+            true,
         );
         let result = rt.block_on(fut);
         let db = result.or_else(|err| cx.throw_error(err.to_string()))?;
