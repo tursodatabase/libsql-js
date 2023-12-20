@@ -26,7 +26,7 @@
     },
     "./promise": {
       "default": "./promise.js",
-      "types": "./types/index.d.ts"
+      "types": "./types/promise.d.ts"
     }
   },
   "scripts": {
