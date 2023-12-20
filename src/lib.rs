@@ -414,10 +414,10 @@ impl Statement {
         self.raw.replace(raw);
     }
 
-    fn js_is_reader(cx: FunctionContext) -> JsResult<JsBoolean> {
+    fn js_is_reader(mut cx: FunctionContext) -> JsResult<JsBoolean> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let raw_stmt = stmt.stmt.blocking_lock();
-        Ok(!raw_stmt.columns().is_empty())
+        Ok(cx.boolean(!raw_stmt.columns().is_empty()))
     }
 
     fn js_run(mut cx: FunctionContext) -> JsResult<JsValue> {
