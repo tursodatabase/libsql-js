@@ -68,7 +68,7 @@ class Database {
   }
 
   sync() {
-    databaseSyncAsync.call(this.db);
+    return databaseSyncAsync.call(this.db);
   }
 
   /**
@@ -97,7 +97,7 @@ class Database {
       // TODO: Use libsql transaction API.
       await this.exec("BEGIN");
       try {
-        const result = fn(...bindParameters);
+        const result = await fn(...bindParameters);
         await this.exec("COMMIT");
         return result;
       } catch (err) {
