@@ -641,7 +641,7 @@ dependencies = [
 [[package]]
 name = "libsql"
 version = "0.2.0-alpha.1"
-source = "git+https://github.com/libsql/libsql/?rev=2bdfe312b5e62a40c427f1e769a26a5f95f84378#2bdfe312b5e62a40c427f1e769a26a5f95f84378"
+source = "git+https://github.com/libsql/libsql/?rev=4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8#4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -676,7 +676,7 @@ dependencies = [
 [[package]]
 name = "libsql-ffi"
 version = "0.1.0"
-source = "git+https://github.com/libsql/libsql/?rev=2bdfe312b5e62a40c427f1e769a26a5f95f84378#2bdfe312b5e62a40c427f1e769a26a5f95f84378"
+source = "git+https://github.com/libsql/libsql/?rev=4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8#4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8"
 dependencies = [
  "bindgen",
  "cc",
@@ -697,7 +697,7 @@ dependencies = [
 [[package]]
 name = "libsql-replication"
 version = "0.1.0"
-source = "git+https://github.com/libsql/libsql/?rev=2bdfe312b5e62a40c427f1e769a26a5f95f84378#2bdfe312b5e62a40c427f1e769a26a5f95f84378"
+source = "git+https://github.com/libsql/libsql/?rev=4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8#4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -720,7 +720,7 @@ dependencies = [
 [[package]]
 name = "libsql-sys"
 version = "0.2.14"
-source = "git+https://github.com/libsql/libsql/?rev=2bdfe312b5e62a40c427f1e769a26a5f95f84378#2bdfe312b5e62a40c427f1e769a26a5f95f84378"
+source = "git+https://github.com/libsql/libsql/?rev=4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8#4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8"
 dependencies = [
  "libsql-ffi",
  "once_cell",
@@ -1125,7 +1125,7 @@ dependencies = [
 [[package]]
 name = "rusqlite"
 version = "0.29.0"
-source = "git+https://github.com/libsql/libsql/?rev=2bdfe312b5e62a40c427f1e769a26a5f95f84378#2bdfe312b5e62a40c427f1e769a26a5f95f84378"
+source = "git+https://github.com/libsql/libsql/?rev=4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8#4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8"
 dependencies = [
  "bitflags 2.4.1",
  "fallible-iterator 0.2.0",
@@ -1370,7 +1370,7 @@ checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 [[package]]
 name = "sqlite3-parser"
 version = "0.11.0"
-source = "git+https://github.com/libsql/libsql/?rev=2bdfe312b5e62a40c427f1e769a26a5f95f84378#2bdfe312b5e62a40c427f1e769a26a5f95f84378"
+source = "git+https://github.com/libsql/libsql/?rev=4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8#4b56badb0667d3d4fcba1d1ca1770e7cef4db4f8"
 dependencies = [
  "bitflags 2.4.1",
  "cc",
