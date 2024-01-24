@@ -1,6 +1,6 @@
 {
   "name": "libsql",
-  "version": "0.2.0-pre.7",
+  "version": "0.2.0",
   "description": "",
   "os": [
     "darwin",
