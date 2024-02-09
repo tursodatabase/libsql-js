@@ -57,7 +57,7 @@
   },
   "homepage": "https://github.com/tursodatabase/libsql-js",
   "devDependencies": {
-    "@neon-rs/cli": "^0.0.165"
+    "@neon-rs/cli": "^0.0.202"
   },
   "dependencies": {
     "@neon-rs/load": "^0.0.4",
