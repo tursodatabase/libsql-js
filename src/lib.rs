@@ -36,16 +36,18 @@ impl Database {
         let rt = runtime(&mut cx)?;
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
+        let encryption_key = cx.argument::<JsString>(2)?.value(&mut cx);
         let db = if is_remote_path(&db_path) {
             let version = version("remote");
 
             trace!("Opening remote database: {}", db_path);
             libsql::Database::open_remote_internal(db_path.clone(), auth_token, version)
         } else {
-            trace!("Opening local database: {}, setting enckey", db_path);
-            rt.block_on(libsql::Builder::new_local(&db_path)
-                .encryption_key("s3cr3t")
-                .build())
+            let mut builder = libsql::Builder::new_local(&db_path);
+            if !encryption_key.is_empty() {
+                builder = builder.encryption_key(encryption_key);
+            }
+            rt.block_on(builder.build())
         }
         .or_else(|err| throw_libsql_error(&mut cx, err))?;
         let conn = db
@@ -59,6 +61,12 @@ impl Database {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
+        let encryption_key = cx.argument::<JsString>(3)?.value(&mut cx);
+        let encryption_key = if encryption_key.is_empty() {
+            None
+        } else {
+            Some(encryption_key.into())
+        };
 
         let version = version("rpc");
 
@@ -74,7 +82,7 @@ impl Database {
             sync_auth,
             Some(version),
             true,
-            Some("s3cr3t".to_string().into()),
+            encryption_key,
             None,
         );
         let result = rt.block_on(fut);
