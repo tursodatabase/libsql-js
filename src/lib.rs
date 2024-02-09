@@ -33,6 +33,7 @@ impl Database {
     }
 
     fn js_open(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
+        let rt = runtime(&mut cx)?;
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
         let db = if is_remote_path(&db_path) {
@@ -41,8 +42,10 @@ impl Database {
             trace!("Opening remote database: {}", db_path);
             libsql::Database::open_remote_internal(db_path.clone(), auth_token, version)
         } else {
-            trace!("Opening local database: {}", db_path);
-            libsql::Database::open(db_path.clone())
+            trace!("Opening local database: {}, setting enckey", db_path);
+            rt.block_on(libsql::Builder::new_local(&db_path)
+                .encryption_key("s3cr3t")
+                .build())
         }
         .or_else(|err| throw_libsql_error(&mut cx, err))?;
         let conn = db
@@ -71,7 +74,7 @@ impl Database {
             sync_auth,
             Some(version),
             true,
-            None,
+            Some("s3cr3t".to_string().into()),
             None,
         );
         let result = rt.block_on(fut);
