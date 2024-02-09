@@ -71,6 +71,8 @@ impl Database {
             sync_auth,
             Some(version),
             true,
+            None,
+            None,
         );
         let result = rt.block_on(fut);
         let db = result.or_else(|err| cx.throw_error(err.to_string()))?;
@@ -445,10 +447,10 @@ impl Statement {
         let rt = runtime(&mut cx)?;
         let result = rt.block_on(fut);
         let mut rows = result.or_else(|err| throw_libsql_error(&mut cx, err))?;
-        let result = match rows
-            .next()
-            .or_else(|err| throw_libsql_error(&mut cx, err))?
-        {
+        let result = rt
+            .block_on(rows.next())
+            .or_else(|err| throw_libsql_error(&mut cx, err))?;
+        let result = match result {
             Some(row) => {
                 if *stmt.raw.borrow() {
                     let mut result = cx.empty_array();
@@ -593,10 +595,11 @@ impl Rows {
         let raw = rows.raw;
         let safe_ints = rows.safe_ints;
         let mut rows = rows.rows.borrow_mut();
-        match rows
-            .next()
-            .or_else(|err| throw_libsql_error(&mut cx, err))?
-        {
+        let rt = runtime(&mut cx)?;
+        let next = rt
+            .block_on(rows.next())
+            .or_else(|err| throw_libsql_error(&mut cx, err))?;
+        match next {
             Some(row) => {
                 if raw {
                     let mut result = cx.empty_array();
