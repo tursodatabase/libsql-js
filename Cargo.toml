@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tracing-subscriber = "0.3"
-libsql = { git = "https://github.com/libsql/libsql/", rev = "6c7d6dc298e019e0fe5d39350849e53e1a488ed1", features = ["encryption"] }
+libsql = { git = "https://github.com/libsql/libsql/", rev = "5118a4527186372a0c8f7f8a88db882278a5d1ee", features = ["encryption"] }
 tracing = "0.1"
 once_cell = "1.18.0"
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
