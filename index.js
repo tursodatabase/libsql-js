@@ -64,7 +64,8 @@ class Database {
       this.db = databaseOpenWithRpcSync(path, opts.syncUrl, authToken);
     } else {
       const authToken = opts?.authToken ?? "";
-      this.db = databaseOpen(path, authToken);
+      const encryptionKey = opts?.encryptionKey ?? "";
+      this.db = databaseOpen(path, authToken, encryptionKey);
     }
     // TODO: Use a libSQL API for this?
     this.memory = path === ":memory:";
