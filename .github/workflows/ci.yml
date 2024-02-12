@@ -15,32 +15,26 @@ on:
       - main
 
 jobs:
-  pack:
-    name: Pack (main)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Pack
-        uses: neon-actions/pack@v0.1
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          github-release: false
-
   macos-builds:
     name: Builds (macOS)
     strategy:
       fail-fast: false
       matrix:
-        target: [x86_64-apple-darwin, aarch64-apple-darwin]
+        platform: [darwin-x64, darwin-arm64]
     runs-on: macos-arm64
     permissions:
       contents: write
     steps:
-      - name: Build
-        uses: neon-actions/build@v0.1
+      - uses: actions/setup-node@v4
         with:
-          target: ${{ matrix.target }}
+          node-version: env.NODE_VERSION
+      - name: Install Dependencies
+        shell: bash
+        run: npm ci --verbose
+      - name: Build
+        uses: neon-actions/build@v0.9
+        with:
+          platform: ${{ matrix.platform }}
           node-version: ${{ env.NODE_VERSION }}
           npm-publish: false
           github-release: false
@@ -50,15 +44,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [x86_64-pc-windows-msvc]
+        platform: [win32-x64-msvc]
     runs-on: windows-latest
     permissions:
       contents: write
     steps:
-      - name: Build
-        uses: neon-actions/build@v0.1
+      - uses: actions/setup-node@v4
         with:
-          target: ${{ matrix.target }}
+          node-version: env.NODE_VERSION
+      - name: Install Dependencies
+        shell: bash
+        run: npm ci --verbose
+      - name: Build
+        uses: neon-actions/build@v0.9
+        with:
+          platform: ${{ matrix.platform }}
           node-version: ${{ env.NODE_VERSION }}
           npm-publish: false
           github-release: false
@@ -68,15 +68,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl, aarch64-unknown-linux-gnu, aarch64-unknown-linux-musl]
+        platform: [linux-x64-gnu, linux-x64-musl, linux-arm64-gnu, linux-arm64-musl]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Build
-        uses: neon-actions/build@v0.1
+      - uses: actions/setup-node@v4
         with:
-          target: ${{ matrix.target }}
+          node-version: env.NODE_VERSION
+      - name: Install Dependencies
+        shell: bash
+        run: npm ci --verbose
+      - name: Build
+        uses: neon-actions/build@v0.9
+        with:
+          platform: ${{ matrix.platform }}
           node-version: ${{ env.NODE_VERSION }}
           use-cross: true
           npm-publish: false

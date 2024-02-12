@@ -1,0 +1,24 @@
+{
+  "name": "@libsql/darwin-arm64",
+  "description": "Prebuilt binary package for `libsql` on `darwin-arm64`.",
+  "version": "0.2.0",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "index.node",
+  "files": [
+    "index.node"
+  ],
+  "license": "MIT",
+  "neon": {
+    "type": "binary",
+    "rust": "aarch64-apple-darwin",
+    "node": "darwin-arm64",
+    "os": "darwin",
+    "arch": "arm64",
+    "abi": null
+  }
+}
