@@ -99,7 +99,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: [pack, macos-builds, windows-builds, other-builds]
+    needs: [pack, macos-arm64-build, macos-x64-build, windows-builds, other-builds]
     runs-on: ubuntu-latest
     permissions:
       contents: write
