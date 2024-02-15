@@ -33,16 +33,21 @@ impl Database {
     }
 
     fn js_open(mut cx: FunctionContext) -> JsResult<JsBox<Database>> {
+        let rt = runtime(&mut cx)?;
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
+        let encryption_key = cx.argument::<JsString>(2)?.value(&mut cx);
         let db = if is_remote_path(&db_path) {
             let version = version("remote");
 
             trace!("Opening remote database: {}", db_path);
             libsql::Database::open_remote_internal(db_path.clone(), auth_token, version)
         } else {
-            trace!("Opening local database: {}", db_path);
-            libsql::Database::open(db_path.clone())
+            let mut builder = libsql::Builder::new_local(&db_path);
+            if !encryption_key.is_empty() {
+                builder = builder.encryption_key(encryption_key);
+            }
+            rt.block_on(builder.build())
         }
         .or_else(|err| throw_libsql_error(&mut cx, err))?;
         let conn = db
@@ -56,6 +61,12 @@ impl Database {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
+        let encryption_key = cx.argument::<JsString>(3)?.value(&mut cx);
+        let encryption_key = if encryption_key.is_empty() {
+            None
+        } else {
+            Some(encryption_key.into())
+        };
 
         let version = version("rpc");
 
@@ -71,6 +82,8 @@ impl Database {
             sync_auth,
             Some(version),
             true,
+            encryption_key,
+            None,
         );
         let result = rt.block_on(fut);
         let db = result.or_else(|err| cx.throw_error(err.to_string()))?;
@@ -445,10 +458,10 @@ impl Statement {
         let rt = runtime(&mut cx)?;
         let result = rt.block_on(fut);
         let mut rows = result.or_else(|err| throw_libsql_error(&mut cx, err))?;
-        let result = match rows
-            .next()
-            .or_else(|err| throw_libsql_error(&mut cx, err))?
-        {
+        let result = rt
+            .block_on(rows.next())
+            .or_else(|err| throw_libsql_error(&mut cx, err))?;
+        let result = match result {
             Some(row) => {
                 if *stmt.raw.borrow() {
                     let mut result = cx.empty_array();
@@ -593,10 +606,11 @@ impl Rows {
         let raw = rows.raw;
         let safe_ints = rows.safe_ints;
         let mut rows = rows.rows.borrow_mut();
-        match rows
-            .next()
-            .or_else(|err| throw_libsql_error(&mut cx, err))?
-        {
+        let rt = runtime(&mut cx)?;
+        let next = rt
+            .block_on(rows.next())
+            .or_else(|err| throw_libsql_error(&mut cx, err))?;
+        match next {
             Some(row) => {
                 if raw {
                     let mut result = cx.empty_array();

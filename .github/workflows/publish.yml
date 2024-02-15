@@ -22,12 +22,29 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           github-release: true
 
-  macos-builds:
-    name: Builds (macOS)
+  macos-arm64-build:
+    name: Builds (macOS arm64)
     strategy:
       matrix:
-        target: [x86_64-apple-darwin, aarch64-apple-darwin]
-    runs-on: macos-arm64
+        target: [aarch64-apple-darwin]
+    runs-on: macos-13-xlarge
+    permissions:
+      contents: write
+    steps:
+      - name: Build
+        uses: neon-actions/build@v0.1
+        with:
+          target: ${{ matrix.target }}
+          node-version: ${{ env.NODE_VERSION }}
+          npm-publish: false
+          github-release: true
+
+  macos-x64-build:
+    name: Builds (macOS x64)
+    strategy:
+      matrix:
+        target: [x86_64-apple-darwin]
+    runs-on: macos-13
     permissions:
       contents: write
     steps:
@@ -48,6 +65,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
       - name: Build
         uses: neon-actions/build@v0.1
         with:
@@ -65,6 +84,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v1.14
+        with:
+          cmake-version: '3.18.x'
       - name: Build
         uses: neon-actions/build@v0.1
         with:

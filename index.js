@@ -61,10 +61,12 @@ class Database {
       } else if (opts.authToken) {
           authToken = opts.authToken;
       }
-      this.db = databaseOpenWithRpcSync(path, opts.syncUrl, authToken);
+      const encryptionKey = opts?.encryptionKey ?? "";
+      this.db = databaseOpenWithRpcSync(path, opts.syncUrl, authToken, encryptionKey);
     } else {
       const authToken = opts?.authToken ?? "";
-      this.db = databaseOpen(path, authToken);
+      const encryptionKey = opts?.encryptionKey ?? "";
+      this.db = databaseOpen(path, authToken, encryptionKey);
     }
     // TODO: Use a libSQL API for this?
     this.memory = path === ":memory:";
