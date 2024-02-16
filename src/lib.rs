@@ -3,6 +3,7 @@ use neon::types::JsPromise;
 use neon::{prelude::*, types::JsBigInt};
 use once_cell::sync::OnceCell;
 use std::cell::RefCell;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::{runtime::Runtime, sync::Mutex};
 use tracing::trace;
@@ -36,16 +37,21 @@ impl Database {
         let rt = runtime(&mut cx)?;
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
-        let encryption_key = cx.argument::<JsString>(2)?.value(&mut cx);
+        let encryption_cipher = cx.argument::<JsString>(2)?.value(&mut cx);
+        let encryption_key = cx.argument::<JsString>(3)?.value(&mut cx);
         let db = if is_remote_path(&db_path) {
             let version = version("remote");
 
             trace!("Opening remote database: {}", db_path);
             libsql::Database::open_remote_internal(db_path.clone(), auth_token, version)
         } else {
+            let cipher = libsql::Cipher::from_str(&encryption_cipher)
+                .or_else(|err| throw_libsql_error(&mut cx, libsql::Error::SqliteFailure(err.extended_code, "".into())))?;
             let mut builder = libsql::Builder::new_local(&db_path);
             if !encryption_key.is_empty() {
-                builder = builder.encryption_key(encryption_key);
+                let encryption_config =
+                    libsql::EncryptionConfig::new(cipher, encryption_key.into());
+                builder = builder.encryption_config(encryption_config);
             }
             rt.block_on(builder.build())
         }
@@ -61,11 +67,14 @@ impl Database {
         let db_path = cx.argument::<JsString>(0)?.value(&mut cx);
         let sync_url = cx.argument::<JsString>(1)?.value(&mut cx);
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
-        let encryption_key = cx.argument::<JsString>(3)?.value(&mut cx);
-        let encryption_key = if encryption_key.is_empty() {
+        let encryption_cipher = cx.argument::<JsString>(3)?.value(&mut cx);
+        let encryption_key = cx.argument::<JsString>(4)?.value(&mut cx);
+        let cipher = libsql::Cipher::from_str(&encryption_cipher)
+            .or_else(|err| throw_libsql_error(&mut cx, libsql::Error::SqliteFailure(err.extended_code, "".into())))?;
+        let encryption_config = if encryption_key.is_empty() {
             None
         } else {
-            Some(encryption_key.into())
+            Some(libsql::EncryptionConfig::new(cipher, encryption_key.into()))
         };
 
         let version = version("rpc");
@@ -82,7 +91,7 @@ impl Database {
             sync_auth,
             Some(version),
             true,
-            encryption_key,
+            encryption_config,
             None,
         );
         let result = rt.block_on(fut);

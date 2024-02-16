@@ -1,6 +1,13 @@
 import Database from "libsql";
 
-const db = new Database(":memory:");
+const path = process.env.DATABASE ?? ":memory:";
+
+const opts = {
+    encryptionCipher: process.env.ENCRYPTION_CIPHER,
+    encryptionKey: process.env.ENCRYPTION_KEY,
+};
+
+const db = new Database(path, opts);
 
 db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)");
 db.exec(
