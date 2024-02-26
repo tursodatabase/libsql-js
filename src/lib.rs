@@ -7,6 +7,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::{runtime::Runtime, sync::Mutex};
 use tracing::trace;
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::EnvFilter;
 
 fn runtime<'a, C: Context<'a>>(cx: &mut C) -> NeonResult<&'static Runtime> {
     static RUNTIME: OnceCell<Runtime> = OnceCell::new();
@@ -45,8 +47,12 @@ impl Database {
             trace!("Opening remote database: {}", db_path);
             libsql::Database::open_remote_internal(db_path.clone(), auth_token, version)
         } else {
-            let cipher = libsql::Cipher::from_str(&encryption_cipher)
-                .or_else(|err| throw_libsql_error(&mut cx, libsql::Error::SqliteFailure(err.extended_code, "".into())))?;
+            let cipher = libsql::Cipher::from_str(&encryption_cipher).or_else(|err| {
+                throw_libsql_error(
+                    &mut cx,
+                    libsql::Error::SqliteFailure(err.extended_code, "".into()),
+                )
+            })?;
             let mut builder = libsql::Builder::new_local(&db_path);
             if !encryption_key.is_empty() {
                 let encryption_config =
@@ -69,8 +75,12 @@ impl Database {
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
         let encryption_cipher = cx.argument::<JsString>(3)?.value(&mut cx);
         let encryption_key = cx.argument::<JsString>(4)?.value(&mut cx);
-        let cipher = libsql::Cipher::from_str(&encryption_cipher)
-            .or_else(|err| throw_libsql_error(&mut cx, libsql::Error::SqliteFailure(err.extended_code, "".into())))?;
+        let cipher = libsql::Cipher::from_str(&encryption_cipher).or_else(|err| {
+            throw_libsql_error(
+                &mut cx,
+                libsql::Error::SqliteFailure(err.extended_code, "".into()),
+            )
+        })?;
         let encryption_config = if encryption_key.is_empty() {
             None
         } else {
@@ -743,7 +753,13 @@ fn convert_row_raw(
 
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
-    let _ = tracing_subscriber::fmt::try_init();
+    let _ = tracing_subscriber::fmt::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::ERROR.into())
+                .from_env_lossy(),
+        )
+        .try_init();
     cx.export_function("databaseOpen", Database::js_open)?;
     cx.export_function("databaseOpenWithRpcSync", Database::js_open_with_rpc_sync)?;
     cx.export_function("databaseInTransaction", Database::js_in_transaction)?;
