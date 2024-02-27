@@ -15,7 +15,7 @@ pub(crate) struct Statement {
     pub safe_ints: RefCell<bool>,
 }
 
-impl<'a> Finalize for Statement {}
+impl Finalize for Statement {}
 
 fn js_value_to_value(
     cx: &mut FunctionContext,
