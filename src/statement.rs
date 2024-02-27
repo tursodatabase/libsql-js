@@ -21,9 +21,7 @@ fn js_value_to_value(
     cx: &mut FunctionContext,
     v: Handle<'_, JsValue>,
 ) -> NeonResult<libsql::Value> {
-    if v.is_a::<JsNull, _>(cx) {
-        Ok(libsql::Value::Null)
-    } else if v.is_a::<JsUndefined, _>(cx) {
+    if v.is_a::<JsNull, _>(cx) || v.is_a::<JsUndefined, _>(cx) {
         Ok(libsql::Value::Null)
     } else if v.is_a::<JsArray, _>(cx) {
         todo!("array");
