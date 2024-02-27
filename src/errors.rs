@@ -7,14 +7,14 @@ pub fn throw_libsql_error<'a, C: Context<'a>, T>(cx: &mut C, err: libsql::Error)
             let err = JsError::error(cx, err).unwrap();
             let code_num = cx.number(code);
             err.set(cx, "rawCode", code_num).unwrap();
-            let code = cx.string(convert_sqlite_code(code).to_string());
+            let code = cx.string(convert_sqlite_code(code));
             err.set(cx, "code", code).unwrap();
             cx.throw(err)?
         }
         _ => {
             let err = err.to_string();
             let err = JsError::error(cx, err).unwrap();
-            let code = cx.string("".to_string());
+            let code = cx.string("");
             err.set(cx, "code", code).unwrap();
             cx.throw(err)?
         }
