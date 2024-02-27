@@ -39,7 +39,7 @@ const {
   statementColumns,
   statementSafeIntegers,
   rowsNext,
-} = load(__dirname) || require(`@libsql/${target}`);
+} = require(`@libsql/${target}`);
 
 const SqliteError = require("./sqlite-error");
 
