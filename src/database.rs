@@ -194,7 +194,7 @@ impl Database {
         Ok(promise)
     }
 
-    pub fn js_prepare_sync<'a>(mut cx: FunctionContext) -> JsResult<JsBox<Statement>> {
+    pub fn js_prepare_sync(mut cx: FunctionContext) -> JsResult<JsBox<Statement>> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         trace!("Preparing SQL statement (sync): {}", sql);
@@ -212,7 +212,7 @@ impl Database {
         Ok(cx.boxed(stmt))
     }
 
-    pub fn js_prepare_async<'a>(mut cx: FunctionContext) -> JsResult<JsPromise> {
+    pub fn js_prepare_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         trace!("Preparing SQL statement (async): {}", sql);
