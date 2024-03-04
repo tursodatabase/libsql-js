@@ -19,6 +19,7 @@ To open an in-memory database, please pass `:memory:` as the `path` parameter.
 You can use the `options` parameter to specify various options. Options supported by the parameter are:
 
 - `syncUrl`: open the database as embedded replica synchronizing from the provided URL.
+- `syncPeriod`: synchronize the database periodically every `syncPeriod` seconds.
 - `authToken`: authentication token for the provider URL (optional).
 
 The function returns a `Database` object.
