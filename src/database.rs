@@ -2,6 +2,7 @@ use neon::prelude::*;
 use std::cell::RefCell;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 use tracing::trace;
 
@@ -34,7 +35,6 @@ impl Database {
         let encryption_key = cx.argument::<JsString>(3)?.value(&mut cx);
         let db = if is_remote_path(&db_path) {
             let version = version("remote");
-
             trace!("Opening remote database: {}", db_path);
             libsql::Database::open_remote_internal(db_path.clone(), auth_token, version)
         } else {
@@ -66,6 +66,8 @@ impl Database {
         let sync_auth = cx.argument::<JsString>(2)?.value(&mut cx);
         let encryption_cipher = cx.argument::<JsString>(3)?.value(&mut cx);
         let encryption_key = cx.argument::<JsString>(4)?.value(&mut cx);
+        let sync_period = cx.argument::<JsNumber>(5)?.value(&mut cx);
+
         let cipher = libsql::Cipher::from_str(&encryption_cipher).or_else(|err| {
             throw_libsql_error(
                 &mut cx,
@@ -78,6 +80,11 @@ impl Database {
             Some(libsql::EncryptionConfig::new(cipher, encryption_key.into()))
         };
 
+        let sync_period = if sync_period > 0.0 {
+            Some(Duration::from_secs_f64(sync_period))
+        } else {
+            None
+        };
         let version = version("rpc");
 
         trace!(
@@ -93,7 +100,7 @@ impl Database {
             Some(version),
             true,
             encryption_config,
-            None,
+            sync_period,
         );
         let result = rt.block_on(fut);
         let db = result.or_else(|err| cx.throw_error(err.to_string()))?;

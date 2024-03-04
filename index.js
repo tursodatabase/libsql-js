@@ -64,7 +64,8 @@ class Database {
           authToken = opts.authToken;
       }
       const encryptionKey = opts?.encryptionKey ?? "";
-      this.db = databaseOpenWithRpcSync(path, opts.syncUrl, authToken, encryptionCipher, encryptionKey);
+      const syncPeriod = opts?.syncPeriod ?? 0.0;
+      this.db = databaseOpenWithRpcSync(path, opts.syncUrl, authToken, encryptionCipher, encryptionKey, syncPeriod);
     } else {
       const authToken = opts?.authToken ?? "";
       const encryptionKey = opts?.encryptionKey ?? "";
