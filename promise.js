@@ -39,6 +39,7 @@ class Database {
    * @param {string} path - Path to the database file.
    */
   constructor(path, opts) {
+    const encryptionCipher = opts?.encryptionCipher ?? "sqlcipher";
     if (opts && opts.syncUrl) {
       var authToken = "";
       if (opts.syncAuth) {
@@ -47,10 +48,13 @@ class Database {
       } else if (opts.authToken) {
           authToken = opts.authToken;
       }
-      this.db = databaseOpenWithRpcSync(path, opts.syncUrl, authToken);
+      const encryptionKey = opts?.encryptionKey ?? "";
+      const syncPeriod = opts?.syncPeriod ?? 0.0;
+      this.db = databaseOpenWithRpcSync(path, opts.syncUrl, authToken, encryptionCipher, encryptionKey, syncPeriod);
     } else {
       const authToken = opts?.authToken ?? "";
-      this.db = databaseOpen(path, authToken);
+      const encryptionKey = opts?.encryptionKey ?? "";
+      this.db = databaseOpen(path, authToken, encryptionCipher, encryptionKey);
     }
     // TODO: Use a libSQL API for this?
     this.memory = path === ":memory:";
