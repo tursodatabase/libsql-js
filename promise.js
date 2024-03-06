@@ -39,7 +39,7 @@ class Database {
    * @param {string} path - Path to the database file.
    */
   constructor(path, opts) {
-    const encryptionCipher = opts?.encryptionCipher ?? "sqlcipher";
+    const encryptionCipher = opts?.encryptionCipher ?? "aes256cbc";
     if (opts && opts.syncUrl) {
       var authToken = "";
       if (opts.syncAuth) {
