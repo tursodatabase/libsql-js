@@ -1,6 +1,6 @@
 {
   "name": "libsql",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "A better-sqlite3 compatible API for libSQL that supports Bun, Deno, and Node",
   "os": [
     "darwin",
