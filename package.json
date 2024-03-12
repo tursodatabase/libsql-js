@@ -9,7 +9,8 @@
   ],
   "cpu": [
     "x64",
-    "arm64"
+    "arm64",
+    "wasm32"
   ],
   "main": "index.js",
   "types": "types/index.d.ts",
