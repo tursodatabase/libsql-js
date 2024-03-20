@@ -39,9 +39,48 @@ const {
   statementColumns,
   statementSafeIntegers,
   rowsNext,
-} = require(`@libsql/${target}`);
+} = requireLibsql(target);
 
 const SqliteError = require("./sqlite-error");
+
+/**
+ * Statically require the correct libsql for the given target.
+ * Workaround for bundlers that don't support dynamic requires.
+ * e.g.: Bun single-executable build mode.
+ * @param {*} target
+ * @returns
+ */
+function requireLibsql(target) {
+  if (target === "darwin-arm64") {
+    return require("@libsql/darwin-arm64");
+  }
+
+  if (target === "darwin-x64") {
+    return require("@libsql/darwin-x64");
+  }
+
+  if (target === "linux-arm64-gnu") {
+    return require("@libsql/linux-arm64-gnu");
+  }
+
+  if (target === "linux-arm64-musl") {
+    return require("@libsql/linux-arm64-musl");
+  }
+
+  if (target === "linux-x64-gnu") {
+    return require("@libsql/linux-x64-gnu");
+  }
+
+  if (target === "linux-x64-musl") {
+    return require("@libsql/linux-x64-musl");
+  }
+
+  if (target === "win32-x64-msvc") {
+    return require("@libsql/win32-x64-msvc");
+  }
+
+  throw new Error(`Unsupported target: ${target}`);
+}
 
 /**
  * Database represents a connection that can prepare and execute SQL statements.
@@ -99,7 +138,7 @@ class Database {
   prepare(sql) {
     try {
       const stmt = databasePrepareSync.call(this.db, sql);
-      return new Statement(stmt);  
+      return new Statement(stmt);
     } catch (err) {
       throw new SqliteError(err.message, err.code, err.rawCode);
     }
