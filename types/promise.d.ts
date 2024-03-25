@@ -26,8 +26,8 @@ declare namespace Libsql {
 
         run(...params: BindParameters): Database.RunResult;
         get(...params: BindParameters): unknown;
-        all(...params: BindParameters): unknown[];
-        iterate(...params: BindParameters): IterableIterator<unknown>;
+        all(...params: BindParameters): Promise<unknown[]>;
+        iterate(...params: BindParameters): Promise<IterableIterator<unknown>>;
         raw(toggleState?: boolean): this;
         columns(): ColumnDefinition[];
         safeIntegers(toggleState?: boolean): this;
@@ -42,7 +42,7 @@ declare namespace Libsql {
     }
 
     interface Transaction<F extends VariableArgFunction> {
-        (...params: Parameters<F>): ReturnType<F>;
+        (...params: Parameters<F>): Promise<ReturnType<F>>;
     }
 
     interface VirtualTableOptions {
@@ -62,26 +62,26 @@ declare namespace Libsql {
 
         prepare<BindParameters extends unknown[] | {} = unknown[]>(
             source: string,
-        ): BindParameters extends unknown[] ? Statement<BindParameters> : Statement<[BindParameters]>;
+        ): Promise<BindParameters extends unknown[] ? Statement<BindParameters> : Statement<[BindParameters]>>;
         transaction<F extends VariableArgFunction>(fn: F): Transaction<F>;
-        sync(): this;
-        exec(source: string): this;
-        pragma(source: string, options?: Database.PragmaOptions): unknown;
-        function(name: string, cb: (...params: unknown[]) => unknown): this;
-        function(name: string, options: Database.RegistrationOptions, cb: (...params: unknown[]) => unknown): this;
+        sync(): Promise<void>;
+        exec(source: string): Promise<void>;
+        pragma(source: string, options?: Database.PragmaOptions): never;
+        function(name: string, cb: (...params: unknown[]) => unknown): never;
+        function(name: string, options: Database.RegistrationOptions, cb: (...params: unknown[]) => unknown): never;
         aggregate<T>(name: string, options: Database.RegistrationOptions & {
             start?: T | (() => T);
             step: (total: T, next: ElementOf<T>) => T | void;
             inverse?: ((total: T, dropped: T) => T) | undefined;
             result?: ((total: T) => unknown) | undefined;
-        }): this;
-        loadExtension(path: string): this;
-        close(): this;
+        }): never;
+        loadExtension(path: string): never;
+        close(): void;
         defaultSafeIntegers(toggleState?: boolean): this;
-        backup(destinationFile: string, options?: Database.BackupOptions): Promise<Database.BackupMetadata>;
-        table(name: string, options: VirtualTableOptions): this;
-        unsafeMode(unsafe?: boolean): this;
-        serialize(options?: Database.SerializeOptions): Buffer;
+        backup(destinationFile: string, options?: Database.BackupOptions): never;
+        table(name: string, options: VirtualTableOptions): never;
+        unsafeMode(unsafe?: boolean): never;
+        serialize(options?: Database.SerializeOptions): never;
     }
 
     interface DatabaseConstructor {
