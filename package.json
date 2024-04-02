@@ -21,7 +21,10 @@
     "types/index.d.ts"
   ],
   "exports": {
-    ".": "./index.js",
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./index.js"
+    },
     "./promise": "./promise.js"
   },
   "scripts": {
