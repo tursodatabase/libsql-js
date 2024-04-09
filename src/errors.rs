@@ -1,4 +1,15 @@
-use neon::{context::Context, object::Object, result::NeonResult, types::JsError};
+use neon::{
+    context::Context,
+    handle::Handle,
+    object::Object,
+    result::NeonResult,
+    types::{JsError, JsFunction, JsObject},
+};
+
+pub fn throw_database_closed_error<'a, C: Context<'a>, T>(cx: &mut C) -> NeonResult<T> {
+    let err = JsError::type_error(cx, "The database connection is not open")?;
+    cx.throw(err)
+}
 
 pub fn throw_libsql_error<'a, C: Context<'a>, T>(cx: &mut C, err: libsql::Error) -> NeonResult<T> {
     match err {
@@ -9,6 +20,8 @@ pub fn throw_libsql_error<'a, C: Context<'a>, T>(cx: &mut C, err: libsql::Error)
             err.set(cx, "rawCode", code_num).unwrap();
             let code = cx.string(convert_sqlite_code(code));
             err.set(cx, "code", code).unwrap();
+            let val = cx.boolean(true);
+            err.set(cx, "libsqlError", val).unwrap();
             cx.throw(err)?
         }
         _ => {

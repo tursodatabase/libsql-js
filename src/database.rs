@@ -6,7 +6,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tracing::trace;
 
-use crate::errors::throw_libsql_error;
+use crate::errors::{throw_database_closed_error, throw_libsql_error};
 use crate::runtime;
 use crate::Statement;
 
@@ -170,7 +170,10 @@ impl Database {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         trace!("Executing SQL statement (sync): {}", sql);
-        let conn = db.get_conn();
+        let conn = match db.get_conn(&mut cx) {
+            Some(conn) => conn,
+            None => throw_database_closed_error(&mut cx)?,
+        };
         let rt = runtime(&mut cx)?;
         let result = rt.block_on(async { conn.lock().await.execute_batch(&sql).await });
         result.or_else(|err| throw_libsql_error(&mut cx, err))?;
@@ -183,7 +186,16 @@ impl Database {
         trace!("Executing SQL statement (async): {}", sql);
         let (deferred, promise) = cx.promise();
         let channel = cx.channel();
-        let conn = db.get_conn();
+        let conn = match db.get_conn(&mut cx) {
+            Some(conn) => conn,
+            None => {
+                deferred.settle_with(&channel, |mut cx| {
+                    throw_database_closed_error(&mut cx)?;
+                    Ok(cx.undefined())
+                });
+                return Ok(promise);
+            }
+        };
         let rt = runtime(&mut cx)?;
         rt.spawn(async move {
             match conn.lock().await.execute_batch(&sql).await {
@@ -205,7 +217,10 @@ impl Database {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);
         trace!("Preparing SQL statement (sync): {}", sql);
-        let conn = db.get_conn();
+        let conn = match db.get_conn(&mut cx) {
+            Some(conn) => conn,
+            None => throw_database_closed_error(&mut cx)?,
+        };
         let rt = runtime(&mut cx)?;
         let result = rt.block_on(async { conn.lock().await.prepare(&sql).await });
         let stmt = result.or_else(|err| throw_libsql_error(&mut cx, err))?;
@@ -227,7 +242,16 @@ impl Database {
         let channel = cx.channel();
         let safe_ints = *db.default_safe_integers.borrow();
         let rt = runtime(&mut cx)?;
-        let conn = db.get_conn();
+        let conn = match db.get_conn(&mut cx) {
+            Some(conn) => conn,
+            None => {
+                deferred.settle_with(&channel, |mut cx| {
+                    throw_database_closed_error(&mut cx)?;
+                    Ok(cx.undefined())
+                });
+                return Ok(promise);
+            }
+        };
         rt.spawn(async move {
             match conn.lock().await.prepare(&sql).await {
                 Ok(stmt) => {
@@ -263,9 +287,9 @@ impl Database {
         self.default_safe_integers.replace(toggle);
     }
 
-    fn get_conn(&self) -> Arc<Mutex<libsql::Connection>> {
+    fn get_conn(&self, cx: &mut FunctionContext) -> Option<Arc<Mutex<libsql::Connection>>> {
         let conn = self.conn.borrow();
-        conn.as_ref().unwrap().clone()
+        conn.as_ref().map(|conn| conn.clone())
     }
 }
 
