@@ -3,11 +3,6 @@
 const { load, currentTarget } = require("@neon-rs/load");
 const { familySync, GLIBC } = require("detect-libc");
 
-// Static requires for bundlers.
-if (0) {
-  require("./.targets");
-}
-
 function requireNative() {
   if (process.env.LIBSQL_JS_DEV) {
     return load(__dirname)
