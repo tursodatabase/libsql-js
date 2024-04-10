@@ -251,6 +251,12 @@ test.serial("values", async (t) => {
   t.deepEqual(stmt.get(9007199254740991n), [9007199254740991]);
 });
 
+test.serial("Database.pragma()", async (t) => {
+  const db = t.context.db;
+  db.pragma("cache_size = 2000");
+  t.deepEqual(db.pragma("cache_size"), [{ "cache_size": 2000 }]);
+});
+
 test.serial("errors", async (t) => {
   const db = t.context.db;
 

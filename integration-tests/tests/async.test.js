@@ -236,6 +236,12 @@ test.serial("Database.transaction()", async (t) => {
   t.is(stmt.get(5).name, "Junior");
 });
 
+test.serial("Database.pragma()", async (t) => {
+  const db = t.context.db;
+  await db.pragma("cache_size = 2000");
+  t.deepEqual(await db.pragma("cache_size"), [{ "cache_size": 2000 }]);
+});
+
 test.serial("errors", async (t) => {
   const db = t.context.db;
 
