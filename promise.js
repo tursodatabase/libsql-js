@@ -9,6 +9,13 @@ if (0) {
 
 const SqliteError = require("./sqlite-error");
 
+function convertError(err) {
+  if (err.libsqlError) {
+    return new SqliteError(err.message, err.code, err.rawCode);
+  }
+  return err;
+}
+
 function requireNative() {
   if (process.env.LIBSQL_JS_DEV) {
     return load(__dirname)
@@ -104,7 +111,7 @@ class Database {
     return databasePrepareAsync.call(this.db, sql).then((stmt) => {
       return new Statement(stmt);
     }).catch((err) => {
-      throw new SqliteError(err.message, err.code, err.rawCode);
+      throw convertError(err);
     });
   }
 
@@ -203,7 +210,7 @@ class Database {
    */
   exec(sql) {
     return databaseExecAsync.call(this.db, sql).catch((err) => {
-      throw new SqliteError(err.message, err.code, err.rawCode);
+      throw convertError(err);
     });
   }
 
@@ -260,7 +267,7 @@ class Statement {
         return statementRun.call(this.stmt, bindParameters.flat());
       }
     } catch (err) {
-      throw new SqliteError(err.message, err.code, err.rawCode);
+      throw convertError(err);
     }
   }
 

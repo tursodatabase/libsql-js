@@ -258,6 +258,28 @@ test.serial("errors", async (t) => {
   t.is(noTableError.rawCode, 1)
 });
 
+test.serial("Database.prepare() after close()", async (t) => {
+  const db = t.context.db;
+  await db.close();
+  await t.throwsAsync(async () => {    
+    await db.prepare("SELECT 1");
+  }, { 
+    instanceOf: TypeError,
+    message: "The database connection is not open"
+  });
+});
+
+test.serial("Database.exec() after close()", async (t) => {
+  const db = t.context.db;
+  await db.close();
+  await t.throwsAsync(async () => {    
+    await db.exec("SELECT 1");
+  }, { 
+    instanceOf: TypeError,
+    message: "The database connection is not open"
+  });
+});
+
 const connect = async (path_opt) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;

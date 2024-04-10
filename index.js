@@ -48,6 +48,13 @@ const {
 
 const SqliteError = require("./sqlite-error");
 
+function convertError(err) {
+  if (err.libsqlError) {
+    return new SqliteError(err.message, err.code, err.rawCode);
+  }
+  return err;
+}
+
 /**
  * Database represents a connection that can prepare and execute SQL statements.
  */
@@ -106,7 +113,7 @@ class Database {
       const stmt = databasePrepareSync.call(this.db, sql);
       return new Statement(stmt);  
     } catch (err) {
-      throw new SqliteError(err.message, err.code, err.rawCode);
+      throw convertError(err);
     }
   }
 
@@ -207,7 +214,7 @@ class Database {
     try {
       databaseExecSync.call(this.db, sql);
     } catch (err) {
-      throw new SqliteError(err.message, err.code, err.rawCode);
+      throw convertError(err);
     }
   }
 
@@ -263,9 +270,9 @@ class Statement {
         return statementRun.call(this.stmt, bindParameters[0]);
       } else {
         return statementRun.call(this.stmt, bindParameters.flat());
-      }
+      }  
     } catch (err) {
-      throw new SqliteError(err.message, err.code, err.rawCode);
+      throw convertError(err);
     }
   }
 
