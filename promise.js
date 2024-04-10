@@ -9,6 +9,25 @@ if (0) {
 
 const SqliteError = require("./sqlite-error");
 
+function requireNative() {
+  if (process.env.LIBSQL_JS_DEV) {
+    return load(__dirname)
+  }
+  let target = currentTarget();
+  // Workaround for Bun, which reports a musl target, but really wants glibc...
+  if (familySync() == GLIBC) {
+    switch (target) {
+    case "linux-x64-musl":
+      target = "linux-x64-gnu";
+      break;
+    case "linux-arm64-musl":
+      target = "linux-arm64-gnu";
+      break;
+    }
+  }
+  return require(`@libsql/${target}`);
+}
+
 const {
   databaseOpen,
   databaseOpenWithRpcSync,
@@ -26,7 +45,7 @@ const {
   statementColumns,
   statementSafeIntegers,
   rowsNext,
-} = require(`@libsql/${currentTarget()}`);
+} = requireNative();
 
 /**
  * Database represents a connection that can prepare and execute SQL statements.
