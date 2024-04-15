@@ -136,7 +136,12 @@ class Database {
   }
 
   pragma(source, options) {
-    throw new Error("not implemented");
+    if (options == null) options = {};
+    if (typeof source !== 'string') throw new TypeError('Expected first argument to be a string');
+    if (typeof options !== 'object') throw new TypeError('Expected second argument to be an options object');
+    const simple = options['simple'];
+    const stmt = this.prepare(`PRAGMA ${source}`, this, true);
+    return simple ? stmt.pluck().get() : stmt.all();
   }
 
   backup(filename, options) {
