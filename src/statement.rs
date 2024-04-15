@@ -327,7 +327,6 @@ fn convert_row(
             .get_value(idx)
             .or_else(|err| throw_libsql_error(cx, err))?;
         let column_name = rows.column_name(idx).unwrap();
-        let key = cx.string(column_name);
         let v: Handle<'_, JsValue> = match v {
             libsql::Value::Null => cx.null().upcast(),
             libsql::Value::Integer(v) => {
@@ -341,7 +340,7 @@ fn convert_row(
             libsql::Value::Text(v) => cx.string(v).upcast(),
             libsql::Value::Blob(v) => JsArrayBuffer::from_slice(cx, &v)?.upcast(),
         };
-        result.set(cx, key, v)?;
+        result.set(cx, column_name, v)?;
     }
     Ok(())
 }
