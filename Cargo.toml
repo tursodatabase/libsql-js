@@ -23,6 +23,5 @@ lto = true
 codegen-units = 1
 debug = false
 strip = true
-opt-level = "z"
 panic = "abort"
 
