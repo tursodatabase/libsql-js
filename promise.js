@@ -124,18 +124,32 @@ class Database {
     if (typeof fn !== "function")
       throw new TypeError("Expected first argument to be a function");
 
-    return async (...bindParameters) => {
-      // TODO: Use libsql transaction API.
-      await this.exec("BEGIN");
-      try {
-        const result = fn(...bindParameters);
-        await this.exec("COMMIT");
-        return result;
-      } catch (err) {
-        await this.exec("ROLLBACK");
-        throw err;
-      }
+    const db = this;
+    const wrapTxn = (mode) => {
+      return async (...bindParameters) => {
+        await db.exec("BEGIN " + mode);
+        try {
+          const result = fn(...bindParameters);
+          await db.exec("COMMIT");
+          return result;
+        } catch (err) {
+          await db.exec("ROLLBACK");
+          throw err;
+        }
+      };
     };
+    const properties = {
+      default: { value: wrapTxn("") },
+      deferred: { value: wrapTxn("DEFERRED") },
+      immediate: { value: wrapTxn("IMMEDIATE") },
+      exclusive: { value: wrapTxn("EXCLUSIVE") },
+      database: { value: this, enumerable: true },
+    };
+    Object.defineProperties(properties.default.value, properties);
+    Object.defineProperties(properties.deferred.value, properties);
+    Object.defineProperties(properties.immediate.value, properties);
+    Object.defineProperties(properties.exclusive.value, properties);
+    return properties.default.value;
   }
 
   pragma(source, options) {

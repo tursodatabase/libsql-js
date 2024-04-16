@@ -240,6 +240,24 @@ test.serial("Database.transaction()", async (t) => {
   t.is(stmt.get(5).name, "Junior");
 });
 
+test.serial("Database.transaction().immediate()", async (t) => {
+  const db = t.context.db;
+  const insert = db.prepare(
+    "INSERT INTO users(name, email) VALUES (:name, :email)"
+  );
+  const insertMany = db.transaction((users) => {
+    t.is(db.inTransaction, true);
+    for (const user of users) insert.run(user);
+  });
+  t.is(db.inTransaction, false);
+  insertMany.immediate([
+    { name: "Joey", email: "joey@example.org" },
+    { name: "Sally", email: "sally@example.org" },
+    { name: "Junior", email: "junior@example.org" },
+  ]);
+  t.is(db.inTransaction, false);
+});
+
 test.serial("values", async (t) => {
   const db = t.context.db;
 

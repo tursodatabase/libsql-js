@@ -236,6 +236,24 @@ test.serial("Database.transaction()", async (t) => {
   t.is(stmt.get(5).name, "Junior");
 });
 
+test.serial("Database.transaction().immediate()", async (t) => {
+  const db = t.context.db;
+  const insert = await db.prepare(
+    "INSERT INTO users(name, email) VALUES (:name, :email)"
+  );
+  const insertMany = db.transaction((users) => {
+    t.is(db.inTransaction, true);
+    for (const user of users) insert.run(user);
+  });
+  t.is(db.inTransaction, false);
+  await insertMany.immediate([
+    { name: "Joey", email: "joey@example.org" },
+    { name: "Sally", email: "sally@example.org" },
+    { name: "Junior", email: "junior@example.org" },
+  ]);
+  t.is(db.inTransaction, false);
+});
+
 test.serial("Database.pragma()", async (t) => {
   const db = t.context.db;
   await db.pragma("cache_size = 2000");
