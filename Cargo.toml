@@ -16,11 +16,7 @@ libsql = { git = "https://github.com/tursodatabase/libsql/", rev = "998d33042828
 tracing = "0.1"
 once_cell = "1.18.0"
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
-
-[dependencies.neon]
-version = "1.0.0-alpha.4"
-default-features = false
-features = ["napi-6"]
+neon = "1.0.0"
 
 [profile.release]
 lto = true
