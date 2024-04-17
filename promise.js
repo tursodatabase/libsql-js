@@ -1,6 +1,7 @@
 "use strict";
 
 const { load, currentTarget } = require("@neon-rs/load");
+const { familySync, GLIBC } = require("detect-libc");
 
 // Static requires for bundlers.
 if (0) {
