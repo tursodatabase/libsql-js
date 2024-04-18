@@ -1,6 +1,6 @@
 {
   "name": "libsql",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "description": "A better-sqlite3 compatible API for libSQL that supports Bun, Deno, and Node",
   "os": [
     "darwin",
@@ -65,6 +65,7 @@
   },
   "dependencies": {
     "@neon-rs/load": "^0.0.4",
-    "detect-libc": "2.0.2"
+    "detect-libc": "2.0.2",
+    "libsql": "^0.3.15"
   }
 }
