@@ -16,7 +16,7 @@ libsql = { version = "0.3.5", features = ["encryption"] }
 tracing = "0.1"
 once_cell = "1.18.0"
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
-neon = "1.0.0"
+neon = { version = "1.0.0", default-features = false, features = ["napi-6"] }
 
 [profile.release]
 lto = true
