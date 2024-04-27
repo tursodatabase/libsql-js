@@ -254,6 +254,11 @@ impl Rows {
         let count = result_arr.len(&mut cx);
         let res = cx.null();
         rt.block_on(async move {
+            let mut keys = Vec::<Handle<JsString>>::with_capacity(rows.column_count() as usize);
+            for idx in 0..rows.column_count() {
+                let column_name = rows.column_name(idx).unwrap();
+                keys.push(cx.string(column_name));
+            }
             for idx in 0..count {
                 match rows.next().await.or_else(|err| throw_libsql_error(&mut cx, err))? {
                     Some(row) => {
@@ -263,7 +268,25 @@ impl Rows {
                             result_arr.set(&mut cx, idx, result)?;
                         } else {
                             let mut result = cx.empty_object();
-                            convert_row(&mut cx, safe_ints, &mut result, &rows, &row)?;
+                            for idx in 0..rows.column_count() {
+                                let v = row
+                                    .get_value(idx)
+                                    .or_else(|err| throw_libsql_error(&mut cx, err))?;
+                                let v: Handle<'_, JsValue> = match v {
+                                    libsql::Value::Null => cx.null().upcast(),
+                                    libsql::Value::Integer(v) => {
+                                        if safe_ints {
+                                            neon::types::JsBigInt::from_i64(&mut cx, v).upcast()
+                                        } else {
+                                            cx.number(v as f64).upcast()
+                                        }
+                                    }
+                                    libsql::Value::Real(v) => cx.number(v).upcast(),
+                                    libsql::Value::Text(v) => cx.string(v).upcast(),
+                                    libsql::Value::Blob(v) => JsArrayBuffer::from_slice(&mut cx, &v)?.upcast(),
+                                };
+                                result.set(&mut cx, keys[idx as usize], v)?;
+                            }
                             result_arr.set(&mut cx, idx, result)?;
                         }
                     }
