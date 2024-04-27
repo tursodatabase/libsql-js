@@ -244,29 +244,37 @@ pub(crate) struct Rows {
 impl Finalize for Rows {}
 
 impl Rows {
-    pub fn js_next(mut cx: FunctionContext) -> JsResult<JsValue> {
+    pub fn js_next(mut cx: FunctionContext) -> JsResult<JsNull> {
+        let result_arr = cx.argument::<JsArray>(0)?;
         let rows: Handle<'_, JsBox<Rows>> = cx.this()?;
         let raw = rows.raw;
         let safe_ints = rows.safe_ints;
         let mut rows = rows.rows.borrow_mut();
         let rt = runtime(&mut cx)?;
-        let next = rt
-            .block_on(rows.next())
-            .or_else(|err| throw_libsql_error(&mut cx, err))?;
-        match next {
-            Some(row) => {
-                if raw {
-                    let mut result = cx.empty_array();
-                    convert_row_raw(&mut cx, safe_ints, &mut result, &rows, &row)?;
-                    Ok(result.upcast())
-                } else {
-                    let mut result = cx.empty_object();
-                    convert_row(&mut cx, safe_ints, &mut result, &rows, &row)?;
-                    Ok(result.upcast())
-                }
+        let count = result_arr.len(&mut cx);
+        let res = cx.null();
+        rt.block_on(async move {
+            for idx in 0..count {
+                match rows.next().await.or_else(|err| throw_libsql_error(&mut cx, err))? {
+                    Some(row) => {
+                        if raw {
+                            let mut result = cx.empty_array();
+                            convert_row_raw(&mut cx, safe_ints, &mut result, &rows, &row)?;
+                            result_arr.set(&mut cx, idx, result)?;
+                        } else {
+                            let mut result = cx.empty_object();
+                            convert_row(&mut cx, safe_ints, &mut result, &rows, &row)?;
+                            result_arr.set(&mut cx, idx, result)?;
+                        }
+                    }
+                    None => {
+                        break;
+                    },
+                };
             }
-            None => Ok(cx.undefined().upcast()),
-        }
+            Ok(())
+        })?;
+        Ok(res)
     }
 }
 
