@@ -1,0 +1,10 @@
+{
+  "name": "libsql-perf",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "better-sqlite3": "^9.5.0",
+    "libsql": "..",
+    "mitata": "^0.1.11"
+  }
+}

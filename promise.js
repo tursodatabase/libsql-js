@@ -318,11 +318,20 @@ class Statement {
       rows = await statementRowsAsync.call(this.stmt, bindParameters.flat());
     }
     const iter = {
+      nextRows: Array(100),
+      nextRowIndex: 100,
       next() {
-        const row = rowsNext.call(rows);
+        if (this.nextRowIndex === 100) {
+          this.nextRows.fill(null);
+          rowsNext.call(rows, this.nextRows);
+          this.nextRowIndex = 0;
+        }
+        const row = this.nextRows[this.nextRowIndex];
+        this.nextRows[this.nextRowIndex] = null;
         if (!row) {
           return { done: true };
         }
+        this.nextRowIndex++;
         return { value: row, done: false };
       },
       [Symbol.iterator]() {
