@@ -49,6 +49,16 @@ test.serial("Statement.run() [positional]", async (t) => {
   t.is(info.lastInsertRowid, 3);
 });
 
+test.serial("Statement.get() [no parameters]", async (t) => {
+  const db = t.context.db;
+
+  var stmt = 0;
+
+  stmt = await db.prepare("SELECT * FROM users");
+  t.is(stmt.get().name, "Alice");
+  t.deepEqual(await stmt.raw().get(), [1, 'Alice', 'alice@example.org']);
+});
+
 test.serial("Statement.get() [positional]", async (t) => {
   const db = t.context.db;
 
