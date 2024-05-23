@@ -182,6 +182,23 @@ test.serial("Statement.raw() [failure]", async (t) => {
   });
 });
 
+test.serial("Statement.run() with array bind parameter", async (t) => {
+  const db = t.context.db;
+
+  db.exec(`
+      DROP TABLE IF EXISTS t;
+      CREATE TABLE t (value BLOB);
+  `);
+
+  const array = new Float32Array([1, 2, 3]);
+
+  const insertStmt = db.prepare("INSERT INTO t (value) VALUES (?)");
+  insertStmt.run([array]);
+
+  const selectStmt = db.prepare("SELECT value FROM t");
+  t.deepEqual(selectStmt.raw().get()[0], Buffer.from(array.buffer));
+});
+
 test.serial("Statement.columns()", async (t) => {
   const db = t.context.db;
 

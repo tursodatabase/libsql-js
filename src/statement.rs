@@ -43,6 +43,11 @@ fn js_value_to_value(
         let v = v.downcast_or_throw::<JsUint8Array, _>(cx)?;
         let v = v.as_slice(cx);
         Ok(libsql::Value::Blob(v.to_vec()))
+    } else if v.is_a::<JsFloat32Array, _>(cx) {
+        let v = v.downcast_or_throw::<JsFloat32Array, _>(cx)?;
+        let v = v.buffer(cx);
+        let v = v.as_slice(cx);
+        Ok(libsql::Value::Blob(v.to_vec()))
     } else {
         todo!("unsupported type");
     }
@@ -369,7 +374,7 @@ fn convert_row(
             }
             libsql::Value::Real(v) => cx.number(v).upcast(),
             libsql::Value::Text(v) => cx.string(v).upcast(),
-            libsql::Value::Blob(v) => JsArrayBuffer::from_slice(cx, &v)?.upcast(),
+            libsql::Value::Blob(v) => JsBuffer::from_slice(cx, &v)?.upcast(),
         };
         result.set(cx, column_name, v)?;
     }
@@ -398,7 +403,7 @@ fn convert_row_raw(
             }
             libsql::Value::Real(v) => cx.number(v).upcast(),
             libsql::Value::Text(v) => cx.string(v).upcast(),
-            libsql::Value::Blob(v) => JsArrayBuffer::from_slice(cx, &v)?.upcast(),
+            libsql::Value::Blob(v) => JsBuffer::from_slice(cx, &v)?.upcast(),
         };
         result.set(cx, idx as u32, v)?;
     }
