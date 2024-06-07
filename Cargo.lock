@@ -723,8 +723,7 @@ dependencies = [
 [[package]]
 name = "libsql"
 version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1bd17bcc143f2a5be449680dc63b91327d953bcabebe34a69c549fca8934ec9d"
+source = "git+https://github.com/penberg/libsql/?rev=8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2#8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -761,8 +760,7 @@ dependencies = [
 [[package]]
 name = "libsql-ffi"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f67a0b0c6585ed06d48bfb2fd702a826065420e602fa34f8eb6e3a44e26520b9"
+source = "git+https://github.com/penberg/libsql/?rev=8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2#8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2"
 dependencies = [
  "bindgen",
  "cc",
@@ -771,8 +769,7 @@ dependencies = [
 [[package]]
 name = "libsql-hrana"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "220a925fe6d49dbfa7523b20f5a5391f579b5d9dcf9dd1225606d00929fcab3a"
+source = "git+https://github.com/penberg/libsql/?rev=8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2#8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2"
 dependencies = [
  "base64 0.21.7",
  "bytes",
@@ -795,8 +792,7 @@ dependencies = [
 [[package]]
 name = "libsql-rusqlite"
 version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6227e9be9b8cb061692babbcdc7ab268a8df3517d5b377f1d603cfdc9cafe12a"
+source = "git+https://github.com/penberg/libsql/?rev=8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2#8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2"
 dependencies = [
  "bitflags 2.4.2",
  "fallible-iterator 0.2.0",
@@ -809,8 +805,7 @@ dependencies = [
 [[package]]
 name = "libsql-sqlite3-parser"
 version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "095d2cf702a5c9c152e48b369f69da30cc44351fa9432621dd8976834abc1752"
+source = "git+https://github.com/penberg/libsql/?rev=8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2#8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2"
 dependencies = [
  "bitflags 2.4.2",
  "cc",
@@ -828,8 +823,7 @@ dependencies = [
 [[package]]
 name = "libsql-sys"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5829f758a82418429de6cb0eb310502de78d0908efc3fe2f84b6a41f2f6bebd1"
+source = "git+https://github.com/penberg/libsql/?rev=8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2#8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2"
 dependencies = [
  "bytes",
  "libsql-ffi",
@@ -842,8 +836,7 @@ dependencies = [
 [[package]]
 name = "libsql_replication"
 version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef903dda0e85af2224e7454380e59d9602738a5041546a4807438951ad0d5b25"
+source = "git+https://github.com/penberg/libsql/?rev=8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2#8f3538b68a3b93f22631c6b0ff9acfeb030ad7d2"
 dependencies = [
  "aes",
  "async-stream",

@@ -1,0 +1,16 @@
+{
+  "name": "libsql-examples-vector",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@xenova/transformers": "^2.17.1",
+    "csv-parse": "^5.5.5",
+    "libsql": "../../"
+  }
+}
