@@ -41,6 +41,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
         "databaseDefaultSafeIntegers",
         Database::js_default_safe_integers,
     )?;
+    cx.export_function("databaseLoadExtension", Database::js_load_extension)?;
     cx.export_function("statementRaw", Statement::js_raw)?;
     cx.export_function("statementIsReader", Statement::js_is_reader)?;
     cx.export_function("statementRun", Statement::js_run)?;
