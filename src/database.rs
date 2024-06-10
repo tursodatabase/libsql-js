@@ -287,6 +287,32 @@ impl Database {
         self.default_safe_integers.replace(toggle);
     }
 
+    pub fn js_load_extension(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        let extension = cx.argument::<JsString>(0)?.value(&mut cx);
+        let entry_point: Option<&str> = match cx.argument_opt(1) {
+            Some(arg) => todo!(),
+            None => None,
+        };
+        trace!("Loading extension: {}", extension);
+        let conn = match db.get_conn(&mut cx) {
+            Some(conn) => conn,
+            None => throw_database_closed_error(&mut cx)?,
+        };
+        let conn = conn.blocking_lock();
+        if let Err(err) = conn.load_extension_enable() {
+            throw_libsql_error(&mut cx, err)?;
+        }
+        if let Err(err) = conn.load_extension(&extension, entry_point) {
+            let _ = conn.load_extension_disable();
+            throw_libsql_error(&mut cx, err)?;
+        }
+        if let Err(err) = conn.load_extension_disable() {
+            throw_libsql_error(&mut cx, err)?;
+        }
+        Ok(cx.undefined())
+    }
+
     fn get_conn(&self, cx: &mut FunctionContext) -> Option<Arc<Mutex<libsql::Connection>>> {
         let conn = self.conn.borrow();
         conn.as_ref().map(|conn| conn.clone())

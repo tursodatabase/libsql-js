@@ -68,8 +68,7 @@ This function is currently not supported.
 
 ### loadExtension(path, [entryPoint]) ⇒ this
 
-This function is currently not supported.
-
+Loads a SQLite3 extension
 ### exec(sql) ⇒ this
 
 Executes a SQL statement.
