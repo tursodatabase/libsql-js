@@ -23,8 +23,6 @@ fn js_value_to_value(
 ) -> NeonResult<libsql::Value> {
     if v.is_a::<JsNull, _>(cx) || v.is_a::<JsUndefined, _>(cx) {
         Ok(libsql::Value::Null)
-    } else if v.is_a::<JsArray, _>(cx) {
-        todo!("array");
     } else if v.is_a::<JsBoolean, _>(cx) {
         todo!("bool");
     } else if v.is_a::<JsNumber, _>(cx) {
@@ -49,7 +47,7 @@ fn js_value_to_value(
         let v = v.as_slice(cx);
         Ok(libsql::Value::Blob(v.to_vec()))
     } else {
-        todo!("unsupported type");
+        cx.throw_error("SQLite3 can only bind numbers, strings, bigints, buffers, and null")
     }
 }
 
