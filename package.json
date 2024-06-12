@@ -18,7 +18,8 @@
     "index.js",
     "sqlite-error.js",
     "promise.js",
-    "types/index.d.ts"
+    "types/index.d.ts",
+    "types/promise.d.ts"
   ],
   "exports": {
     ".": {
@@ -61,7 +62,8 @@
   },
   "homepage": "https://github.com/tursodatabase/libsql-js",
   "devDependencies": {
-    "@neon-rs/cli": "^0.0.165"
+    "@neon-rs/cli": "^0.0.165",
+    "typescript": "^5.4.5"
   },
   "dependencies": {
     "@neon-rs/load": "^0.0.4",
