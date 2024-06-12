@@ -190,6 +190,24 @@ test.serial("Statement.run() with array bind parameter", async (t) => {
       CREATE TABLE t (value BLOB);
   `);
 
+  const array = [1, 2, 3];
+
+  const insertStmt = db.prepare("INSERT INTO t (value) VALUES (?)");
+  await t.throws(() => {
+    insertStmt.run([array]);
+  }, {
+    message: 'SQLite3 can only bind numbers, strings, bigints, buffers, and null'
+  });
+});
+
+test.serial("Statement.run() with Float32Array bind parameter", async (t) => {
+  const db = t.context.db;
+
+  db.exec(`
+      DROP TABLE IF EXISTS t;
+      CREATE TABLE t (value BLOB);
+  `);
+
   const array = new Float32Array([1, 2, 3]);
 
   const insertStmt = db.prepare("INSERT INTO t (value) VALUES (?)");
