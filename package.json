@@ -18,7 +18,8 @@
     "index.js",
     "sqlite-error.js",
     "promise.js",
-    "types/index.d.ts"
+    "types/index.d.ts",
+    "types/promise.d.ts"
   ],
   "exports": {
     ".": {
@@ -30,7 +31,7 @@
   "scripts": {
     "test": "cargo test",
     "debug": "cargo build --message-format=json | npm exec neon dist",
-    "build": "cargo build --message-format=json --release | npm exec neon dist -- --name libsql-js",
+    "build": "npx tsc | cargo build --message-format=json --release | npm exec neon dist -- --name libsql-js",
     "cross": "cross build --message-format=json --release | npm exec neon dist -- --name libsql-js -m /target",
     "pack-build": "neon pack-build",
     "prepack": "neon install-builds",
@@ -61,7 +62,8 @@
   },
   "homepage": "https://github.com/tursodatabase/libsql-js",
   "devDependencies": {
-    "@neon-rs/cli": "^0.0.165"
+    "@neon-rs/cli": "^0.0.165",
+    "typescript": "^5.4.5"
   },
   "dependencies": {
     "@neon-rs/load": "^0.0.4",
