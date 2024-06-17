@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-libsql = { git = "https://github.com/tursodatabase/libsql/", rev = "35d07635a42026f74eae20dd534e2d3382dc8425", features = ["encryption"] }
+libsql = { git = "https://github.com/tursodatabase/libsql/", rev = "8b360c1697f05bf375c0c8dd68f551139edc3e4f", features = ["encryption"] }
 tracing = "0.1"
 once_cell = "1.18.0"
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
