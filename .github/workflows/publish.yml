@@ -3,6 +3,7 @@ name: publish
 env:
   NODE_VERSION: 18.x
   NPM_REGISTRY: 'https://registry.npmjs.org'
+  RUST_VERSION: 1.78
 
 on:
   push:
@@ -20,6 +21,7 @@ jobs:
         uses: neon-actions/pack@v0.1
         with:
           node-version: ${{ env.NODE_VERSION }}
+          rust-version: ${{ env.RUST_VERSION }}
           github-release: true
 
   macos-arm64-build:
@@ -36,6 +38,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           node-version: ${{ env.NODE_VERSION }}
+          rust-version: ${{ env.RUST_VERSION }}
           npm-publish: false
           github-release: true
 
@@ -53,6 +56,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           node-version: ${{ env.NODE_VERSION }}
+          rust-version: ${{ env.RUST_VERSION }}
           npm-publish: false
           github-release: true
 
@@ -72,6 +76,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           node-version: ${{ env.NODE_VERSION }}
+          rust-version: ${{ env.RUST_VERSION }}
           npm-publish: false
           github-release: true
 
@@ -93,6 +98,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           node-version: ${{ env.NODE_VERSION }}
+          rust-version: ${{ env.RUST_VERSION }}
           use-cross: true
           npm-publish: false
           github-release: true
@@ -110,5 +116,6 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         with:
           node-version: ${{ env.NODE_VERSION }}
+          rust-version: ${{ env.RUST_VERSION }}
           registry-url: ${{ env.NPM_REGISTRY }}
           github-release: "*.tgz"
