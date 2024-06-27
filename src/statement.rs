@@ -76,16 +76,27 @@ impl Statement {
 
     pub fn js_run(mut cx: FunctionContext) -> JsResult<JsValue> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
+        let raw_conn = stmt.conn.clone();
+        let total_changes_before = raw_conn.blocking_lock().total_changes();
         let params = cx.argument::<JsValue>(0)?;
         let params = convert_params(&mut cx, &stmt, params)?;
         let mut raw_stmt = stmt.stmt.blocking_lock();
         raw_stmt.reset();
-        let fut = raw_stmt.execute(params);
+        let fut = raw_stmt.run(params);
         let rt = runtime(&mut cx)?;
-        let result = rt.block_on(fut);
-        let changes = result.or_else(|err| throw_libsql_error(&mut cx, err))?;
-        let raw_conn = stmt.conn.clone();
-        let last_insert_rowid = raw_conn.blocking_lock().last_insert_rowid();
+        rt.block_on(fut)
+            .or_else(|err| throw_libsql_error(&mut cx, err))?;
+        let (changes, last_insert_rowid) = {
+            let raw_conn = stmt.conn.clone();
+            let raw_conn = raw_conn.blocking_lock();
+            let changes = if raw_conn.total_changes() == total_changes_before {
+                0
+            } else {
+                raw_conn.changes()
+            };
+            let last_insert_rowid = raw_conn.last_insert_rowid();
+            (changes, last_insert_rowid)
+        };
         let info = cx.empty_object();
         let changes = cx.number(changes as f64);
         info.set(&mut cx, "changes", changes)?;

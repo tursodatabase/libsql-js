@@ -41,6 +41,14 @@ test.serial("Statement.prepare() error", async (t) => {
   });
 });
 
+test.serial("Statement.run() returning rows", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("SELECT 1");
+  const info = stmt.run();
+  t.is(info.changes, 0);
+});
+
 test.serial("Statement.run() [positional]", async (t) => {
   const db = t.context.db;
 
