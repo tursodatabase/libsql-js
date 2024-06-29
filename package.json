@@ -26,7 +26,10 @@
       "types": "./types/index.d.ts",
       "default": "./index.js"
     },
-    "./promise": "./promise.js"
+    "./promise": {
+      "types": "./types/promise.d.ts",
+      "default": "./promise.js"
+    }
   },
   "scripts": {
     "test": "cargo test",
