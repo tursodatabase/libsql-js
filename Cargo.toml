@@ -1,6 +1,6 @@
 [package]
 name = "libsql-js"
-version = "0.4.0-pre.8"
+version = "0.4.0-pre.9"
 description = ""
 authors = ["Pekka Enberg <penberg@iki.fi>"]
 license = "MIT"
@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-libsql = { git = "https://github.com/tursodatabase/libsql/", rev = "dd548a902b56cc5b9daa3cec7a43ca887ea81136", features = ["encryption"] }
+libsql = { git = "https://github.com/tursodatabase/libsql/", rev = "7b8bb905ab19f8988ace702d025361e6b6d7c377", features = ["encryption"] }
 tracing = "0.1"
 once_cell = "1.18.0"
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }

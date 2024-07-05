@@ -225,6 +225,28 @@ test.serial("Statement.run() with Float32Array bind parameter", async (t) => {
   t.deepEqual(selectStmt.raw().get()[0], Buffer.from(array.buffer));
 });
 
+test.serial("Statement.run() for vector feature with Float32Array bind parameter", async (t) => {
+  if (t.context.provider === 'sqlite') {
+    // skip this test for sqlite
+    t.assert(true);
+    return;
+  }
+  const db = t.context.db;
+
+  db.exec(`
+    DROP TABLE IF EXISTS t;
+    CREATE TABLE t (embedding FLOAT32(8));
+    CREATE INDEX t_idx ON t ( libsql_vector_idx(embedding) );
+  `);
+
+  const insertStmt = db.prepare("INSERT INTO t VALUES (?)");
+  insertStmt.run([new Float32Array([1,1,1,1,1,1,1,1])]);
+  insertStmt.run([new Float32Array([-1,-1,-1,-1,-1,-1,-1,-1])]);
+
+  const selectStmt = db.prepare("SELECT embedding FROM vector_top_k('t_idx', vector('[2,2,2,2,2,2,2,2]'), 1) n JOIN t ON n.rowid = t.rowid");
+  t.deepEqual(selectStmt.raw().get()[0], Buffer.from(new Float32Array([1,1,1,1,1,1,1,1]).buffer));
+});
+
 test.serial("Statement.columns()", async (t) => {
   const db = t.context.db;
 
