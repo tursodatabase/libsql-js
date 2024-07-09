@@ -245,6 +245,9 @@ test.serial("Statement.run() for vector feature with Float32Array bind parameter
 
   const selectStmt = db.prepare("SELECT embedding FROM vector_top_k('t_idx', vector('[2,2,2,2,2,2,2,2]'), 1) n JOIN t ON n.rowid = t.rowid");
   t.deepEqual(selectStmt.raw().get()[0], Buffer.from(new Float32Array([1,1,1,1,1,1,1,1]).buffer));
+
+  // we need to explicitly delete this table because later when sqlite-based (not LibSQL) tests will delete table 't' they will leave 't_idx_shadow' table untouched
+  db.exec(`DROP TABLE t`);
 });
 
 test.serial("Statement.columns()", async (t) => {
