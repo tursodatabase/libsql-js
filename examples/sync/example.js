@@ -23,7 +23,8 @@ console.log(comment);
 const stmt = db.prepare("INSERT INTO guest_book_entries (comment) VALUES (?)");
 stmt.run(comment);
 
-db.sync();
+const replicated = db.sync();
+console.log("frames synced: " + replicated.frames_synced);
 
 console.log("Guest book entries:");
 const rows = db.prepare("SELECT * FROM guest_book_entries").all();

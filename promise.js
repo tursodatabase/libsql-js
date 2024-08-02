@@ -100,7 +100,7 @@ class Database {
   }
 
   sync() {
-    databaseSyncAsync.call(this.db);
+    return databaseSyncAsync.call(this.db);
   }
 
   /**
