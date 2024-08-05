@@ -67,6 +67,7 @@ impl Database {
         let encryption_cipher = cx.argument::<JsString>(3)?.value(&mut cx);
         let encryption_key = cx.argument::<JsString>(4)?.value(&mut cx);
         let sync_period = cx.argument::<JsNumber>(5)?.value(&mut cx);
+        let read_your_writes = cx.argument::<JsBoolean>(6)?.value(&mut cx);
 
         let cipher = libsql::Cipher::from_str(&encryption_cipher).or_else(|err| {
             throw_libsql_error(
@@ -98,7 +99,7 @@ impl Database {
             sync_url,
             sync_auth,
             Some(version),
-            true,
+            read_your_writes,
             encryption_config,
             sync_period,
         );
