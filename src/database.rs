@@ -1,3 +1,4 @@
+use libsql::replication::Replicated;
 use neon::prelude::*;
 use std::cell::RefCell;
 use std::str::FromStr;
@@ -130,17 +131,21 @@ impl Database {
         Ok(cx.undefined())
     }
 
-    pub fn js_sync_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    pub fn js_sync_sync(mut cx: FunctionContext) -> JsResult<JsObject> {
         trace!("Synchronizing database (sync)");
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let db = db.db.clone();
         let rt = runtime(&mut cx)?;
-        rt.block_on(async move {
-            let db = db.lock().await;
-            db.sync().await
-        })
-        .or_else(|err| throw_libsql_error(&mut cx, err))?;
-        Ok(cx.undefined())
+        let rep = rt
+            .block_on(async move {
+                let db = db.lock().await;
+                db.sync().await
+            })
+            .or_else(|err| throw_libsql_error(&mut cx, err))?;
+
+        let obj = convert_replicated_to_object(&mut cx, &rep)?;
+
+        Ok(obj)
     }
 
     pub fn js_sync_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
@@ -153,8 +158,10 @@ impl Database {
         rt.spawn(async move {
             let result = db.lock().await.sync().await;
             match result {
-                Ok(_) => {
-                    deferred.settle_with(&channel, |mut cx| Ok(cx.undefined()));
+                Ok(rep) => {
+                    deferred.settle_with(&channel, move |mut cx| {
+                        convert_replicated_to_object(&mut cx, &rep)
+                    });
                 }
                 Err(err) => {
                     deferred.settle_with(&channel, |mut cx| {
@@ -292,7 +299,7 @@ impl Database {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let extension = cx.argument::<JsString>(0)?.value(&mut cx);
         let entry_point: Option<&str> = match cx.argument_opt(1) {
-            Some(arg) => todo!(),
+            Some(_arg) => todo!(),
             None => None,
         };
         trace!("Loading extension: {}", extension);
@@ -314,7 +321,7 @@ impl Database {
         Ok(cx.undefined())
     }
 
-    fn get_conn(&self, cx: &mut FunctionContext) -> Option<Arc<Mutex<libsql::Connection>>> {
+    fn get_conn(&self, _cx: &mut FunctionContext) -> Option<Arc<Mutex<libsql::Connection>>> {
         let conn = self.conn.borrow();
         conn.as_ref().map(|conn| conn.clone())
     }
@@ -327,4 +334,24 @@ fn is_remote_path(path: &str) -> bool {
 fn version(protocol: &str) -> String {
     let ver = env!("CARGO_PKG_VERSION");
     format!("libsql-js-{protocol}-{ver}")
+}
+
+fn convert_replicated_to_object<'a>(
+    cx: &mut impl Context<'a>,
+    rep: &Replicated,
+) -> JsResult<'a, JsObject> {
+    let obj = cx.empty_object();
+
+    let frames_synced = cx.number(rep.frames_synced() as f64);
+    obj.set(cx, "frames_synced", frames_synced)?;
+
+    if let Some(v) = rep.frame_no() {
+        let frame_no = cx.number(v as f64);
+        obj.set(cx, "frame_no", frame_no)?;
+    } else {
+        let undef = cx.undefined();
+        obj.set(cx, "frame_no", undef)?;
+    }
+
+    Ok(obj)
 }

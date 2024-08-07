@@ -15,7 +15,7 @@ declare class Database {
     readonly: boolean;
     name: string;
     open: boolean;
-    sync(): void;
+    sync(): any;
     /**
      * Prepares a SQL statement for execution.
      *

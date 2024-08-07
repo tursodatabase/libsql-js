@@ -97,7 +97,7 @@ class Database {
   }
 
   sync() {
-    databaseSyncSync.call(this.db);
+    return databaseSyncSync.call(this.db);
   }
 
   /**
