@@ -72,7 +72,7 @@ declare namespace Libsql {
             source: string,
         ): BindParameters extends unknown[] ? Statement<BindParameters> : Statement<[BindParameters]>;
         transaction<F extends VariableArgFunction>(fn: F): Transaction<F>;
-        sync(): this;
+        sync(): any;
         exec(source: string): this;
         pragma(source: string, options?: Database.PragmaOptions): unknown;
         function(name: string, cb: (...params: unknown[]) => unknown): this;
