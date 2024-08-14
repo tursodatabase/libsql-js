@@ -16,6 +16,7 @@ declare class Database {
     name: string;
     open: boolean;
     sync(): any;
+    syncUntil(replicationIndex: any): any;
     /**
      * Prepares a SQL statement for execution.
      *
@@ -35,6 +36,7 @@ declare class Database {
     aggregate(name: any, options: any): void;
     table(name: any, factory: any): void;
     loadExtension(...args: any[]): void;
+    maxWriteReplicationIndex(): any;
     /**
      * Executes a SQL statement.
      *
