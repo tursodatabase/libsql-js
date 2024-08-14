@@ -22,9 +22,11 @@ console.log(comment);
 
 const stmt = db.prepare("INSERT INTO guest_book_entries (comment) VALUES (?)");
 stmt.run(comment);
+console.log("max write replication index: " + db.maxWriteReplicationIndex());
 
 const replicated = db.sync();
 console.log("frames synced: " + replicated.frames_synced);
+console.log("frame no: " + replicated.frame_no);
 
 console.log("Guest book entries:");
 const rows = db.prepare("SELECT * FROM guest_book_entries").all();
