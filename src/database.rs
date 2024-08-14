@@ -131,6 +131,16 @@ impl Database {
         Ok(cx.undefined())
     }
 
+    pub fn js_max_write_replication_index(mut cx: FunctionContext) -> JsResult<JsValue> {
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        let replication_index = db.db.blocking_lock().max_write_replication_index();
+        Ok(if let Some(ri) = replication_index {
+            cx.number(ri as f64).upcast()
+        } else {
+            cx.undefined().upcast()
+        })
+    }
+
     pub fn js_sync_sync(mut cx: FunctionContext) -> JsResult<JsObject> {
         trace!("Synchronizing database (sync)");
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
