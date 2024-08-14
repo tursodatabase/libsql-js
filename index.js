@@ -28,6 +28,7 @@ const {
   databaseInTransaction,
   databaseClose,
   databaseSyncSync,
+  databaseSyncUntilSync,
   databaseExecSync,
   databasePrepareSync,
   databaseDefaultSafeIntegers,
@@ -99,6 +100,10 @@ class Database {
 
   sync() {
     return databaseSyncSync.call(this.db);
+  }
+
+  syncUntil(replicationIndex) {
+    return databaseSyncUntilSync.call(this.db, replicationIndex);
   }
 
   /**

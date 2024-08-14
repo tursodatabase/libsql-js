@@ -184,6 +184,51 @@ impl Database {
         Ok(promise)
     }
 
+    pub fn js_sync_until_sync(mut cx: FunctionContext) -> JsResult<JsObject> {
+        trace!("Synchronizing database until given replication index (sync)");
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        let db = db.db.clone();
+        let replication_index = cx.argument::<JsNumber>(0)?.value(&mut cx) as u64;
+        let rt = runtime(&mut cx)?;
+        let rep = rt
+            .block_on(async move {
+                let db = db.lock().await;
+                db.sync_until(replication_index).await
+            })
+            .or_else(|err| throw_libsql_error(&mut cx, err))?;
+
+        let obj = convert_replicated_to_object(&mut cx, &rep)?;
+
+        Ok(obj)
+    }
+
+    pub fn js_sync_until_async(mut cx: FunctionContext) -> JsResult<JsPromise> {
+        trace!("Synchronizing database until given replication index (async)");
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        let replication_index = cx.argument::<JsNumber>(0)?.value(&mut cx) as u64;
+        let (deferred, promise) = cx.promise();
+        let channel = cx.channel();
+        let db = db.db.clone();
+        let rt = runtime(&mut cx)?;
+        rt.spawn(async move {
+            let result = db.lock().await.sync_until(replication_index).await;
+            match result {
+                Ok(rep) => {
+                    deferred.settle_with(&channel, move |mut cx| {
+                        convert_replicated_to_object(&mut cx, &rep)
+                    });
+                }
+                Err(err) => {
+                    deferred.settle_with(&channel, |mut cx| {
+                        throw_libsql_error(&mut cx, err)?;
+                        Ok(cx.undefined())
+                    });
+                }
+            }
+        });
+        Ok(promise)
+    }
+
     pub fn js_exec_sync(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let db: Handle<'_, JsBox<Database>> = cx.this()?;
         let sql = cx.argument::<JsString>(0)?.value(&mut cx);

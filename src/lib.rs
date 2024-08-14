@@ -33,6 +33,8 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("databaseClose", Database::js_close)?;
     cx.export_function("databaseSyncSync", Database::js_sync_sync)?;
     cx.export_function("databaseSyncAsync", Database::js_sync_async)?;
+    cx.export_function("databaseSyncUntilSync", Database::js_sync_until_sync)?;
+    cx.export_function("databaseSyncUntilAsync", Database::js_sync_until_async)?;
     cx.export_function("databaseExecSync", Database::js_exec_sync)?;
     cx.export_function("databaseExecAsync", Database::js_exec_async)?;
     cx.export_function("databasePrepareSync", Database::js_prepare_sync)?;

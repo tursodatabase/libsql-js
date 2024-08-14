@@ -42,6 +42,7 @@ const {
   databaseInTransaction,
   databaseClose,
   databaseSyncAsync,
+  databaseSyncUntilAsync,
   databaseExecAsync,
   databasePrepareAsync,
   databaseMaxWriteReplicationIndex,
@@ -102,6 +103,10 @@ class Database {
 
   sync() {
     return databaseSyncAsync.call(this.db);
+  }
+
+  syncUntil(replicationIndex) {
+    return databaseSyncUntilAsync.call(this.db, replicationIndex);
   }
 
   /**
