@@ -32,6 +32,7 @@ const {
   databasePrepareSync,
   databaseDefaultSafeIntegers,
   databaseLoadExtension,
+  databaseMaxWriteReplicationIndex,
   statementRaw,
   statementIsReader,
   statementGet,
@@ -219,6 +220,10 @@ class Database {
 
   loadExtension(...args) {
     databaseLoadExtension.call(this.db, ...args);
+  }
+
+  maxWriteReplicationIndex() {
+    return databaseMaxWriteReplicationIndex.call(this.db)
   }
 
   /**

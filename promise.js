@@ -44,6 +44,7 @@ const {
   databaseSyncAsync,
   databaseExecAsync,
   databasePrepareAsync,
+  databaseMaxWriteReplicationIndex,
   databaseDefaultSafeIntegers,
   statementRaw,
   statementIsReader,
@@ -222,6 +223,10 @@ class Database {
 
   loadExtension(...args) {
     throw new Error("not implemented");
+  }
+
+  maxWriteReplicationIndex() {
+    return databaseMaxWriteReplicationIndex.call(this.db)
   }
 
   /**
