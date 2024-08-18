@@ -1,8 +1,5 @@
 "use strict";
 
-const { load, currentTarget } = require("@neon-rs/load");
-const { familySync, GLIBC } = require("detect-libc");
-
 // Static requires for bundlers.
 if (0) {
   require("./.targets");
@@ -15,25 +12,6 @@ function convertError(err) {
     return new SqliteError(err.message, err.code, err.rawCode);
   }
   return err;
-}
-
-function requireNative() {
-  if (process.env.LIBSQL_JS_DEV) {
-    return load(__dirname)
-  }
-  let target = currentTarget();
-  // Workaround for Bun, which reports a musl target, but really wants glibc...
-  if (familySync() == GLIBC) {
-    switch (target) {
-    case "linux-x64-musl":
-      target = "linux-x64-gnu";
-      break;
-    case "linux-arm64-musl":
-      target = "linux-arm64-gnu";
-      break;
-    }
-  }
-  return require(`@libsql/${target}`);
 }
 
 const {
@@ -53,7 +31,7 @@ const {
   statementColumns,
   statementSafeIntegers,
   rowsNext,
-} = requireNative();
+} = require('@libsql/linux-x64-musl');
 
 /**
  * Database represents a connection that can prepare and execute SQL statements.

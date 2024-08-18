@@ -1,27 +1,5 @@
 "use strict";
 
-const { load, currentTarget } = require("@neon-rs/load");
-const { familySync, GLIBC } = require("detect-libc");
-
-function requireNative() {
-  if (process.env.LIBSQL_JS_DEV) {
-    return load(__dirname)
-  }
-  let target = currentTarget();
-  // Workaround for Bun, which reports a musl target, but really wants glibc...
-  if (familySync() == GLIBC) {
-    switch (target) {
-    case "linux-x64-musl":
-      target = "linux-x64-gnu";
-      break;
-    case "linux-arm64-musl":
-      target = "linux-arm64-gnu";
-      break;
-    }
-  }
-  return require(`@libsql/${target}`);
-}
-
 const {
   databaseOpen,
   databaseOpenWithRpcSync,
@@ -40,7 +18,7 @@ const {
   statementColumns,
   statementSafeIntegers,
   rowsNext,
-} = requireNative();
+} = require('@libsql/linux-x64-musl');
 
 const SqliteError = require("./sqlite-error");
 
@@ -108,7 +86,7 @@ class Database {
   prepare(sql) {
     try {
       const stmt = databasePrepareSync.call(this.db, sql);
-      return new Statement(stmt);  
+      return new Statement(stmt);
     } catch (err) {
       throw convertError(err);
     }
@@ -286,7 +264,7 @@ class Statement {
         return statementRun.call(this.stmt, bindParameters[0]);
       } else {
         return statementRun.call(this.stmt, bindParameters.flat());
-      }  
+      }
     } catch (err) {
       throw convertError(err);
     }

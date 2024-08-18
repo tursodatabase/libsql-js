@@ -30,7 +30,7 @@
   },
   "scripts": {
     "test": "cargo test",
-    "debug": "cargo build --message-format=json | npm exec neon dist",
+    "debug": "cargo build --message-format=json --verbose | npm exec neon dist",
     "build": "npx tsc && cargo build --message-format=json --release | npm exec neon dist -- --name libsql-js",
     "cross": "cross build --message-format=json --release | npm exec neon dist -- --name libsql-js -m /target",
     "pack-build": "neon pack-build",
@@ -40,14 +40,10 @@
   "author": "Pekka Enberg <penberg@iki.fi>",
   "license": "MIT",
   "neon": {
+    "type": "source",
+    "org": "@libsql",
     "targets": {
-      "aarch64-apple-darwin": "@libsql/darwin-arm64",
-      "aarch64-unknown-linux-gnu": "@libsql/linux-arm64-gnu",
-      "aarch64-unknown-linux-musl": "@libsql/linux-arm64-musl",
-      "x86_64-apple-darwin": "@libsql/darwin-x64",
-      "x86_64-pc-windows-msvc": "@libsql/win32-x64-msvc",
-      "x86_64-unknown-linux-gnu": "@libsql/linux-x64-gnu",
-      "x86_64-unknown-linux-musl": "@libsql/linux-x64-musl"
+      "linux-x64-musl": "x86_64-unknown-linux-musl"
     }
   },
   "repository": {
@@ -69,5 +65,8 @@
     "@neon-rs/load": "^0.0.4",
     "detect-libc": "2.0.2",
     "libsql": "^0.3.19"
+  },
+  "optionalDependencies": {
+    "@libsql/linux-x64-musl": "0.4.1"
   }
 }

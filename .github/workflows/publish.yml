@@ -24,67 +24,11 @@ jobs:
           rust-version: ${{ env.RUST_VERSION }}
           github-release: true
 
-  macos-arm64-build:
-    name: Builds (macOS arm64)
-    strategy:
-      matrix:
-        target: [aarch64-apple-darwin]
-    runs-on: macos-13-xlarge
-    permissions:
-      contents: write
-    steps:
-      - name: Build
-        uses: neon-actions/build@v0.1
-        with:
-          target: ${{ matrix.target }}
-          node-version: ${{ env.NODE_VERSION }}
-          rust-version: ${{ env.RUST_VERSION }}
-          npm-publish: false
-          github-release: true
-
-  macos-x64-build:
-    name: Builds (macOS x64)
-    strategy:
-      matrix:
-        target: [x86_64-apple-darwin]
-    runs-on: macos-13
-    permissions:
-      contents: write
-    steps:
-      - name: Build
-        uses: neon-actions/build@v0.1
-        with:
-          target: ${{ matrix.target }}
-          node-version: ${{ env.NODE_VERSION }}
-          rust-version: ${{ env.RUST_VERSION }}
-          npm-publish: false
-          github-release: true
-
-  windows-builds:
-    name: Builds (Windows)
-    strategy:
-      matrix:
-        target: [x86_64-pc-windows-msvc]
-    runs-on: windows-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v2
-      - name: Build
-        uses: neon-actions/build@v0.1
-        with:
-          target: ${{ matrix.target }}
-          node-version: ${{ env.NODE_VERSION }}
-          rust-version: ${{ env.RUST_VERSION }}
-          npm-publish: false
-          github-release: true
-
   other-builds:
     name: Builds (other platforms)
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl, aarch64-unknown-linux-gnu, aarch64-unknown-linux-musl]
+        target: [x86_64-unknown-linux-musl]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -105,7 +49,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: [pack, macos-arm64-build, macos-x64-build, windows-builds, other-builds]
+    needs: [pack, other-builds]
     runs-on: ubuntu-latest
     permissions:
       contents: write
