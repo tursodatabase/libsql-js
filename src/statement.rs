@@ -274,14 +274,18 @@ impl Rows {
                 keys.push(cx.string(column_name));
             }
             for idx in 0..count {
-                match rows.next().await.or_else(|err| throw_libsql_error(&mut cx, err))? {
+                match rows
+                    .next()
+                    .await
+                    .or_else(|err| throw_libsql_error(&mut cx, err))?
+                {
                     Some(row) => {
                         if raw {
                             let mut result = cx.empty_array();
                             convert_row_raw(&mut cx, safe_ints, &mut result, &rows, &row)?;
                             result_arr.set(&mut cx, idx, result)?;
                         } else {
-                            let mut result = cx.empty_object();
+                            let result = cx.empty_object();
                             for idx in 0..rows.column_count() {
                                 let v = row
                                     .get_value(idx)
@@ -297,7 +301,9 @@ impl Rows {
                                     }
                                     libsql::Value::Real(v) => cx.number(v).upcast(),
                                     libsql::Value::Text(v) => cx.string(v).upcast(),
-                                    libsql::Value::Blob(v) => JsArrayBuffer::from_slice(&mut cx, &v)?.upcast(),
+                                    libsql::Value::Blob(v) => {
+                                        JsArrayBuffer::from_slice(&mut cx, &v)?.upcast()
+                                    }
                                 };
                                 result.set(&mut cx, keys[idx as usize], v)?;
                             }
@@ -306,7 +312,7 @@ impl Rows {
                     }
                     None => {
                         break;
-                    },
+                    }
                 };
             }
             Ok(())
