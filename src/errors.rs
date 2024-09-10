@@ -1,10 +1,4 @@
-use neon::{
-    context::Context,
-    handle::Handle,
-    object::Object,
-    result::NeonResult,
-    types::{JsError, JsFunction, JsObject},
-};
+use neon::{context::Context, object::Object, result::NeonResult, types::JsError};
 
 pub fn throw_database_closed_error<'a, C: Context<'a>, T>(cx: &mut C) -> NeonResult<T> {
     let err = JsError::type_error(cx, "The database connection is not open")?;
