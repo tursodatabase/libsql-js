@@ -67,7 +67,6 @@
   },
   "dependencies": {
     "@neon-rs/load": "^0.0.4",
-    "detect-libc": "2.0.2",
-    "libsql": "^0.3.19"
+    "detect-libc": "2.0.2"
   }
 }
