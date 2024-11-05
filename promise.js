@@ -38,7 +38,7 @@ function requireNative() {
 
 const {
   databaseOpen,
-  databaseOpenWithRpcSync,
+  databaseOpenWithSync,
   databaseInTransaction,
   databaseClose,
   databaseSyncAsync,
@@ -79,7 +79,8 @@ class Database {
       }
       const encryptionKey = opts?.encryptionKey ?? "";
       const syncPeriod = opts?.syncPeriod ?? 0.0;
-      this.db = databaseOpenWithRpcSync(path, opts.syncUrl, authToken, encryptionCipher, encryptionKey, syncPeriod);
+      const offline = opts?.offline ?? false;
+      this.db = databaseOpenWithSync(path, opts.syncUrl, authToken, encryptionCipher, encryptionKey, syncPeriod, offline);
     } else {
       const authToken = opts?.authToken ?? "";
       const encryptionKey = opts?.encryptionKey ?? "";
