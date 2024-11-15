@@ -1002,7 +1002,7 @@ dependencies = [
 [[package]]
 name = "libsql"
 version = "0.6.0"
-source = "git+https://github.com/tursodatabase/libsql/?rev=18f444290d9f2542d6da14e559d2b3e31f8f157d#18f444290d9f2542d6da14e559d2b3e31f8f157d"
+source = "git+https://github.com/tursodatabase/libsql/?rev=9499c3c40aa299b0ce5221b53f000f69462f8d8c#9499c3c40aa299b0ce5221b53f000f69462f8d8c"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -1040,7 +1040,7 @@ dependencies = [
 [[package]]
 name = "libsql-ffi"
 version = "0.5.0"
-source = "git+https://github.com/tursodatabase/libsql/?rev=18f444290d9f2542d6da14e559d2b3e31f8f157d#18f444290d9f2542d6da14e559d2b3e31f8f157d"
+source = "git+https://github.com/tursodatabase/libsql/?rev=9499c3c40aa299b0ce5221b53f000f69462f8d8c#9499c3c40aa299b0ce5221b53f000f69462f8d8c"
 dependencies = [
  "bindgen",
  "cc",
@@ -1049,7 +1049,7 @@ dependencies = [
 [[package]]
 name = "libsql-hrana"
 version = "0.2.0"
-source = "git+https://github.com/tursodatabase/libsql/?rev=18f444290d9f2542d6da14e559d2b3e31f8f157d#18f444290d9f2542d6da14e559d2b3e31f8f157d"
+source = "git+https://github.com/tursodatabase/libsql/?rev=9499c3c40aa299b0ce5221b53f000f69462f8d8c#9499c3c40aa299b0ce5221b53f000f69462f8d8c"
 dependencies = [
  "base64 0.21.7",
  "bytes",
@@ -1072,7 +1072,7 @@ dependencies = [
 [[package]]
 name = "libsql-rusqlite"
 version = "0.33.0"
-source = "git+https://github.com/tursodatabase/libsql/?rev=18f444290d9f2542d6da14e559d2b3e31f8f157d#18f444290d9f2542d6da14e559d2b3e31f8f157d"
+source = "git+https://github.com/tursodatabase/libsql/?rev=9499c3c40aa299b0ce5221b53f000f69462f8d8c#9499c3c40aa299b0ce5221b53f000f69462f8d8c"
 dependencies = [
  "bitflags 2.6.0",
  "fallible-iterator 0.2.0",
@@ -1085,7 +1085,7 @@ dependencies = [
 [[package]]
 name = "libsql-sqlite3-parser"
 version = "0.13.0"
-source = "git+https://github.com/tursodatabase/libsql/?rev=18f444290d9f2542d6da14e559d2b3e31f8f157d#18f444290d9f2542d6da14e559d2b3e31f8f157d"
+source = "git+https://github.com/tursodatabase/libsql/?rev=9499c3c40aa299b0ce5221b53f000f69462f8d8c#9499c3c40aa299b0ce5221b53f000f69462f8d8c"
 dependencies = [
  "bitflags 2.6.0",
  "cc",
@@ -1102,7 +1102,7 @@ dependencies = [
 [[package]]
 name = "libsql-sys"
 version = "0.8.0"
-source = "git+https://github.com/tursodatabase/libsql/?rev=18f444290d9f2542d6da14e559d2b3e31f8f157d#18f444290d9f2542d6da14e559d2b3e31f8f157d"
+source = "git+https://github.com/tursodatabase/libsql/?rev=9499c3c40aa299b0ce5221b53f000f69462f8d8c#9499c3c40aa299b0ce5221b53f000f69462f8d8c"
 dependencies = [
  "bytes",
  "libsql-ffi",
@@ -1115,7 +1115,7 @@ dependencies = [
 [[package]]
 name = "libsql_replication"
 version = "0.6.0"
-source = "git+https://github.com/tursodatabase/libsql/?rev=18f444290d9f2542d6da14e559d2b3e31f8f157d#18f444290d9f2542d6da14e559d2b3e31f8f157d"
+source = "git+https://github.com/tursodatabase/libsql/?rev=9499c3c40aa299b0ce5221b53f000f69462f8d8c#9499c3c40aa299b0ce5221b53f000f69462f8d8c"
 dependencies = [
  "aes",
  "async-stream",
