@@ -3,7 +3,6 @@ name: CI
 env:
   NODE_VERSION: 18.x
   NPM_REGISTRY: 'https://registry.npmjs.org'
-  RUST_VERSION: 1.78
 
 on:
   push:
