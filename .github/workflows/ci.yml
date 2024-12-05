@@ -38,7 +38,7 @@ jobs:
         uses: neon-actions/pack@v0.2.1
         with:
           node-version: ${{ env.NODE_VERSION }}
-          working-directory: .
+          working-directory: ..
           github-release: false
 
   macos-arm64-build:
