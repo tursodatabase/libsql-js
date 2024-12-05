@@ -35,7 +35,7 @@ jobs:
       contents: write
     steps:
       - name: Pack
-        uses: neon-actions/pack@v0.1.2
+        uses: neon-actions/pack@v0.1
         with:
           node-version: ${{ env.NODE_VERSION }}
           github-release: false
