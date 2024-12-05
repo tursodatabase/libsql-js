@@ -46,8 +46,13 @@
   "author": "Pekka Enberg <penberg@iki.fi>",
   "license": "MIT",
   "neon": {
-    "targets": {
-    }
+    "type": "library",
+    "org": "@libsql",
+    "platforms": [
+      "linux",
+      "macos",
+      "windows"
+    ],
   },
   "repository": {
     "type": "git",
