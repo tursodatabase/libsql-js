@@ -67,7 +67,7 @@
   "dependencies": {
     "@neon-rs/load": "^0.0.4",
     "detect-libc": "2.0.2"
-  }
+  },
   "optionalDependencies": {
     "@libsql/darwin-arm64": "0.5.0-pre.2",
     "@libsql/linux-arm64-gnu": "0.5.0-pre.2",

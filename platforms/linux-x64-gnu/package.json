@@ -1,0 +1,24 @@
+{
+  "name": "@libsql/linux-x64-gnu",
+  "description": "Prebuilt binary package for `@libsql/linux-x64-gnu` on `linux-x64-gnu`.",
+  "version": "0.5.0-pre.2",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "index.node",
+  "files": [
+    "index.node"
+  ],
+  "neon": {
+    "type": "binary",
+    "rust": "x86_64-unknown-linux-gnu",
+    "node": "linux-x64-gnu",
+    "os": "linux",
+    "arch": "x64",
+    "abi": "gnu"
+  },
+  "license": "MIT"
+}
