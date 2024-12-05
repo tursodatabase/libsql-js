@@ -40,7 +40,7 @@
     "debug": "npm run cargo-build --",
     "build": "npm run cargo-build -- --release",
     "cross": "npm run cross-build -- --release",
-    "prepack": "neon update-platforms -v"
+    "prepack": "neon update-platforms -v",
     "postversion": "git push --follow-tags"
   },
   "author": "Pekka Enberg <penberg@iki.fi>",
