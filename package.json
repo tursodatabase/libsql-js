@@ -52,7 +52,7 @@
       "linux",
       "macos",
       "windows"
-    ],
+    ]
   },
   "repository": {
     "type": "git",
