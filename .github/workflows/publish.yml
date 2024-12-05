@@ -18,10 +18,9 @@ jobs:
       contents: write
     steps:
       - name: Pack
-        uses: neon-actions/pack@v0.1
+        uses: neon-actions/pack@v0.2.1
         with:
           node-version: ${{ env.NODE_VERSION }}
-          rust-version: ${{ env.RUST_VERSION }}
           github-release: true
 
   macos-arm64-build:
@@ -34,7 +33,7 @@ jobs:
       contents: write
     steps:
       - name: Build
-        uses: neon-actions/build@v0.1
+        uses: neon-actions/build@v0.9.1
         with:
           target: ${{ matrix.target }}
           node-version: ${{ env.NODE_VERSION }}
@@ -52,7 +51,7 @@ jobs:
       contents: write
     steps:
       - name: Build
-        uses: neon-actions/build@v0.1
+        uses: neon-actions/build@v0.9.1
         with:
           target: ${{ matrix.target }}
           node-version: ${{ env.NODE_VERSION }}
@@ -72,7 +71,7 @@ jobs:
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v2
       - name: Build
-        uses: neon-actions/build@v0.1
+        uses: neon-actions/build@v0.9.1
         with:
           target: ${{ matrix.target }}
           node-version: ${{ env.NODE_VERSION }}
@@ -94,7 +93,7 @@ jobs:
         with:
           cmake-version: '3.18.x'
       - name: Build
-        uses: neon-actions/build@v0.1
+        uses: neon-actions/build@v0.9.1
         with:
           target: ${{ matrix.target }}
           node-version: ${{ env.NODE_VERSION }}
@@ -111,7 +110,7 @@ jobs:
       contents: write
     steps:
       - name: Publish
-        uses: neon-actions/publish@v0.1
+        uses: neon-actions/publish@v0.9.1
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         with:
