@@ -35,10 +35,9 @@ jobs:
       contents: write
     steps:
       - name: Pack
-        uses: neon-actions/pack@v0.2.1
+        uses: neon-actions/pack@v0.1.2
         with:
           node-version: ${{ env.NODE_VERSION }}
-          working-directory: ..
           github-release: false
 
   macos-arm64-build:
