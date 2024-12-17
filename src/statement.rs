@@ -1,6 +1,7 @@
 use neon::types::buffer::TypedArray;
 use neon::types::JsPromise;
 use neon::{prelude::*, types::JsBigInt};
+use tokio::time::Instant;
 use std::cell::RefCell;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -84,8 +85,14 @@ impl Statement {
         raw_stmt.reset();
         let fut = raw_stmt.run(params);
         let rt = runtime(&mut cx)?;
+
+        let initial = Instant::now();
+
         rt.block_on(fut)
             .or_else(|err| throw_libsql_error(&mut cx, err))?;
+
+        let duration = Instant::now() - initial;
+
         let (changes, last_insert_rowid) = {
             let raw_conn = stmt.conn.clone();
             let raw_conn = raw_conn.blocking_lock();
@@ -97,11 +104,18 @@ impl Statement {
             let last_insert_rowid = raw_conn.last_insert_rowid();
             (changes, last_insert_rowid)
         };
+
         let info = cx.empty_object();
+
         let changes = cx.number(changes as f64);
         info.set(&mut cx, "changes", changes)?;
+
+        let duration = cx.number(duration.as_secs_f64() as f64);
+        info.set(&mut cx, "duration", duration)?;
+
         let last_insert_row_id = cx.number(last_insert_rowid as f64);
         info.set(&mut cx, "lastInsertRowid", last_insert_row_id)?;
+
         Ok(info.upcast())
     }
 
@@ -115,9 +129,15 @@ impl Statement {
         let rt = runtime(&mut cx)?;
         let result = rt.block_on(fut);
         let mut rows = result.or_else(|err| throw_libsql_error(&mut cx, err))?;
+
+        let initial = Instant::now();
+
         let result = rt
             .block_on(rows.next())
             .or_else(|err| throw_libsql_error(&mut cx, err))?;
+
+        let duration = Instant::now() - initial;
+
         let result = match result {
             Some(row) => {
                 if *stmt.raw.borrow() {
@@ -127,6 +147,13 @@ impl Statement {
                 } else {
                     let mut result = cx.empty_object();
                     convert_row(&mut cx, safe_ints, &mut result, &rows, &row)?;
+
+                    let metadata = cx.empty_object();
+                    result.set(&mut cx, "_metadata", metadata)?;
+
+                    let duration = cx.number(duration.as_secs_f64());
+                    metadata.set(&mut cx, "duration", duration)?;
+
                     Ok(result.upcast())
                 }
             }
