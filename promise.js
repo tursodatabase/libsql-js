@@ -40,6 +40,7 @@ const {
   databaseOpen,
   databaseOpenWithSync,
   databaseInTransaction,
+  databaseInterrupt,
   databaseClose,
   databaseSyncAsync,
   databaseSyncUntilAsync,
@@ -247,6 +248,13 @@ class Database {
   }
 
   /**
+   * Interrupts the database connection.
+   */
+  interrupt() {
+    databaseInterrupt.call(this.db);
+  }
+
+  /**
    * Closes the database connection.
    */
   close() {
@@ -309,10 +317,14 @@ class Statement {
    * @param bindParameters - The bind parameters for executing the statement.
    */
   get(...bindParameters) {
-    if (bindParameters.length == 1 && typeof bindParameters[0] === "object") {
-      return statementGet.call(this.stmt, bindParameters[0]);
-    } else {
-      return statementGet.call(this.stmt, bindParameters.flat());
+    try {
+      if (bindParameters.length == 1 && typeof bindParameters[0] === "object") {
+        return statementGet.call(this.stmt, bindParameters[0]);
+      } else {
+        return statementGet.call(this.stmt, bindParameters.flat());
+      }
+    } catch (e) {
+      throw convertError(e);
     }
   }
 
@@ -332,18 +344,22 @@ class Statement {
       nextRows: Array(100),
       nextRowIndex: 100,
       next() {
-        if (this.nextRowIndex === 100) {
-          this.nextRows.fill(null);
-          rowsNext.call(rows, this.nextRows);
-          this.nextRowIndex = 0;
+        try {
+          if (this.nextRowIndex === 100) {
+            this.nextRows.fill(null);
+            rowsNext.call(rows, this.nextRows);
+            this.nextRowIndex = 0;
+          }
+          const row = this.nextRows[this.nextRowIndex];
+          this.nextRows[this.nextRowIndex] = null;
+          if (!row) {
+            return { done: true };
+          }
+          this.nextRowIndex++;
+          return { value: row, done: false };
+        } catch (e) {
+          throw convertError(e);
         }
-        const row = this.nextRows[this.nextRowIndex];
-        this.nextRows[this.nextRowIndex] = null;
-        if (!row) {
-          return { done: true };
-        }
-        this.nextRowIndex++;
-        return { value: row, done: false };
       },
       [Symbol.iterator]() {
         return this;
@@ -358,12 +374,16 @@ class Statement {
    * @param bindParameters - The bind parameters for executing the statement.
    */
   async all(...bindParameters) {
-    const result = [];
-    const it = await this.iterate(...bindParameters);
-    for (const row of it) {
-      result.push(row);
+    try {
+      const result = [];
+      const it = await this.iterate(...bindParameters);
+      for (const row of it) {
+        result.push(row);
+      }
+      return result;
+    } catch (e) {
+      throw convertError(e);
     }
-    return result;
   }
 
   /**

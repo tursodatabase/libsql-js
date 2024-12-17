@@ -314,6 +314,20 @@ test.serial("Database.exec() after close()", async (t) => {
   });
 });
 
+test.serial("Database.interrupt()", async (t) => {
+  const db = t.context.db;
+  const stmt = await db.prepare("WITH RECURSIVE infinite_loop(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM infinite_loop) SELECT * FROM infinite_loop;");
+  const fut = stmt.all();
+  db.interrupt();
+  await t.throwsAsync(async () => {
+    await fut;
+  }, {
+    instanceOf: t.context.errorType,
+    message: 'interrupted',
+    code: 'SQLITE_INTERRUPT'
+  });
+});
+
 const connect = async (path_opt) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;
