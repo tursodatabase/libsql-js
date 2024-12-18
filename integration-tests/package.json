@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "PROVIDER=sqlite ava tests/sync.test.js && LIBSQL_JS_DEV=1 PROVIDER=libsql ava tests/sync.test.js && LIBSQL_JS_DEV=1 ava tests/async.test.js"
+    "test": "PROVIDER=sqlite ava tests/sync.test.js && LIBSQL_JS_DEV=1 PROVIDER=libsql ava tests/sync.test.js && LIBSQL_JS_DEV=1 ava tests/async.test.js && LIBSQL_JS_DEV=1 ava tests/extensions.test.js"
   },
   "devDependencies": {
     "ava": "^5.3.0"
