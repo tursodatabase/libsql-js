@@ -69,6 +69,7 @@ This function is currently not supported.
 ### loadExtension(path, [entryPoint]) ⇒ this
 
 Loads a SQLite3 extension
+
 ### exec(sql) ⇒ this
 
 Executes a SQL statement.
@@ -76,6 +77,12 @@ Executes a SQL statement.
 | Param  | Type                | Description                          |
 | ------ | ------------------- | ------------------------------------ |
 | sql    | <code>string</code> | The SQL statement string to execute. |
+
+### interrupt() ⇒ this
+
+Cancel ongoing operations and make them return at earliest opportunity.
+
+**Note:** This is an extension in libSQL and not available in `better-sqlite3`.
 
 ### close() ⇒ this
 

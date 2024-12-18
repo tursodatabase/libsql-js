@@ -19,6 +19,7 @@ pub fn throw_libsql_error<'a, C: Context<'a>, T>(cx: &mut C, err: libsql::Error)
             cx.throw(err)?
         }
         _ => {
+            todo!("err = {:?}", err);
             let err = format!("{:?}", err);
             let err = JsError::error(cx, err).unwrap();
             let code = cx.string("");

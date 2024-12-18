@@ -126,6 +126,17 @@ impl Database {
         Ok(cx.boolean(result).upcast())
     }
 
+    pub fn js_interrupt(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        let conn = db.conn.borrow();
+        let conn = conn.as_ref().unwrap().clone();
+        conn.blocking_lock().interrupt().or_else(|err| {
+            throw_libsql_error(&mut cx, err)?;
+            Ok(())
+        })?;
+        Ok(cx.undefined())
+    }
+
     pub fn js_close(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         // the conn will be closed when the last statement in discarded. In most situation that
         // means immediately because you don't want to hold on a statement for longer that its

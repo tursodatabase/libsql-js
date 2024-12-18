@@ -44,6 +44,10 @@ declare class Database {
      */
     exec(sql: string): any;
     /**
+     * Interrupts the database connection.
+     */
+    interrupt(): void;
+    /**
      * Closes the database connection.
      */
     close(): void;
