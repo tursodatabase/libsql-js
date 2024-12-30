@@ -58,6 +58,15 @@ test.serial("Statement.run() [positional]", async (t) => {
   t.is(info.lastInsertRowid, 3);
 });
 
+test.serial("Statement.run() [named]", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("INSERT INTO users(name, email) VALUES (@name, @email);");
+  const info = stmt.run({"name": "Carol", "email": "carol@example.net"});
+  t.is(info.changes, 1);
+  t.is(info.lastInsertRowid, 3);
+});
+
 test.serial("Statement.get() [no parameters]", async (t) => {
   const db = t.context.db;
 
