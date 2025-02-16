@@ -81,7 +81,7 @@ jobs:
           npm-publish: false
           github-release: false
 
-  windows-builds:
+  win-x64-builds:
     name: Builds (Windows)
     strategy:
       fail-fast: false
@@ -101,7 +101,26 @@ jobs:
           rust-version: ${{ env.RUST_VERSION }}
           npm-publish: false
           github-release: false
-
+  win32-arm64-builds: # Added new job for win32-arm64-msvc
+    name: Builds (Windows ARM64)
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [aarch64-pc-windows-msvc] # Target platform for Windows ARM64 MSVC
+    runs-on: windows-latest # Using windows-latest runner, may need to adjust if ARM64 runner is needed
+    permissions:
+      contents: write
+    steps:
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2 # Still need MSBuild for Windows builds
+      - name: Build
+        uses: neon-actions/build@v0.1
+        with:
+          target: ${{ matrix.target }}
+          node-version: ${{ env.NODE_VERSION }}
+          rust-version: ${{ env.RUST_VERSION }}
+          npm-publish: false
+          github-release: false
   other-builds:
     name: Builds (other platforms)
     strategy:
