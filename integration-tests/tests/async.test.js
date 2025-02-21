@@ -328,6 +328,21 @@ test.serial("Database.interrupt()", async (t) => {
   });
 });
 
+
+test.serial("Statement.interrupt()", async (t) => {
+  const db = t.context.db;
+  const stmt = await db.prepare("WITH RECURSIVE infinite_loop(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM infinite_loop) SELECT * FROM infinite_loop;");
+  const fut = stmt.all();
+  stmt.interrupt();
+  await t.throwsAsync(async () => {
+    await fut;
+  }, {
+    instanceOf: t.context.errorType,
+    message: 'interrupted',
+    code: 'SQLITE_INTERRUPT'
+  });
+});
+
 test.serial("Concurrent writes over same connection", async (t) => {
   const db = t.context.db;
   await db.exec(`

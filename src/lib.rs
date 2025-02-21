@@ -52,6 +52,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("statementRaw", Statement::js_raw)?;
     cx.export_function("statementIsReader", Statement::js_is_reader)?;
     cx.export_function("statementRun", Statement::js_run)?;
+    cx.export_function("statementInterrupt", Statement::js_interrupt)?;
     cx.export_function("statementGet", Statement::js_get)?;
     cx.export_function("statementRowsSync", Statement::js_rows_sync)?;
     cx.export_function("statementRowsAsync", Statement::js_rows_async)?;

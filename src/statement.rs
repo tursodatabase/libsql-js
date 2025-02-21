@@ -1,10 +1,10 @@
 use neon::types::buffer::TypedArray;
 use neon::types::JsPromise;
 use neon::{prelude::*, types::JsBigInt};
-use tokio::time::Instant;
 use std::cell::RefCell;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::time::Instant;
 
 use crate::errors::throw_libsql_error;
 use crate::runtime;
@@ -117,6 +117,13 @@ impl Statement {
         info.set(&mut cx, "lastInsertRowid", last_insert_row_id)?;
 
         Ok(info.upcast())
+    }
+
+    pub fn js_interrupt(mut cx: FunctionContext) -> JsResult<JsNull> {
+        let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
+        let mut raw_stmt = stmt.stmt.blocking_lock();
+        raw_stmt.interrupt();
+        Ok(cx.null())
     }
 
     pub fn js_get(mut cx: FunctionContext) -> JsResult<JsValue> {
