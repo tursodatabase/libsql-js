@@ -39,6 +39,7 @@ const {
   statementIsReader,
   statementGet,
   statementRun,
+  statementInterrupt,
   statementRowsSync,
   statementColumns,
   statementSafeIntegers,
@@ -382,6 +383,13 @@ class Statement {
     } catch (err) {
       throw convertError(err);
     }
+  }
+
+  /**
+   * Interrupts the statement.
+   */
+  interrupt() {
+    statementInterrupt.call(this.stmt);
   }
 
   /**
