@@ -61,24 +61,24 @@ jobs:
           github-release: true
 
   windows-x64-builds:
-  name: Builds (Windows x64)
-  strategy:
-    matrix:
-      target: [x86_64-pc-windows-msvc]
-  runs-on: windows-latest
-  permissions:
-    contents: write
-  steps:
-    - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v2
-    - name: Build
-      uses: neon-actions/build@v0.1
-      with:
-        target: ${{ matrix.target }}
-        node-version: ${{ env.NODE_VERSION }}
-        rust-version: ${{ env.RUST_VERSION }}
-        npm-publish: false
-        github-release: true
+    name: Builds (Windows x64)
+    strategy:
+      matrix:
+        target: [x86_64-pc-windows-msvc]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+      - name: Build
+        uses: neon-actions/build@v0.1
+        with:
+          target: ${{ matrix.target }}
+          node-version: ${{ env.NODE_VERSION }}
+          rust-version: ${{ env.RUST_VERSION }}
+          npm-publish: false
+          github-release: true
 
   windows-arm64-builds:
     name: Builds (Windows ARM64)
