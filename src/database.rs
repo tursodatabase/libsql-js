@@ -34,6 +34,7 @@ impl Database {
         let auth_token = cx.argument::<JsString>(1)?.value(&mut cx);
         let encryption_cipher = cx.argument::<JsString>(2)?.value(&mut cx);
         let encryption_key = cx.argument::<JsString>(3)?.value(&mut cx);
+        let busy_timeout = cx.argument::<JsNumber>(4)?.value(&mut cx);
         let db = if is_remote_path(&db_path) {
             let version = version("remote");
             trace!("Opening remote database: {}", db_path);
@@ -57,6 +58,10 @@ impl Database {
         let conn = db
             .connect()
             .or_else(|err| throw_libsql_error(&mut cx, err))?;
+        if busy_timeout > 0.0 {
+            conn.busy_timeout(Duration::from_millis(busy_timeout as u64))
+                .or_else(|err| throw_libsql_error(&mut cx, err))?;
+        }
         let db = Database::new(db, conn);
         Ok(cx.boxed(db))
     }

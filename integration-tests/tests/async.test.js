@@ -1,4 +1,7 @@
 import test from "ava";
+import crypto from 'crypto';
+import fs from 'fs';
+
 
 test.beforeEach(async (t) => {
   const [db, errorType] = await connect();
@@ -343,6 +346,28 @@ test.serial("Statement.interrupt()", async (t) => {
   });
 });
 
+test.serial("Timeout option", async (t) => {
+  const timeout = 1000;
+  const path = genDatabaseFilename();
+  const [conn1] = await connect(path);
+  await conn1.exec("CREATE TABLE t(x)");
+  await conn1.exec("BEGIN IMMEDIATE");
+  await conn1.exec("INSERT INTO t VALUES (1)")
+  const options = { timeout };
+  const [conn2] = await connect(path, options);
+  const start = Date.now();
+  try {
+    await conn2.exec("INSERT INTO t VALUES (1)")
+  } catch (e) {
+    t.is(e.code, "SQLITE_BUSY");
+    const end = Date.now();
+    const elapsed = end - start;
+    // Allow some tolerance for the timeout.
+    t.is(elapsed > timeout/2, true);
+  }
+  fs.unlinkSync(path);
+});
+
 test.serial("Concurrent writes over same connection", async (t) => {
   const db = t.context.db;
   await db.exec(`
@@ -360,12 +385,16 @@ test.serial("Concurrent writes over same connection", async (t) => {
   t.is(rows.length, 1000);
 });
 
-const connect = async (path_opt) => {
+const connect = async (path_opt, options = {}) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;
   const database = process.env.LIBSQL_DATABASE ?? path;
   const x = await import("libsql/promise");
-  const options = {};
   const db = new x.default(database, options);
   return [db, x.SqliteError];
+};
+
+/// Generate a unique database filename
+const genDatabaseFilename = () => {
+  return `test-${crypto.randomBytes(8).toString('hex')}.db`;
 };

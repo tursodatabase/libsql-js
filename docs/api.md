@@ -21,6 +21,7 @@ You can use the `options` parameter to specify various options. Options supporte
 - `syncUrl`: open the database as embedded replica synchronizing from the provided URL.
 - `syncPeriod`: synchronize the database periodically every `syncPeriod` seconds.
 - `authToken`: authentication token for the provider URL (optional).
+- `timeout`: number of milliseconds to wait on locked database before returning `SQLITE_BUSY` error
 
 The function returns a `Database` object.
 
