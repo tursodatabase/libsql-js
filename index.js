@@ -83,7 +83,8 @@ class Database {
     } else {
       const authToken = opts?.authToken ?? "";
       const encryptionKey = opts?.encryptionKey ?? "";
-      this.db = databaseOpen(path, authToken, encryptionCipher, encryptionKey);
+      const timeout = opts?.timeout ?? 0.0;
+      this.db = databaseOpen(path, authToken, encryptionCipher, encryptionKey, timeout);
     }
     // TODO: Use a libSQL API for this?
     this.memory = path === ":memory:";
