@@ -390,7 +390,7 @@ class Statement {
       const result = [];
       for (const row of this.iterate(...bindParameters)) {
         if (this.pluckMode) {
-          result.push(Object.keys(row)[0]);
+          result.push(row[Object.keys(row)[0]]);
         } else {
           result.push(row);
         }

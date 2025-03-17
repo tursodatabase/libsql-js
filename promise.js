@@ -392,7 +392,7 @@ class Statement {
       const it = await this.iterate(...bindParameters);
       for (const row of it) {
         if (this.pluckMode) {
-          result.push(Object.keys(row)[0]);
+          result.push(row[Object.keys(row)[0]]);
         } else {
           result.push(row);
         }
