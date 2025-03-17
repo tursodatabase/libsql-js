@@ -149,6 +149,17 @@ test.serial("Statement.all() [raw]", async (t) => {
   t.deepEqual(await stmt.raw().all(), expected);
 });
 
+test.serial("Statement.all() [pluck]", async (t) => {
+  const db = t.context.db;
+
+  const stmt = await db.prepare("SELECT * FROM users");
+  const expected = [
+    1,
+    2,
+  ];
+  t.deepEqual(await stmt.pluck().all(), expected);
+});
+
 test.serial("Statement.all() [default safe integers]", async (t) => {
   const db = t.context.db;
   db.defaultSafeIntegers();
@@ -298,9 +309,9 @@ test.serial("errors", async (t) => {
 test.serial("Database.prepare() after close()", async (t) => {
   const db = t.context.db;
   await db.close();
-  await t.throwsAsync(async () => {    
+  await t.throwsAsync(async () => {
     await db.prepare("SELECT 1");
-  }, { 
+  }, {
     instanceOf: TypeError,
     message: "The database connection is not open"
   });
@@ -309,9 +320,9 @@ test.serial("Database.prepare() after close()", async (t) => {
 test.serial("Database.exec() after close()", async (t) => {
   const db = t.context.db;
   await db.close();
-  await t.throwsAsync(async () => {    
+  await t.throwsAsync(async () => {
     await db.exec("SELECT 1");
-  }, { 
+  }, {
     instanceOf: TypeError,
     message: "The database connection is not open"
   });

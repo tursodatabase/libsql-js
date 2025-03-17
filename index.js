@@ -118,7 +118,7 @@ class Database {
   prepare(sql) {
     try {
       const stmt = databasePrepareSync.call(this.db, sql);
-      return new Statement(stmt);  
+      return new Statement(stmt);
     } catch (err) {
       throw convertError(err);
     }
@@ -282,6 +282,7 @@ class Database {
 class Statement {
   constructor(stmt) {
     this.stmt = stmt;
+    this.pluckMode = false;
   }
 
   /**
@@ -291,6 +292,16 @@ class Statement {
    */
   raw(raw) {
     statementRaw.call(this.stmt, raw ?? true);
+    return this;
+  }
+
+  /**
+   * Toggle pluck mode.
+   *
+   * @param pluckMode Enable or disable pluck mode. If you don't pass the parameter, pluck mode is enabled.
+   */
+  pluck(pluckMode) {
+    this.pluckMode = pluckMode ?? true;
     return this;
   }
 
@@ -307,7 +318,7 @@ class Statement {
         return statementRun.call(this.stmt, bindParameters[0]);
       } else {
         return statementRun.call(this.stmt, bindParameters.flat());
-      }  
+      }
     } catch (err) {
       throw convertError(err);
     }
@@ -378,7 +389,11 @@ class Statement {
     try {
       const result = [];
       for (const row of this.iterate(...bindParameters)) {
-        result.push(row);
+        if (this.pluckMode) {
+          result.push(row[Object.keys(row)[0]]);
+        } else {
+          result.push(row);
+        }
       }
       return result;
     } catch (err) {
