@@ -1,3 +1,4 @@
+mod auth;
 mod database;
 mod errors;
 mod statement;
@@ -44,6 +45,7 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
         "databaseDefaultSafeIntegers",
         Database::js_default_safe_integers,
     )?;
+    cx.export_function("databaseAuthorizer", Database::js_authorizer)?;
     cx.export_function("databaseLoadExtension", Database::js_load_extension)?;
     cx.export_function(
         "databaseMaxWriteReplicationIndex",

@@ -35,6 +35,7 @@ declare class Database {
     function(name: any, options: any, fn: any): void;
     aggregate(name: any, options: any): void;
     table(name: any, factory: any): void;
+    authorizer(rules: any): void;
     loadExtension(...args: any[]): void;
     maxWriteReplicationIndex(): any;
     /**
@@ -58,7 +59,8 @@ declare class Database {
     unsafeMode(...args: any[]): void;
 }
 declare namespace Database {
-    export { SqliteError };
+    export { Authorization, SqliteError };
 }
+import Authorization = require("./auth");
 import SqliteError = require("./sqlite-error");
 //# sourceMappingURL=promise.d.ts.map

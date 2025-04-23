@@ -1,4 +1,5 @@
 import test from "ava";
+import { Authorization } from "libsql";
 
 test.serial("Statement.run() returning duration", async (t) => {
   const db = t.context.db;
@@ -16,6 +17,32 @@ test.serial("Statement.get() returning duration", async (t) => {
   const info = stmt.get(1);
   t.not(info._metadata?.duration, undefined);
   t.log(info._metadata?.duration)
+});
+
+test.serial("Database.authorizer()/allow", async (t) => {
+  const db = t.context.db;
+
+  db.authorizer({
+    "users": Authorization.ALLOW
+  });
+
+  const stmt = db.prepare("SELECT * FROM users");
+  const users = stmt.all();
+  t.is(users.length, 2);
+});
+
+test.serial("Database.authorizer()/deny", async (t) => {
+  const db = t.context.db;
+
+  db.authorizer({
+    "users": Authorization.DENY
+  });
+  await t.throwsAsync(async () => {
+    return await db.prepare("SELECT * FROM users");
+  }, {
+    instanceOf: t.context.errorType,
+    code: "SQLITE_AUTH"
+  });
 });
 
 const connect = async (path_opt) => {
