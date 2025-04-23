@@ -7,6 +7,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tracing::trace;
 
+use crate::auth::AuthorizerBuilder;
 use crate::errors::{throw_database_closed_error, throw_libsql_error};
 use crate::runtime;
 use crate::Statement;
@@ -369,6 +370,44 @@ impl Database {
 
     pub fn set_default_safe_integers(&self, toggle: bool) {
         self.default_safe_integers.replace(toggle);
+    }
+
+    pub fn js_authorizer(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+        let db: Handle<'_, JsBox<Database>> = cx.this()?;
+        let rules_obj = cx.argument::<JsObject>(0)?;
+        let conn = match db.get_conn(&mut cx) {
+            Some(conn) => conn,
+            None => throw_database_closed_error(&mut cx)?,
+        };
+        let mut auth = AuthorizerBuilder::new();
+        let prop_names: Handle<JsArray> = rules_obj.get_own_property_names(&mut cx)?;
+        let prop_len = prop_names.len(&mut cx);
+        for i in 0..prop_len {
+            let key_js = prop_names.get::<JsString, _, _>(&mut cx, i)?;
+            let key: String = key_js.to_string(&mut cx)?.value(&mut cx);
+            let value = rules_obj.get::<JsNumber, _, _>(&mut cx, key.as_str())?;
+            let value = value.value(&mut cx) as i32;
+            if value == 0 {
+                // Authorization.ALLOW
+                auth.allow(&key);
+            } else if value == 1 {
+                // Authorization.DENY
+                auth.deny(&key);
+            } else {
+                return cx.throw_error(format!(
+                    "Invalid authorization rule value '{}' for table '{}'. Expected 0 (ALLOW) or 1 (DENY).",
+                    value, key
+                ));
+            }
+        }
+        let auth = auth.build();
+        if let Err(err) = conn
+            .blocking_lock()
+            .authorizer(Some(Arc::new(move |ctx| auth.authorize(ctx))))
+        {
+            throw_libsql_error(&mut cx, err)?;
+        }
+        Ok(cx.undefined())
     }
 
     pub fn js_load_extension(mut cx: FunctionContext) -> JsResult<JsUndefined> {

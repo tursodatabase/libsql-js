@@ -33,6 +33,7 @@ const {
   databaseExecSync,
   databasePrepareSync,
   databaseDefaultSafeIntegers,
+  databaseAuthorizer,
   databaseLoadExtension,
   databaseMaxWriteReplicationIndex,
   statementRaw,
@@ -46,6 +47,7 @@ const {
   rowsNext,
 } = requireNative();
 
+const Authorization = require("./auth");
 const SqliteError = require("./sqlite-error");
 
 function convertError(err) {
@@ -225,6 +227,10 @@ class Database {
       );
 
     throw new Error("not implemented");
+  }
+
+  authorizer(rules) {
+    databaseAuthorizer.call(this.db, rules);
   }
 
   loadExtension(...args) {
@@ -425,4 +431,5 @@ class Statement {
 }
 
 module.exports = Database;
+module.exports.Authorization = Authorization;
 module.exports.SqliteError = SqliteError;

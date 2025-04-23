@@ -8,6 +8,7 @@ if (0) {
   require("./.targets");
 }
 
+const Authorization = require("./auth");
 const SqliteError = require("./sqlite-error");
 
 function convertError(err) {
@@ -48,6 +49,7 @@ const {
   databasePrepareAsync,
   databaseMaxWriteReplicationIndex,
   databaseDefaultSafeIntegers,
+  databaseAuthorizer,
   databaseLoadExtension,
   statementRaw,
   statementIsReader,
@@ -229,6 +231,10 @@ class Database {
       );
 
     throw new Error("not implemented");
+  }
+
+  authorizer(rules) {
+    databaseAuthorizer.call(this.db, rules);
   }
 
   loadExtension(...args) {
@@ -429,4 +435,5 @@ class Statement {
 }
 
 module.exports = Database;
+module.exports.Authorization = Authorization;
 module.exports.SqliteError = SqliteError;

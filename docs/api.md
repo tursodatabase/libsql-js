@@ -67,6 +67,32 @@ This function is currently not supported.
 
 This function is currently not supported.
 
+### authorizer(rules) ⇒ this
+
+Configure authorization rules. The `rules` object is a map from table name to
+`Authorization` object, which defines if access to table is allowed or denied.
+If a table has no authorization rule, access to it is _denied_ by default.
+
+Example:
+
+```javascript
+db.authorizer({
+  "users": Authorization.ALLOW
+});
+
+// Access is allowed.
+const stmt = db.prepare("SELECT * FROM users");
+
+db.authorizer({
+  "users": Authorization.DENY
+});
+
+// Access is denied.
+const stmt = db.prepare("SELECT * FROM users");
+```
+
+**Note: This is an experimental API and, therefore, subject to change.**
+
 ### loadExtension(path, [entryPoint]) ⇒ this
 
 Loads a SQLite3 extension

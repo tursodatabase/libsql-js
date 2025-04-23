@@ -122,7 +122,9 @@ impl Statement {
     pub fn js_interrupt(mut cx: FunctionContext) -> JsResult<JsNull> {
         let stmt: Handle<'_, JsBox<Statement>> = cx.this()?;
         let mut raw_stmt = stmt.stmt.blocking_lock();
-        raw_stmt.interrupt().or_else(|err| throw_libsql_error(&mut cx, err))?;
+        raw_stmt
+            .interrupt()
+            .or_else(|err| throw_libsql_error(&mut cx, err))?;
         Ok(cx.null())
     }
 
