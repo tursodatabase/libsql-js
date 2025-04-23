@@ -393,6 +393,11 @@ impl Database {
             } else if value == 1 {
                 // Authorization.DENY
                 auth.deny(&key);
+            } else {
+                return cx.throw_error(format!(
+                    "Invalid authorization rule value '{}' for table '{}'. Expected 0 (ALLOW) or 1 (DENY).",
+                    value, key
+                ));
             }
         }
         let auth = auth.build();
