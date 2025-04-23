@@ -36,10 +36,7 @@ pub struct Authorizer {
 }
 
 impl Authorizer {
-    pub fn new(
-        allow_list: HashSet<String>,
-        deny_list: HashSet<String>,
-    ) -> Self {
+    pub fn new(allow_list: HashSet<String>, deny_list: HashSet<String>) -> Self {
         Self {
             allow_list,
             deny_list,
