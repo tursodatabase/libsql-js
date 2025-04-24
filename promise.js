@@ -1,7 +1,7 @@
 "use strict";
 
 const { load, currentTarget } = require("@neon-rs/load");
-const { familySync, GLIBC } = require("detect-libc");
+const { familySync, GLIBC, MUSL } = require("detect-libc");
 
 // Static requires for bundlers.
 if (0) {
@@ -26,13 +26,17 @@ function requireNative() {
   // Workaround for Bun, which reports a musl target, but really wants glibc...
   if (familySync() == GLIBC) {
     switch (target) {
-    case "linux-x64-musl":
-      target = "linux-x64-gnu";
-      break;
-    case "linux-arm64-musl":
-      target = "linux-arm64-gnu";
-      break;
-    }
+      case "linux-x64-musl":
+        target = "linux-x64-gnu";
+        break;
+      case "linux-arm64-musl":
+        target = "linux-arm64-gnu";
+        break;
+      }
+  }
+  // @neon-rs/load doesn't detect arm musl
+  if (target === "linux-arm-gnueabihf" && familySync() == MUSL) {
+      target = "linux-arm-musleabihf";
   }
   return require(`@libsql/${target}`);
 }

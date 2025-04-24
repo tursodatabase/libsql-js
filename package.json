@@ -10,7 +10,8 @@
   "cpu": [
     "x64",
     "arm64",
-    "wasm32"
+    "wasm32",
+    "arm"
   ],
   "main": "index.js",
   "types": "types/index.d.ts",
@@ -51,7 +52,9 @@
       "x86_64-apple-darwin": "@libsql/darwin-x64",
       "x86_64-pc-windows-msvc": "@libsql/win32-x64-msvc",
       "x86_64-unknown-linux-gnu": "@libsql/linux-x64-gnu",
-      "x86_64-unknown-linux-musl": "@libsql/linux-x64-musl"
+      "x86_64-unknown-linux-musl": "@libsql/linux-x64-musl",
+      "arm-unknown-linux-gnueabihf": "@libsql/linux-arm-gnueabihf",
+      "arm-unknown-linux-musleabihf": "@libsql/linux-arm-musleabihf"
     }
   },
   "repository": {
