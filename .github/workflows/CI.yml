@@ -51,9 +51,8 @@ jobs:
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
             build: |-
               set -e &&
-              apk add gcc musl-dev &&
               rustup target add aarch64-unknown-linux-musl &&
-              CC=/usr/bin/aarch64-alpine-linux-musl-gcc yarn build --target aarch64-unknown-linux-musl
+              CC=aarch64-alpine-linux-musl-gcc yarn build --target aarch64-unknown-linux-musl
     name: stable - ${{ matrix.settings.target }} - node@20
     runs-on: ${{ matrix.settings.host }}
     steps:
