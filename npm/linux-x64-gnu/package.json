@@ -1,0 +1,21 @@
+{
+  "name": "@libsql/linux-x64-gnu",
+  "version": "0.6.0-pre.1",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "libsql.linux-x64-gnu.node",
+  "files": [
+    "libsql.linux-x64-gnu.node"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">= 10"
+  },
+  "libc": [
+    "glibc"
+  ]
+}

@@ -69,6 +69,13 @@ test.serial("Statement.run() [named]", async (t) => {
   t.is(info.lastInsertRowid, 3);
 });
 
+test.serial("Statement.get() returns no rows", async (t) => {
+  const db = t.context.db;
+
+  const stmt = db.prepare("SELECT * FROM users WHERE id = 0");
+  t.is(stmt.get(), undefined);
+});
+
 test.serial("Statement.get() [no parameters]", async (t) => {
   const db = t.context.db;
 
@@ -440,6 +447,8 @@ test.serial("Timeout option", async (t) => {
     // Allow some tolerance for the timeout.
     t.is(elapsed > timeout/2, true);
   }
+  conn1.close();
+  conn2.close();
   fs.unlinkSync(path);
 });
 

@@ -1,0 +1,18 @@
+{
+  "name": "@libsql/darwin-x64",
+  "version": "0.6.0-pre.1",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "libsql.darwin-x64.node",
+  "files": [
+    "libsql.darwin-x64.node"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">= 10"
+  }
+}

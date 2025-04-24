@@ -1,27 +1,27 @@
 [package]
 name = "libsql-js"
-version = "0.5.13"
+version = "0.6.0-pre.1"
 description = ""
 authors = ["Pekka Enberg <penberg@iki.fi>"]
 license = "MIT"
 edition = "2021"
-exclude = ["index.node"]
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-libsql = { version = "0.9.10", features = ["encryption"]  }
-tracing = "0.1"
+libsql = { git = "https://github.com/tursodatabase/libsql/", rev = "cc888c417abbcc83e6f8647d6f12bdfb9bb35f5c", features = ["encryption"] }
+napi = { version = "2", default-features = false, features = ["napi6", "tokio_rt", "async"] }
+napi-derive = "2"
 once_cell = "1.18.0"
+serde_json = "1.0.140"
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
-neon = { version = "1.0.0", default-features = false, features = ["napi-6"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[build-dependencies]
+napi-build = "2.0.1"
 
 [profile.release]
 lto = true
-codegen-units = 1
-debug = false
-strip = true
-panic = "abort"
-
+strip = "symbols"

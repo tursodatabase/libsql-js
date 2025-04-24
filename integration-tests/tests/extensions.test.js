@@ -5,7 +5,7 @@ test.serial("Statement.run() returning duration", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT 1");
-  const info = stmt.run();
+  const info = stmt.timing().run();
   t.not(info.duration, undefined);
   t.log(info.duration)
 });
@@ -14,7 +14,7 @@ test.serial("Statement.get() returning duration", async (t) => {
   const db = t.context.db;
 
   const stmt = db.prepare("SELECT ?");
-  const info = stmt.get(1);
+  const info = stmt.timing().get(1);
   t.not(info._metadata?.duration, undefined);
   t.log(info._metadata?.duration)
 });

@@ -52,6 +52,13 @@ test.serial("Statement.run() [positional]", async (t) => {
   t.is(info.lastInsertRowid, 3);
 });
 
+test.serial("Statement.get() returns no rows", async (t) => {
+  const db = t.context.db;
+
+  const stmt = await db.prepare("SELECT * FROM users WHERE id = 0");
+  t.is(stmt.get(), undefined);
+});
+
 test.serial("Statement.get() [no parameters]", async (t) => {
   const db = t.context.db;
 
@@ -113,7 +120,7 @@ test.serial("Statement.iterate() [empty]", async (t) => {
 
   const stmt = await db.prepare("SELECT * FROM users WHERE id = 0");
   const it = await stmt.iterate();
-  t.is(it.next().done, true);
+  t.is((await it.next()).done, true);
 });
 
 test.serial("Statement.iterate()", async (t) => {
@@ -122,7 +129,7 @@ test.serial("Statement.iterate()", async (t) => {
   const stmt = await db.prepare("SELECT * FROM users");
   const expected = [1, 2];
   var idx = 0;
-  for (const row of await stmt.iterate()) {
+  for await (const row of await stmt.iterate()) {
     t.is(row.id, expected[idx++]);
   }
 });
@@ -376,6 +383,8 @@ test.serial("Timeout option", async (t) => {
     // Allow some tolerance for the timeout.
     t.is(elapsed > timeout/2, true);
   }
+  conn1.close();
+  conn2.close();
   fs.unlinkSync(path);
 });
 
