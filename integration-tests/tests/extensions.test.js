@@ -1,5 +1,4 @@
 import test from "ava";
-import { Authorization } from "libsql";
 
 test.serial("Statement.run() returning duration", async (t) => {
   const db = t.context.db;
@@ -19,30 +18,43 @@ test.serial("Statement.get() returning duration", async (t) => {
   t.log(info._metadata?.duration)
 });
 
-test.serial("Database.authorizer()/allow", async (t) => {
+test.serial("Database.authorizer() [allow]", async (t) => {
   const db = t.context.db;
-
-  db.authorizer({
-    "users": Authorization.ALLOW
-  });
-
+  db.authorizer(auth => auth("allow"));
   const stmt = db.prepare("SELECT * FROM users");
-  const users = stmt.all();
-  t.is(users.length, 2);
+  const rows = stmt.all();
+  t.is(rows.length, 2);
 });
 
-test.serial("Database.authorizer()/deny", async (t) => {
+test.serial("Database.authorizer() [ignore]", async (t) => {
   const db = t.context.db;
+  db.authorizer(auth => auth("ignore"));
+  const stmt = db.prepare("SELECT * FROM users");
+  const rows = stmt.all();
+  t.is(rows.length, 0);
+});
 
-  db.authorizer({
-    "users": Authorization.DENY
-  });
-  await t.throwsAsync(async () => {
-    return await db.prepare("SELECT * FROM users");
-  }, {
-    instanceOf: t.context.errorType,
-    code: "SQLITE_AUTH"
-  });
+test.serial("Database.authorizer() [deny]", async (t) => {
+  const db = t.context.db;
+  db.authorizer(auth => auth("deny"));
+  let error = null;
+  try {
+    await db.prepare("SELECT * FROM users");
+  } catch (err) {
+    error = err;
+  }
+  t.truthy(error, "Expected an error to be thrown");
+
+  let parsed;
+  try {
+    parsed = JSON.parse(error.message);
+  } catch {
+    t.fail("Error message is not valid JSON: " + String(error && error.message));
+  }
+  t.is(parsed.code, "SQLITE_AUTH");
+  t.is(parsed.libsqlError, true);
+  t.is(parsed.message, "Authorization denied by JS authorizer");
+  t.is(parsed.rawCode, 23);
 });
 
 const connect = async (path_opt) => {
