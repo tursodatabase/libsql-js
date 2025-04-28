@@ -7,23 +7,42 @@ function requireNative() {
   if (process.env.LIBSQL_JS_DEV) {
     return load(__dirname)
   }
-  let target = currentTarget();
+
+  const target = currentTarget();
   // Workaround for Bun, which reports a musl target, but really wants glibc...
-  if (familySync() == GLIBC) {
-    switch (target) {
-      case "linux-x64-musl":
-        target = "linux-x64-gnu";
-        break;
-      case "linux-arm64-musl":
-        target = "linux-arm64-gnu";
-        break;
-    }
+  const isGLIBC = familySync() == GLIBC;
+  const isMUSL = familySync() == MUSL;
+
+  switch (target) {
+    case "linux-x64-musl": return isGLIBC 
+      ? require("@libsql/linux-x64-gnu") 
+      : require("@libsql/linux-x64-musl");
+
+    case "linux-x64-gnu": return require("@libsql/linux-x64-gnu");
+
+    case "linux-arm64-musl": return isGLIBC 
+      ? require("@libsql/linux-arm64-gnu") 
+      : require("@libsql/linux-arm64-musl");
+
+    case "linux-arm64-gnu": return require("@libsql/linux-arm64-gnu");
+
+    case "linux-arm-gnueabihf": return isMUSL 
+      // @neon-rs/load doesn't detect arm musl
+      ? require("@libsql/linux-arm-musleabihf") 
+      : require("@libsql/linux-arm-gnueabihf");
+
+    case "linux-arm-musleabih": return require("@libsql/linux-arm-musleabihf");
+
+    case "darwin-x64": return require("@libsql/darwin-x64");
+
+    case "darwin-arm64": return require("@libsql/darwin-arm64");
+
+    case "win32-x64-msvc": return require("@libsql/win32-x64-msvc");
+
+    // Fallback for runtime, 
+    // but this should be avoided to prevent bundle issuses, #185
+    default: return require(`@libsql/${target}`);
   }
-  // @neon-rs/load doesn't detect arm musl
-  if (target === "linux-arm-gnueabihf" && familySync() == MUSL) {
-      target = "linux-arm-musleabihf";
-  }
-  return require(`@libsql/${target}`);
 }
 
 const {
