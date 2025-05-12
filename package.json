@@ -53,8 +53,8 @@
       "x86_64-pc-windows-msvc": "@libsql/win32-x64-msvc",
       "x86_64-unknown-linux-gnu": "@libsql/linux-x64-gnu",
       "x86_64-unknown-linux-musl": "@libsql/linux-x64-musl",
-      "arm-unknown-linux-gnueabihf": "@libsql/linux-arm-gnueabihf",
-      "arm-unknown-linux-musleabihf": "@libsql/linux-arm-musleabihf"
+      "armv7-unknown-linux-gnueabihf": "@libsql/linux-arm-gnueabihf",
+      "armv7-unknown-linux-musleabihf": "@libsql/linux-arm-musleabihf"
     }
   },
   "repository": {
