@@ -47,6 +47,7 @@
   "neon": {
     "targets": {
       "aarch64-apple-darwin": "@libsql/darwin-arm64",
+      "aarch64-windows-msvc": "@libsql/win32-arm64-msvc",
       "aarch64-unknown-linux-gnu": "@libsql/linux-arm64-gnu",
       "aarch64-unknown-linux-musl": "@libsql/linux-arm64-musl",
       "x86_64-apple-darwin": "@libsql/darwin-x64",
