@@ -20,8 +20,10 @@ function requireNative() {
     }
   }
   // @neon-rs/load doesn't detect arm musl
-  if (target === "linux-arm-gnueabihf" && familySync() == MUSL) {
+  if (familySync() == MUSL) {
+    if (target === "linux-arm-gnueabihf") {
       target = "linux-arm-musleabihf";
+    }
   }
   return require(`@libsql/${target}`);
 }
