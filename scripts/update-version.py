@@ -176,7 +176,7 @@ def create_git_commit_and_tag(version):
                 print(f"Warning: Could not add {file} to git")
 
         # Create commit
-        commit_message = f"libsql-js {version}"
+        commit_message = f"{version}"
         subprocess.run(
             ["git", "commit", "-m", commit_message],
             check=True
