@@ -11,6 +11,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "libsql": "^0.1.0"
+    "libsql": "../.."
   }
 }

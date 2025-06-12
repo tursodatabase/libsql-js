@@ -1,6 +1,6 @@
 import { run, bench, group, baseline } from 'mitata';
 
-import Database from 'better-sqlite3';
+import Database from 'libsql';
 
 const db = new Database(':memory:');
 
@@ -160,6 +160,13 @@ group('Statement', () => {
             break;
           }
       }
+  });
+  bench('iterate (raw)', () => {
+    for (const row of stmt.raw().iterate(10)) {
+        if (row.field1 === 'Never appears') {
+          break;
+        }
+    }
   });
 });
 

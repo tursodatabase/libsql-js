@@ -171,6 +171,10 @@ Toggle raw mode.
 
 This function enables or disables raw mode. Prepared statements return objects by default, but if raw mode is enabled, the functions return arrays instead.
 
+### timed([toggle]) ⇒ this
+
+Toggle query duration timing.
+
 ### columns() ⇒ array of objects
 
 Returns the columns in the result set returned by this prepared statement.

@@ -1,6 +1,6 @@
 "use strict";
 
-const { Database: NativeDb } = require("./index.js");
+const { Database: NativeDb, databasePrepareSync, databaseSyncSync, statementIterateSync, iteratorNextSync } = require("./index.js");
 const SqliteError = require("./sqlite-error.js");
 const Authorization = require("./auth");
 
@@ -53,7 +53,11 @@ class Database {
 
   sync() {
     try {
-      return this.db.sync();
+      const result = databaseSyncSync(this.db);
+      return {
+        frames_synced: result.frames_synced,
+        replication_index: result.replication_index
+      };
     } catch (err) {
       throw convertError(err);
     }
@@ -68,9 +72,9 @@ class Database {
    *
    * @param {string} sql - The SQL statement string to prepare.
    */
-  async prepare(sql) {
+  prepare(sql) {
     try {
-      const stmt = await this.db.prepare(sql);
+      const stmt = databasePrepareSync(this.db, sql);
       return new Statement(stmt);
     } catch (err) {
       throw convertError(err);
@@ -114,12 +118,12 @@ class Database {
     return properties.default.value;
   }
 
-  async pragma(source, options) {
+  pragma(source, options) {
     if (options == null) options = {};
     if (typeof source !== 'string') throw new TypeError('Expected first argument to be a string');
     if (typeof options !== 'object') throw new TypeError('Expected second argument to be an options object');
     const simple = options['simple'];
-    const stmt = await this.prepare(`PRAGMA ${source}`, this, true);
+    const stmt = this.prepare(`PRAGMA ${source}`, this, true);
     return simple ? stmt.pluck().get() : stmt.all();
   }
 
@@ -283,20 +287,16 @@ class Statement {
    *
    * @param bindParameters - The bind parameters for executing the statement.
    */
-  async iterate(...bindParameters) {
+  iterate(...bindParameters) {
     try {
-      const it = await this.stmt.iterate(...bindParameters);
+      const it = statementIterateSync(this.stmt, ...bindParameters);
       return {
-        next() {
-          return it.next();
-        },
-        [Symbol.asyncIterator]() {
+        next: () => iteratorNextSync(it),
+        [Symbol.iterator]() {
           return {
-            next() {
-              return it.next();
-            }
-          };
-        }
+            next: () => iteratorNextSync(it),
+          }
+        },
       };
     } catch (err) {
       throw convertError(err);
@@ -308,12 +308,12 @@ class Statement {
    *
    * @param bindParameters - The bind parameters for executing the statement.
    */
-  async all(...bindParameters) {
+  all(...bindParameters) {
     try {
       const result = [];
-      const iterator = await this.iterate(...bindParameters);
+      const iterator = this.iterate(...bindParameters);
       let next;
-      while (!(next = await iterator.next()).done) {
+      while (!(next = iterator.next()).done) {
         result.push(next.value);
       }
       return result;

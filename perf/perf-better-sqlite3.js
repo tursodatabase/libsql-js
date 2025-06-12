@@ -10,8 +10,14 @@ db.exec("INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.
 const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
 
 group('Statement', () => {
-  bench('get(1)', () => {
+  bench('get()', () => {
     stmt.get(1);
+  });
+  bench('get() [raw]', () => {
+    stmt.raw().get(1);
+  });
+  bench('get() [pluck]', () => {
+    stmt.pluck().get(1);
   });
 });
 
