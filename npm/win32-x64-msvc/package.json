@@ -1,6 +1,10 @@
 {
   "name": "@libsql/win32-x64-msvc",
   "version": "0.6.0-pre.3",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tursodatabase/libsql-js"
+  },
   "os": [
     "win32"
   ],
