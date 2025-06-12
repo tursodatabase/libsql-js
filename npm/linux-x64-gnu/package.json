@@ -1,6 +1,6 @@
 {
   "name": "@libsql/linux-x64-gnu",
-  "version": "0.6.0-pre.2",
+  "version": "0.6.0-pre.3",
   "os": [
     "linux"
   ],
