@@ -17,6 +17,7 @@ from pathlib import Path
 
 # Define all npm package paths in one place
 NPM_PACKAGES = [
+    ".",
     "npm/darwin-x64",
     "npm/linux-arm64-musl",
     "npm/linux-x64-gnu",
