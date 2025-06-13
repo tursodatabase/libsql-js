@@ -184,7 +184,8 @@ test("Concurrent operations with timeout should handle busy database", async (t)
 
     conn1.close();
     conn2.close();
-    fs.unlinkSync(path);
+    // FIXME: Fails on Windows because file is still busy.
+    // fs.unlinkSync(path);
 });  
 
 
@@ -197,7 +198,8 @@ const connect = async (path_opt, options = {}) => {
 
 const cleanup = async (context) => {
     context.db.close();
-    fs.unlinkSync(context.path);
+    // FIXME: Fails on Windows because file is still busy.
+    // fs.unlinkSync(context.path);
 };
 
 const generateUUID = () => {
