@@ -50,6 +50,11 @@ test.serial("Statement.run() [positional]", async (t) => {
   const info = stmt.run(["Carol", "carol@example.net"]);
   t.is(info.changes, 1);
   t.is(info.lastInsertRowid, 3);
+
+  // Verify that the data is inserted
+  const stmt2 = await db.prepare("SELECT * FROM users WHERE id = 3");
+  t.is(stmt2.get().name, "Carol");
+  t.is(stmt2.get().email, "carol@example.net");
 });
 
 test.serial("Statement.get() returns no rows", async (t) => {
@@ -315,7 +320,7 @@ test.serial("errors", async (t) => {
 
 test.serial("Database.prepare() after close()", async (t) => {
   const db = t.context.db;
-  await db.close();
+  db.close();
   await t.throwsAsync(async () => {
     await db.prepare("SELECT 1");
   }, {
@@ -326,7 +331,7 @@ test.serial("Database.prepare() after close()", async (t) => {
 
 test.serial("Database.exec() after close()", async (t) => {
   const db = t.context.db;
-  await db.close();
+  db.close();
   await t.throwsAsync(async () => {
     await db.exec("SELECT 1");
   }, {
