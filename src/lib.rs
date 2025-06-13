@@ -654,9 +654,8 @@ impl Statement {
             let start = std::time::Instant::now();
 
             let mut stmt = self.stmt.lock().await;
-            stmt.reset();
             let params = map_params(&stmt, params)?;
-            stmt.query(params).await.map_err(Error::from)?;
+            stmt.run(params).await.map_err(Error::from)?;
             let changes = if conn.total_changes() == total_changes_before {
                 0
             } else {
@@ -664,6 +663,7 @@ impl Statement {
             };
             let last_insert_row_id = conn.last_insert_rowid();
             let duration = start.elapsed().as_secs_f64();
+            stmt.reset();
             Ok(RunResult {
                 changes: changes as f64,
                 duration,
