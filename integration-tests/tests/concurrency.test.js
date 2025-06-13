@@ -44,7 +44,7 @@ test("Concurrent reads", async (t) => {
         t.is(typeof result.name, 'string');
         t.is(typeof result.email, 'string');
     }
-    await cleanup(t.context);
+    cleanup(t.context);
 });
 
 test("Concurrent writes", async (t) => {
@@ -76,7 +76,7 @@ test("Concurrent writes", async (t) => {
     const result = await countStmt.get();
     t.is(result.count, 50);
 
-    await cleanup(t.context);
+    cleanup(t.context);
 });
 
 test("Concurrent transaction isolation", async (t) => {
@@ -119,7 +119,7 @@ test("Concurrent transaction isolation", async (t) => {
     t.truthy(results[0].name.startsWith('Alice'));
     t.truthy(results[1].name.startsWith('Bob'));
 
-    await cleanup(t.context);
+    cleanup(t.context);
 });
 
 test("Concurrent reads and writes", async (t) => {
@@ -182,8 +182,8 @@ test("Concurrent operations with timeout should handle busy database", async (t)
         t.true(elapsed > timeout / 2, "Timeout should be respected");
     }
 
-    await conn1.close();
-    await conn2.close();
+    conn1.close();
+    conn2.close();
     fs.unlinkSync(path);
 });  
 
@@ -196,7 +196,7 @@ const connect = async (path_opt, options = {}) => {
 };
 
 const cleanup = async (context) => {
-    await context.db.close();
+    context.db.close();
     fs.unlinkSync(context.path);
 };
 

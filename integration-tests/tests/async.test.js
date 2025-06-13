@@ -320,7 +320,7 @@ test.serial("errors", async (t) => {
 
 test.serial("Database.prepare() after close()", async (t) => {
   const db = t.context.db;
-  await db.close();
+  db.close();
   await t.throwsAsync(async () => {
     await db.prepare("SELECT 1");
   }, {
@@ -331,7 +331,7 @@ test.serial("Database.prepare() after close()", async (t) => {
 
 test.serial("Database.exec() after close()", async (t) => {
   const db = t.context.db;
-  await db.close();
+  db.close();
   await t.throwsAsync(async () => {
     await db.exec("SELECT 1");
   }, {
