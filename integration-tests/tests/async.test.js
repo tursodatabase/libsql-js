@@ -50,6 +50,11 @@ test.serial("Statement.run() [positional]", async (t) => {
   const info = stmt.run(["Carol", "carol@example.net"]);
   t.is(info.changes, 1);
   t.is(info.lastInsertRowid, 3);
+
+  // Verify that the data is inserted
+  const stmt2 = await db.prepare("SELECT * FROM users WHERE id = 3");
+  t.is(stmt2.get().name, "Carol");
+  t.is(stmt2.get().email, "carol@example.net");
 });
 
 test.serial("Statement.get() returns no rows", async (t) => {
