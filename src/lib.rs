@@ -23,7 +23,7 @@
 mod auth;
 
 use napi::{
-    bindgen_prelude::{Array, FromNapiValue},
+    bindgen_prelude::{Array, FromNapiValue, ToNapiValue},
     Env, JsUnknown, Result, ValueType,
 };
 use napi_derive::napi;
@@ -210,7 +210,7 @@ pub struct Options {
 }
 
 /// Access mode.
-///
+/// 
 /// The `better-sqlite3` API allows the caller to configure the format of
 /// query results. This struct encapsulates the different access mode configs.
 struct AccessMode {
@@ -607,7 +607,7 @@ pub struct Statement {
     // The libSQL statement instance.
     stmt: Arc<tokio::sync::Mutex<libsql::Statement>>,
     // The column names.
-    column_names: Vec<String>,
+    column_names: Vec<std::ffi::CString>,
     // The access mode.
     mode: AccessMode,
 }
@@ -626,10 +626,10 @@ impl Statement {
         stmt: libsql::Statement,
         mode: AccessMode,
     ) -> Self {
-        let column_names: Vec<String> = stmt
+        let column_names: Vec<std::ffi::CString> = stmt
             .columns()
             .iter()
-            .map(|c| c.name().to_string())
+            .map(|c| std::ffi::CString::new(c.name().to_string()).unwrap())
             .collect();
         let stmt = Arc::new(tokio::sync::Mutex::new(stmt));
         Self {
@@ -715,7 +715,7 @@ impl Statement {
     fn get_internal(
         env: &Env,
         row: &Option<libsql::Row>,
-        column_names: &[String],
+        column_names: &[std::ffi::CString],
         safe_ints: bool,
         raw: bool,
         pluck: bool,
@@ -876,12 +876,9 @@ impl Statement {
     }
 }
 
+
 #[napi]
-pub fn statement_iterate_sync(
-    stmt: &Statement,
-    _env: Env,
-    params: Option<napi::JsUnknown>,
-) -> Result<RowsIterator> {
+pub fn statement_iterate_sync(stmt: &Statement, _env: Env, params: Option<napi::JsUnknown>) -> Result<RowsIterator> {
     let rt = runtime()?;
     let safe_ints = stmt.mode.safe_ints.load(Ordering::SeqCst);
     let raw = stmt.mode.raw.load(Ordering::SeqCst);
@@ -894,7 +891,9 @@ pub fn statement_iterate_sync(
         let rows = stmt.query(params).await.map_err(Error::from)?;
         let mut column_names = Vec::new();
         for i in 0..rows.column_count() {
-            column_names.push(rows.column_name(i).unwrap().to_string());
+            column_names.push(
+                std::ffi::CString::new(rows.column_name(i).unwrap().to_string()).unwrap(),
+            );
         }
         Ok::<_, napi::Error>((rows, column_names))
     })?;
@@ -1046,7 +1045,7 @@ fn map_value(value: JsUnknown) -> Result<libsql::Value> {
 #[napi]
 pub struct RowsIterator {
     rows: Arc<tokio::sync::Mutex<libsql::Rows>>,
-    column_names: Vec<String>,
+    column_names: Vec<std::ffi::CString>,
     safe_ints: bool,
     raw: bool,
     pluck: bool,
@@ -1056,7 +1055,7 @@ pub struct RowsIterator {
 impl RowsIterator {
     pub fn new(
         rows: Arc<tokio::sync::Mutex<libsql::Rows>>,
-        column_names: Vec<String>,
+        column_names: Vec<std::ffi::CString>,
         safe_ints: bool,
         raw: bool,
         pluck: bool,
@@ -1094,7 +1093,7 @@ pub fn iterator_next_sync(iter: &RowsIterator) -> Result<Record> {
 #[napi]
 pub struct Record {
     row: Option<libsql::Row>,
-    column_names: Vec<String>,
+    column_names: Vec<std::ffi::CString>,
     safe_ints: bool,
     raw: bool,
     pluck: bool,
@@ -1133,7 +1132,7 @@ fn runtime() -> Result<&'static Runtime> {
 
 fn map_row(
     env: &Env,
-    column_names: &[String],
+    column_names: &[std::ffi::CString],
     row: &libsql::Row,
     safe_ints: bool,
     raw: bool,
@@ -1169,7 +1168,7 @@ fn convert_value_to_js(
 
 fn map_row_object(
     env: &Env,
-    column_names: &[String],
+    column_names: &[std::ffi::CString],
     row: &libsql::Row,
     safe_ints: bool,
     pluck: bool,
@@ -1187,7 +1186,8 @@ fn map_row_object(
             env.get_null()?.into_unknown()
         }
     } else {
-        let mut result = env.create_object()?;
+        let result = env.create_object()?;
+        let result = unsafe { napi::JsObject::to_napi_value(env.raw(), result)? };
         // If not plucking, get all columns
         for idx in 0..column_count {
             let value = match row.get_value(idx as i32) {
@@ -1197,8 +1197,16 @@ fn map_row_object(
 
             let column_name = &column_names[idx];
             let js_value = convert_value_to_js(env, &value, safe_ints)?;
-            result.set_named_property(column_name, js_value)?;
+            unsafe {
+                napi::sys::napi_set_named_property(
+                    env.raw(),
+                    result,
+                    column_name.as_ptr(),
+                    napi::JsUnknown::to_napi_value(env.raw(), js_value)?,
+                );
+            }
         }
+        let result: napi::JsObject = unsafe { napi::JsObject::from_napi_value(env.raw(), result)? };
         result.into_unknown()
     };
     Ok(result)
@@ -1206,7 +1214,7 @@ fn map_row_object(
 
 fn map_row_raw(
     env: &Env,
-    column_names: &[String],
+    column_names: &[std::ffi::CString],
     row: &libsql::Row,
     safe_ints: bool,
     pluck: bool,
