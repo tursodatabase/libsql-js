@@ -1,6 +1,6 @@
 {
   "name": "@libsql/darwin-arm64",
-  "version": "0.6.0-pre.7",
+  "version": "0.6.0-pre.8",
   "repository": {
     "type": "git",
     "url": "https://github.com/tursodatabase/libsql-js"
