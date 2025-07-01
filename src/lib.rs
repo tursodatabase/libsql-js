@@ -39,17 +39,6 @@ use std::{
 use tokio::{runtime::Runtime, sync::Mutex};
 use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
-/// SQLite error object.
-#[napi]
-pub struct SqliteError {
-    #[napi]
-    pub message: String,
-    #[napi]
-    pub code: String,
-    #[napi(js_name = rawCode)]
-    pub raw_code: i32,
-}
-
 struct Error(libsql::Error);
 
 impl From<Error> for napi::Error {
