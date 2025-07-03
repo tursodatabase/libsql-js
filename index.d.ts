@@ -32,12 +32,6 @@ export interface RunResult {
 }
 /** Retrieve next row from an iterator synchronously. Needed for better-sqlite3 API compatibility. */
 export declare function iteratorNextSync(iter: RowsIterator): Record
-/** SQLite error object. */
-export declare class SqliteError {
-  message: string
-  code: string
-  rawCode: number
-}
 /** SQLite database connection. */
 export declare class Database {
   /**
