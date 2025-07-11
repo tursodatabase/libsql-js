@@ -85,12 +85,14 @@ class Database {
       const syncPeriod = opts?.syncPeriod ?? 0.0;
       const readYourWrites = opts?.readYourWrites ?? true;
       const offline = opts?.offline ?? false;
-      this.db = databaseOpenWithSync(path, opts.syncUrl, authToken, encryptionCipher, encryptionKey, syncPeriod, readYourWrites, offline);
+      const remoteEncryptionKey = opts?.remoteEncryptionKey ?? "";
+      this.db = databaseOpenWithSync(path, opts.syncUrl, authToken, encryptionCipher, encryptionKey, syncPeriod, readYourWrites, offline, remoteEncryptionKey);
     } else {
       const authToken = opts?.authToken ?? "";
       const encryptionKey = opts?.encryptionKey ?? "";
       const timeout = opts?.timeout ?? 0.0;
-      this.db = databaseOpen(path, authToken, encryptionCipher, encryptionKey, timeout);
+      const remoteEncryptionKey = opts?.remoteEncryptionKey ?? "";
+      this.db = databaseOpen(path, authToken, encryptionCipher, encryptionKey, timeout, remoteEncryptionKey);
     }
     // TODO: Use a libSQL API for this?
     this.memory = path === ":memory:";

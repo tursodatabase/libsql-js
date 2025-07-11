@@ -36,10 +36,17 @@ impl Database {
         let encryption_cipher = cx.argument::<JsString>(2)?.value(&mut cx);
         let encryption_key = cx.argument::<JsString>(3)?.value(&mut cx);
         let busy_timeout = cx.argument::<JsNumber>(4)?.value(&mut cx);
+        let remote_encryption_key = cx.argument::<JsString>(5)?.value(&mut cx);
         let db = if is_remote_path(&db_path) {
-            let version = version("remote");
             trace!("Opening remote database: {}", db_path);
-            libsql::Database::open_remote_internal(db_path.clone(), auth_token, version)
+            let mut builder = libsql::Builder::new_remote(db_path.clone(), auth_token);
+            if !remote_encryption_key.is_empty() {
+                let encryption_context = libsql::EncryptionContext {
+                    key: libsql::EncryptionKey::Base64Encoded(remote_encryption_key),
+                };
+                builder = builder.remote_encryption(Some(encryption_context));
+            }
+            rt.block_on(builder.build())
         } else {
             let cipher = libsql::Cipher::from_str(&encryption_cipher).or_else(|err| {
                 throw_libsql_error(
@@ -76,7 +83,7 @@ impl Database {
         let sync_period = cx.argument::<JsNumber>(5)?.value(&mut cx);
         let read_your_writes = cx.argument::<JsBoolean>(6)?.value(&mut cx);
         let offline = cx.argument::<JsBoolean>(7)?.value(&mut cx);
-
+        let remote_encryption_key = cx.argument::<JsString>(8)?.value(&mut cx);
         let cipher = libsql::Cipher::from_str(&encryption_cipher).or_else(|err| {
             throw_libsql_error(
                 &mut cx,
@@ -103,7 +110,17 @@ impl Database {
         );
         let rt = runtime(&mut cx)?;
         let result = if offline {
-            rt.block_on(libsql::Builder::new_synced_database(db_path, sync_url, sync_auth).build())
+            rt.block_on(async {
+                let mut builder =
+                    libsql::Builder::new_synced_database(db_path, sync_url, sync_auth);
+                if !remote_encryption_key.is_empty() {
+                    let encryption_context = libsql::EncryptionContext {
+                        key: libsql::EncryptionKey::Base64Encoded(remote_encryption_key),
+                    };
+                    builder = builder.remote_encryption(Some(encryption_context));
+                }
+                builder.build().await
+            })
         } else {
             rt.block_on(async {
                 let mut builder = libsql::Builder::new_remote_replica(db_path, sync_url, sync_auth);
@@ -112,6 +129,12 @@ impl Database {
                 }
                 if let Some(sync_period) = sync_period {
                     builder = builder.sync_interval(sync_period);
+                }
+                if !remote_encryption_key.is_empty() {
+                    let encryption_context = libsql::EncryptionContext {
+                        key: libsql::EncryptionKey::Base64Encoded(remote_encryption_key),
+                    };
+                    builder = builder.remote_encryption(Some(encryption_context));
                 }
                 builder.build().await
             })
