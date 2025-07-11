@@ -874,7 +874,7 @@ dependencies = [
 
 [[package]]
 name = "libsql-js"
-version = "0.5.13"
+version = "0.5.14-pre.1"
 dependencies = [
  "libsql",
  "neon",
