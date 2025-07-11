@@ -11,6 +11,7 @@ export interface Options {
   syncPeriod?: number
   encryptionCipher?: string
   encryptionKey?: string
+  remoteEncryptionKey?: string
 }
 /** Result of a database sync operation. */
 export interface SyncResult {

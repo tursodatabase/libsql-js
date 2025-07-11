@@ -196,10 +196,12 @@ pub struct Options {
     pub encryptionCipher: Option<String>,
     // Encryption key for local encryption at rest.
     pub encryptionKey: Option<String>,
+    // Encryption key for remote encryption at rest.
+    pub remoteEncryptionKey: Option<String>,
 }
 
 /// Access mode.
-/// 
+///
 /// The `better-sqlite3` API allows the caller to configure the format of
 /// query results. This struct encapsulates the different access mode configs.
 struct AccessMode {
@@ -247,7 +249,17 @@ impl Database {
                 .and_then(|o| o.authToken.as_ref())
                 .cloned()
                 .unwrap_or_default();
-            let builder = libsql::Builder::new_remote(path.clone(), auth_token);
+            let mut builder = libsql::Builder::new_remote(path.clone(), auth_token);
+            if let Some(encryption_key) = opts
+                .as_ref()
+                .and_then(|o| o.remoteEncryptionKey.as_ref())
+                .cloned()
+            {
+                let encryption_context = libsql::EncryptionContext {
+                    key: libsql::EncryptionKey::Base64Encoded(encryption_key),
+                };
+                builder = builder.remote_encryption(Some(encryption_context));
+            }
             rt.block_on(builder.build()).map_err(Error::from)?
         } else if let Some(options) = &opts {
             if let Some(sync_url) = &options.syncUrl {
@@ -278,6 +290,15 @@ impl Database {
                     let encryption_config =
                         libsql::EncryptionConfig::new(cipher, encryption_key.into());
                     builder = builder.encryption_config(encryption_config);
+                }
+
+                if let Some(remote_encryption_key) = &options.remoteEncryptionKey {
+                    let encryption_context = libsql::EncryptionContext {
+                        key: libsql::EncryptionKey::Base64Encoded(
+                            remote_encryption_key.to_string(),
+                        ),
+                    };
+                    builder = builder.remote_encryption(Some(encryption_context));
                 }
 
                 if let Some(period) = options.syncPeriod {
@@ -865,9 +886,12 @@ impl Statement {
     }
 }
 
-
 #[napi]
-pub fn statement_iterate_sync(stmt: &Statement, _env: Env, params: Option<napi::JsUnknown>) -> Result<RowsIterator> {
+pub fn statement_iterate_sync(
+    stmt: &Statement,
+    _env: Env,
+    params: Option<napi::JsUnknown>,
+) -> Result<RowsIterator> {
     let rt = runtime()?;
     let safe_ints = stmt.mode.safe_ints.load(Ordering::SeqCst);
     let raw = stmt.mode.raw.load(Ordering::SeqCst);
@@ -880,9 +904,8 @@ pub fn statement_iterate_sync(stmt: &Statement, _env: Env, params: Option<napi::
         let rows = stmt.query(params).await.map_err(Error::from)?;
         let mut column_names = Vec::new();
         for i in 0..rows.column_count() {
-            column_names.push(
-                std::ffi::CString::new(rows.column_name(i).unwrap().to_string()).unwrap(),
-            );
+            column_names
+                .push(std::ffi::CString::new(rows.column_name(i).unwrap().to_string()).unwrap());
         }
         Ok::<_, napi::Error>((rows, column_names))
     })?;
