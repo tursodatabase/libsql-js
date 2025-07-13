@@ -44,7 +44,7 @@ impl Database {
                 let encryption_context = libsql::EncryptionContext {
                     key: libsql::EncryptionKey::Base64Encoded(remote_encryption_key),
                 };
-                builder = builder.remote_encryption(Some(encryption_context));
+                builder = builder.remote_encryption(encryption_context);
             }
             rt.block_on(builder.build())
         } else {
@@ -117,7 +117,7 @@ impl Database {
                     let encryption_context = libsql::EncryptionContext {
                         key: libsql::EncryptionKey::Base64Encoded(remote_encryption_key),
                     };
-                    builder = builder.remote_encryption(Some(encryption_context));
+                    builder = builder.remote_encryption(encryption_context);
                 }
                 builder.build().await
             })
@@ -134,7 +134,7 @@ impl Database {
                     let encryption_context = libsql::EncryptionContext {
                         key: libsql::EncryptionKey::Base64Encoded(remote_encryption_key),
                     };
-                    builder = builder.remote_encryption(Some(encryption_context));
+                    builder = builder.remote_encryption(encryption_context);
                 }
                 builder.build().await
             })
