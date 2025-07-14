@@ -258,7 +258,7 @@ impl Database {
                 let encryption_context = libsql::EncryptionContext {
                     key: libsql::EncryptionKey::Base64Encoded(encryption_key),
                 };
-                builder = builder.remote_encryption(Some(encryption_context));
+                builder = builder.remote_encryption(encryption_context);
             }
             rt.block_on(builder.build()).map_err(Error::from)?
         } else if let Some(options) = &opts {
@@ -298,7 +298,7 @@ impl Database {
                             remote_encryption_key.to_string(),
                         ),
                     };
-                    builder = builder.remote_encryption(Some(encryption_context));
+                    builder = builder.remote_encryption(encryption_context);
                 }
 
                 if let Some(period) = options.syncPeriod {
