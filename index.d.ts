@@ -8,6 +8,7 @@ export interface Options {
   timeout?: number
   authToken?: string
   syncUrl?: string
+  readYourWrites?: boolean
   syncPeriod?: number
   encryptionCipher?: string
   encryptionKey?: string

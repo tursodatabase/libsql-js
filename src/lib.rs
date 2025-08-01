@@ -190,6 +190,8 @@ pub struct Options {
     pub authToken: Option<String>,
     // URL for remote database sync.
     pub syncUrl: Option<String>,
+    // Read your writes.
+    pub readYourWrites: Option<bool>,
     // Sync interval in seconds.
     pub syncPeriod: Option<f64>,
     // Encryption cipher for local enryption at rest.
@@ -285,6 +287,9 @@ impl Database {
 
                 let mut builder =
                     libsql::Builder::new_remote_replica(path.clone(), sync_url.clone(), auth_token);
+
+                let read_your_writes = options.readYourWrites.unwrap_or(true);
+                builder = builder.read_your_writes(read_your_writes);
 
                 if encryption_key.len() > 0 {
                     let encryption_config =
