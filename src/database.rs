@@ -113,6 +113,7 @@ impl Database {
             rt.block_on(async {
                 let mut builder =
                     libsql::Builder::new_synced_database(db_path, sync_url, sync_auth);
+                builder =  builder.read_your_writes(read_your_writes);
                 if !remote_encryption_key.is_empty() {
                     let encryption_context = libsql::EncryptionContext {
                         key: libsql::EncryptionKey::Base64Encoded(remote_encryption_key),
@@ -124,6 +125,7 @@ impl Database {
         } else {
             rt.block_on(async {
                 let mut builder = libsql::Builder::new_remote_replica(db_path, sync_url, sync_auth);
+                builder = builder.read_your_writes(read_your_writes);
                 if let Some(encryption_config) = encryption_config {
                     builder = builder.encryption_config(encryption_config);
                 }
