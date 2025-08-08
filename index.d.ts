@@ -25,6 +25,8 @@ export interface SyncResult {
 export declare function databasePrepareSync(db: Database, sql: string): Statement
 /** Syncs the database in blocking mode. */
 export declare function databaseSyncSync(db: Database): SyncResult
+/** Executes SQL in blocking mode. */
+export declare function databaseExecSync(db: Database, sql: string): void
 export declare function statementIterateSync(stmt: Statement, params?: unknown | undefined | null): RowsIterator
 /** SQLite `run()` result object */
 export interface RunResult {
@@ -109,7 +111,7 @@ export declare class Database {
    * * `env` - The environment.
    * * `sql` - The SQL statement to execute.
    */
-  exec(sql: string): void
+  exec(sql: string): Promise<void>
   /**
    * Syncs the database.
    *

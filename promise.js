@@ -88,14 +88,14 @@ class Database {
 
     const db = this;
     const wrapTxn = (mode) => {
-      return (...bindParameters) => {
-        db.exec("BEGIN " + mode);
+      return async (...bindParameters) => {
+        await db.exec("BEGIN " + mode);
         try {
-          const result = fn(...bindParameters);
-          db.exec("COMMIT");
+          const result = await fn(...bindParameters);
+          await db.exec("COMMIT");
           return result;
         } catch (err) {
-          db.exec("ROLLBACK");
+          await db.exec("ROLLBACK");
           throw err;
         }
       };
@@ -172,9 +172,9 @@ class Database {
    *
    * @param {string} sql - The SQL statement string to execute.
    */
-  exec(sql) {
+  async exec(sql) {
     try {
-      this.db.exec(sql);
+      await this.db.exec(sql);
     } catch (err) {
       throw convertError(err);
     }

@@ -501,14 +501,18 @@ impl Database {
     /// * `env` - The environment.
     /// * `sql` - The SQL statement to execute.
     #[napi]
-    pub fn exec(&self, env: Env, sql: String) -> Result<()> {
-        let rt = runtime()?;
+    pub async fn exec(&self, sql: String) -> Result<()> {
         let conn = match &self.conn {
             Some(conn) => conn.clone(),
-            None => return Err(throw_database_closed_error(&env).into()),
+            None => {
+                return Err(throw_sqlite_error(
+                    "The database connection is not open".to_string(),
+                    "SQLITE_NOTOPEN".to_string(),
+                    0,
+                ));
+            }
         };
-        rt.block_on(async move { conn.execute_batch(&sql).await })
-            .map_err(Error::from)?;
+        conn.execute_batch(&sql).await.map_err(Error::from)?;
         Ok(())
     }
 
@@ -582,6 +586,13 @@ pub fn database_prepare_sync(db: &Database, sql: String) -> Result<Statement> {
 pub fn database_sync_sync(db: &Database) -> Result<SyncResult> {
     let rt = runtime()?;
     rt.block_on(async move { db.sync().await })
+}
+
+/// Executes SQL in blocking mode.
+#[napi]
+pub fn database_exec_sync(db: &Database, sql: String) -> Result<()> {
+    let rt = runtime()?;
+    rt.block_on(async move { db.exec(sql).await })
 }
 
 fn is_remote_path(path: &str) -> bool {

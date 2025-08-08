@@ -1,6 +1,6 @@
 "use strict";
 
-const { Database: NativeDb, databasePrepareSync, databaseSyncSync, statementIterateSync, iteratorNextSync } = require("./index.js");
+const { Database: NativeDb, databasePrepareSync, databaseSyncSync, databaseExecSync, statementIterateSync, iteratorNextSync } = require("./index.js");
 const SqliteError = require("./sqlite-error.js");
 const Authorization = require("./auth");
 
@@ -178,7 +178,7 @@ class Database {
    */
   exec(sql) {
     try {
-      this.db.exec(sql);
+      databaseExecSync(this.db, sql);
     } catch (err) {
       throw convertError(err);
     }
