@@ -36,7 +36,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::{runtime::Runtime, sync::Mutex};
+use tokio::runtime::Runtime;
 use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
 struct Error(libsql::Error);
@@ -219,7 +219,7 @@ pub struct Database {
     // The libSQL database instance.
     db: libsql::Database,
     // The libSQL connection instance.
-    conn: Option<Arc<tokio::sync::Mutex<libsql::Connection>>>,
+    conn: Option<Arc<libsql::Connection>>,
     // Whether to use safe integers by default.
     default_safe_integers: AtomicBool,
     // Whether to use memory-only mode.
@@ -334,7 +334,7 @@ impl Database {
         }
         Ok(Database {
             db,
-            conn: Some(Arc::new(Mutex::new(conn))),
+            conn: Some(Arc::new(conn)),
             default_safe_integers,
             memory,
         })
@@ -349,15 +349,11 @@ impl Database {
     /// Returns whether the database is in a transaction.
     #[napi]
     pub fn in_transaction(&self) -> Result<bool> {
-        let rt = runtime()?;
         let conn = match &self.conn {
             Some(conn) => conn.clone(),
             None => return Ok(false),
         };
-        Ok(rt.block_on(async move {
-            let conn = conn.lock().await;
-            !conn.is_autocommit()
-        }))
+        Ok(!conn.is_autocommit())
     }
 
     /// Prepares a statement for execution.
@@ -381,10 +377,7 @@ impl Database {
                 ));
             }
         };
-        let stmt = {
-            let conn = conn.lock().await;
-            conn.prepare(&sql).await.map_err(Error::from)?
-        };
+        let stmt = { conn.prepare(&sql).await.map_err(Error::from)? };
         let mode = AccessMode {
             safe_ints: self.default_safe_integers.load(Ordering::SeqCst).into(),
             raw: false.into(),
@@ -453,10 +446,7 @@ impl Database {
             let auth_arc = auth_arc.clone();
             move |ctx: &libsql::AuthContext| auth_arc.authorize(ctx)
         };
-        let rt = runtime()?;
-        let guard_conn = rt.block_on(async { conn.lock().await });
-        guard_conn
-            .authorizer(Some(std::sync::Arc::new(closure)))
+        conn.authorizer(Some(std::sync::Arc::new(closure)))
             .map_err(Error::from)?;
         Ok(())
     }
@@ -482,7 +472,6 @@ impl Database {
             }
         };
         rt.block_on(async move {
-            let conn = conn.lock().await;
             conn.load_extension_enable().map_err(Error::from)?;
             if let Err(err) = conn.load_extension(&path, entry_point.as_deref()) {
                 let _ = conn.load_extension_disable();
@@ -518,11 +507,8 @@ impl Database {
             Some(conn) => conn.clone(),
             None => return Err(throw_database_closed_error(&env).into()),
         };
-        rt.block_on(async move {
-            let conn = conn.lock().await;
-            conn.execute_batch(&sql).await
-        })
-        .map_err(Error::from)?;
+        rt.block_on(async move { conn.execute_batch(&sql).await })
+            .map_err(Error::from)?;
         Ok(())
     }
 
@@ -547,16 +533,11 @@ impl Database {
     /// * `env` - The environment.
     #[napi]
     pub fn interrupt(&self, env: Env) -> Result<()> {
-        let rt = runtime()?;
         let conn = match &self.conn {
             Some(conn) => conn.clone(),
             None => return Err(throw_database_closed_error(&env).into()),
         };
-        rt.block_on(async move {
-            let conn = conn.lock().await;
-            conn.interrupt()
-        })
-        .map_err(Error::from)?;
+        conn.interrupt().map_err(Error::from)?;
         Ok(())
     }
 
@@ -618,7 +599,7 @@ fn throw_database_closed_error(env: &Env) -> napi::Error {
 #[napi]
 pub struct Statement {
     // The libSQL connection instance.
-    conn: Arc<tokio::sync::Mutex<libsql::Connection>>,
+    conn: Arc<libsql::Connection>,
     // The libSQL statement instance.
     stmt: Arc<tokio::sync::Mutex<libsql::Statement>>,
     // The column names.
@@ -637,7 +618,7 @@ impl Statement {
     /// * `stmt` - The libSQL statement instance.
     /// * `mode` - The access mode.
     pub(crate) fn new(
-        conn: Arc<tokio::sync::Mutex<libsql::Connection>>,
+        conn: Arc<libsql::Connection>,
         stmt: libsql::Statement,
         mode: AccessMode,
     ) -> Self {
@@ -664,19 +645,18 @@ impl Statement {
     pub fn run(&self, params: Option<napi::JsUnknown>) -> Result<RunResult> {
         let rt = runtime()?;
         rt.block_on(async move {
-            let conn = self.conn.lock().await;
-            let total_changes_before = conn.total_changes();
+            let total_changes_before = self.conn.total_changes();
             let start = std::time::Instant::now();
 
             let mut stmt = self.stmt.lock().await;
             let params = map_params(&stmt, params)?;
             stmt.run(params).await.map_err(Error::from)?;
-            let changes = if conn.total_changes() == total_changes_before {
+            let changes = if self.conn.total_changes() == total_changes_before {
                 0
             } else {
-                conn.changes()
+                self.conn.changes()
             };
-            let last_insert_row_id = conn.last_insert_rowid();
+            let last_insert_row_id = self.conn.last_insert_rowid();
             let duration = start.elapsed().as_secs_f64();
             stmt.reset();
             Ok(RunResult {
