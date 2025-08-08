@@ -1,6 +1,6 @@
 [package]
 name = "libsql-js"
-version = "0.6.0-pre.11"
+version = "0.6.0-pre.12"
 description = ""
 authors = ["Pekka Enberg <penberg@iki.fi>"]
 license = "MIT"
