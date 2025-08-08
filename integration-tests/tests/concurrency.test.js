@@ -32,8 +32,8 @@ test("Concurrent reads", async (t) => {
 
     const promises = [];
     for (let i = 0; i < 100; i++) {
-        promises.push(stmt.get(t.context.aliceId));
-        promises.push(stmt.get(t.context.bobId));
+        promises.push(await stmt.get(t.context.aliceId));
+        promises.push(await stmt.get(t.context.bobId));
     }
 
     const results = await Promise.all(promises);

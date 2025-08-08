@@ -27,6 +27,8 @@ export declare function databasePrepareSync(db: Database, sql: string): Statemen
 export declare function databaseSyncSync(db: Database): SyncResult
 /** Executes SQL in blocking mode. */
 export declare function databaseExecSync(db: Database, sql: string): void
+/** Gets first row from statement in blocking mode. */
+export declare function statementGetSync(stmt: Statement, params?: unknown | undefined | null): unknown
 /** Runs a statement in blocking mode. */
 export declare function statementRunSync(stmt: Statement, params?: unknown | undefined | null): RunResult
 export declare function statementIterateSync(stmt: Statement, params?: unknown | undefined | null): RowsIterator
@@ -159,7 +161,7 @@ export declare class Statement {
    * * `env` - The environment.
    * * `params` - The parameters to bind to the statement.
    */
-  get(params?: unknown | undefined | null): unknown
+  get(params?: unknown | undefined | null): object
   /**
    * Create an iterator over the rows of a statement.
    *

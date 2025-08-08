@@ -660,7 +660,7 @@ impl Statement {
         let start = std::time::Instant::now();
         let stmt = self.stmt.clone();
         let conn = self.conn.clone();
-        
+
         let future = async move {
             stmt.run(params).await.map_err(Error::from)?;
             let changes = if conn.total_changes() == total_changes_before {
@@ -676,10 +676,8 @@ impl Statement {
                 lastInsertRowid: last_insert_row_id,
             })
         };
-        
-        env.execute_tokio_future(future, move |&mut _env, result| {
-            Ok(result)
-        })
+
+        env.execute_tokio_future(future, move |&mut _env, result| Ok(result))
     }
 
     /// Executes a SQL statement and returns the first row.
@@ -689,35 +687,35 @@ impl Statement {
     /// * `env` - The environment.
     /// * `params` - The parameters to bind to the statement.
     #[napi]
-    pub fn get(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsUnknown> {
-        let rt = runtime()?;
-
+    pub fn get(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsObject> {
         let safe_ints = self.mode.safe_ints.load(Ordering::SeqCst);
         let raw = self.mode.raw.load(Ordering::SeqCst);
         let pluck = self.mode.pluck.load(Ordering::SeqCst);
         let timed = self.mode.timing.load(Ordering::SeqCst);
+
+        let params = map_params(&self.stmt, params)?;
+        let stmt = self.stmt.clone();
+        let column_names = self.column_names.clone();
 
         let start = if timed {
             Some(std::time::Instant::now())
         } else {
             None
         };
-        rt.block_on(async move {
-            let params = map_params(&self.stmt, params)?;
-            let mut rows = self.stmt.query(params).await.map_err(Error::from)?;
+
+        let stmt_fut = stmt.clone();
+        let future = async move {
+            let mut rows = stmt_fut.query(params).await.map_err(Error::from)?;
             let row = rows.next().await.map_err(Error::from)?;
             let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
-            let result = Self::get_internal(
-                &env,
-                &row,
-                &self.column_names,
-                safe_ints,
-                raw,
-                pluck,
-                duration,
-            );
-            self.stmt.reset();
-            result
+            Ok((row, duration))
+        };
+
+        env.execute_tokio_future(future, move |&mut env, (row, duration)| {
+            let result =
+                Self::get_internal(&env, &row, &column_names, safe_ints, raw, pluck, duration);
+            stmt.reset();
+            Ok(result)
         })
     }
 
@@ -869,6 +867,44 @@ impl Statement {
         self.stmt.interrupt().map_err(Error::from)?;
         Ok(())
     }
+}
+
+/// Gets first row from statement in blocking mode.
+#[napi]
+pub fn statement_get_sync(
+    stmt: &Statement,
+    env: Env,
+    params: Option<napi::JsUnknown>,
+) -> Result<napi::JsUnknown> {
+    let safe_ints = stmt.mode.safe_ints.load(Ordering::SeqCst);
+    let raw = stmt.mode.raw.load(Ordering::SeqCst);
+    let pluck = stmt.mode.pluck.load(Ordering::SeqCst);
+    let timed = stmt.mode.timing.load(Ordering::SeqCst);
+
+    let start = if timed {
+        Some(std::time::Instant::now())
+    } else {
+        None
+    };
+
+    let rt = runtime()?;
+    rt.block_on(async move {
+        let params = map_params(&stmt.stmt, params)?;
+        let mut rows = stmt.stmt.query(params).await.map_err(Error::from)?;
+        let row = rows.next().await.map_err(Error::from)?;
+        let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
+        let result = Statement::get_internal(
+            &env,
+            &row,
+            &stmt.column_names,
+            safe_ints,
+            raw,
+            pluck,
+            duration,
+        );
+        stmt.stmt.reset();
+        result
+    })
 }
 
 /// Runs a statement in blocking mode.

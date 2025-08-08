@@ -270,9 +270,9 @@ class Statement {
    *
    * @param bindParameters - The bind parameters for executing the statement.
    */
-  get(...bindParameters) {
+  async get(...bindParameters) {
     try {
-      return this.stmt.get(...bindParameters);
+      return await this.stmt.get(...bindParameters);
     } catch (err) {
       throw convertError(err);
     }
