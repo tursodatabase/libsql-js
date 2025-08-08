@@ -612,7 +612,7 @@ pub struct Statement {
     // The libSQL connection instance.
     conn: Arc<libsql::Connection>,
     // The libSQL statement instance.
-    stmt: Arc<tokio::sync::Mutex<libsql::Statement>>,
+    stmt: Arc<libsql::Statement>,
     // The column names.
     column_names: Vec<std::ffi::CString>,
     // The access mode.
@@ -638,7 +638,7 @@ impl Statement {
             .iter()
             .map(|c| std::ffi::CString::new(c.name().to_string()).unwrap())
             .collect();
-        let stmt = Arc::new(tokio::sync::Mutex::new(stmt));
+        let stmt = Arc::new(stmt);
         Self {
             conn,
             stmt,
@@ -659,9 +659,8 @@ impl Statement {
             let total_changes_before = self.conn.total_changes();
             let start = std::time::Instant::now();
 
-            let mut stmt = self.stmt.lock().await;
-            let params = map_params(&stmt, params)?;
-            stmt.run(params).await.map_err(Error::from)?;
+            let params = map_params(&self.stmt, params)?;
+            self.stmt.run(params).await.map_err(Error::from)?;
             let changes = if self.conn.total_changes() == total_changes_before {
                 0
             } else {
@@ -669,7 +668,7 @@ impl Statement {
             };
             let last_insert_row_id = self.conn.last_insert_rowid();
             let duration = start.elapsed().as_secs_f64();
-            stmt.reset();
+            self.stmt.reset();
             Ok(RunResult {
                 changes: changes as f64,
                 duration,
@@ -699,9 +698,8 @@ impl Statement {
             None
         };
         rt.block_on(async move {
-            let mut stmt = self.stmt.lock().await;
-            let params = map_params(&stmt, params)?;
-            let mut rows = stmt.query(params).await.map_err(Error::from)?;
+            let params = map_params(&self.stmt, params)?;
+            let mut rows = self.stmt.query(params).await.map_err(Error::from)?;
             let row = rows.next().await.map_err(Error::from)?;
             let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
             let result = Self::get_internal(
@@ -713,7 +711,7 @@ impl Statement {
                 pluck,
                 duration,
             );
-            stmt.reset();
+            self.stmt.reset();
             result
         })
     }
@@ -768,14 +766,13 @@ impl Statement {
         let params = {
             let stmt = stmt.clone();
             rt.block_on(async move {
-                let mut stmt = stmt.lock().await;
                 stmt.reset();
                 map_params(&stmt, params).unwrap()
             })
         };
         let stmt = self.stmt.clone();
         let future = async move {
-            let rows = stmt.lock().await.query(params).await.map_err(Error::from)?;
+            let rows = stmt.query(params).await.map_err(Error::from)?;
             Ok::<_, napi::Error>(rows)
         };
         let column_names = self.column_names.clone();
@@ -792,11 +789,7 @@ impl Statement {
 
     #[napi]
     pub fn raw(&self, raw: Option<bool>) -> Result<&Self> {
-        let rt = runtime()?;
-        let returns_data = rt.block_on(async move {
-            let stmt = self.stmt.lock().await;
-            !stmt.columns().is_empty()
-        });
+        let returns_data = !self.stmt.columns().is_empty();
         if !returns_data {
             return Err(napi::Error::from_reason(
                 "The raw() method is only for statements that return data",
@@ -826,8 +819,7 @@ impl Statement {
     pub fn columns(&self, env: Env) -> Result<Array> {
         let rt = runtime()?;
         rt.block_on(async move {
-            let stmt = self.stmt.lock().await;
-            let columns = stmt.columns();
+            let columns = self.stmt.columns();
             let mut js_array = env.create_array(columns.len() as u32)?;
             for (i, col) in columns.iter().enumerate() {
                 let mut js_obj = env.create_object()?;
@@ -872,12 +864,7 @@ impl Statement {
 
     #[napi]
     pub fn interrupt(&self) -> Result<()> {
-        let rt = runtime()?;
-        rt.block_on(async move {
-            let mut stmt = self.stmt.lock().await;
-            stmt.interrupt()
-        })
-        .map_err(Error::from)?;
+        self.stmt.interrupt().map_err(Error::from)?;
         Ok(())
     }
 }
@@ -894,7 +881,6 @@ pub fn statement_iterate_sync(
     let pluck = stmt.mode.pluck.load(Ordering::SeqCst);
     let stmt = stmt.stmt.clone();
     let (rows, column_names) = rt.block_on(async move {
-        let mut stmt = stmt.lock().await;
         stmt.reset();
         let params = map_params(&stmt, params)?;
         let rows = stmt.query(params).await.map_err(Error::from)?;
