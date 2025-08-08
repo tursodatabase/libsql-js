@@ -817,41 +817,38 @@ impl Statement {
 
     #[napi]
     pub fn columns(&self, env: Env) -> Result<Array> {
-        let rt = runtime()?;
-        rt.block_on(async move {
-            let columns = self.stmt.columns();
-            let mut js_array = env.create_array(columns.len() as u32)?;
-            for (i, col) in columns.iter().enumerate() {
-                let mut js_obj = env.create_object()?;
-                js_obj.set_named_property("name", env.create_string(col.name())?)?;
-                // origin_name -> column
-                if let Some(origin_name) = col.origin_name() {
-                    js_obj.set_named_property("column", env.create_string(origin_name)?)?;
-                } else {
-                    js_obj.set_named_property("column", env.get_null()?)?;
-                }
-                // table_name -> table
-                if let Some(table_name) = col.table_name() {
-                    js_obj.set_named_property("table", env.create_string(table_name)?)?;
-                } else {
-                    js_obj.set_named_property("table", env.get_null()?)?;
-                }
-                // database_name -> database
-                if let Some(database_name) = col.database_name() {
-                    js_obj.set_named_property("database", env.create_string(database_name)?)?;
-                } else {
-                    js_obj.set_named_property("database", env.get_null()?)?;
-                }
-                // decl_type -> type
-                if let Some(decl_type) = col.decl_type() {
-                    js_obj.set_named_property("type", env.create_string(decl_type)?)?;
-                } else {
-                    js_obj.set_named_property("type", env.get_null()?)?;
-                }
-                js_array.set(i as u32, js_obj)?;
+        let columns = self.stmt.columns();
+        let mut js_array = env.create_array(columns.len() as u32)?;
+        for (i, col) in columns.iter().enumerate() {
+            let mut js_obj = env.create_object()?;
+            js_obj.set_named_property("name", env.create_string(col.name())?)?;
+            // origin_name -> column
+            if let Some(origin_name) = col.origin_name() {
+                js_obj.set_named_property("column", env.create_string(origin_name)?)?;
+            } else {
+                js_obj.set_named_property("column", env.get_null()?)?;
             }
-            Ok(js_array)
-        })
+            // table_name -> table
+            if let Some(table_name) = col.table_name() {
+                js_obj.set_named_property("table", env.create_string(table_name)?)?;
+            } else {
+                js_obj.set_named_property("table", env.get_null()?)?;
+            }
+            // database_name -> database
+            if let Some(database_name) = col.database_name() {
+                js_obj.set_named_property("database", env.create_string(database_name)?)?;
+            } else {
+                js_obj.set_named_property("database", env.get_null()?)?;
+            }
+            // decl_type -> type
+            if let Some(decl_type) = col.decl_type() {
+                js_obj.set_named_property("type", env.create_string(decl_type)?)?;
+            } else {
+                js_obj.set_named_property("type", env.get_null()?)?;
+            }
+            js_array.set(i as u32, js_obj)?;
+        }
+        Ok(js_array)
     }
 
     #[napi]
