@@ -47,7 +47,7 @@ test.serial("Statement.run() [positional]", async (t) => {
   const db = t.context.db;
 
   const stmt = await db.prepare("INSERT INTO users(name, email) VALUES (?, ?)");
-  const info = stmt.run(["Carol", "carol@example.net"]);
+  const info = await stmt.run(["Carol", "carol@example.net"]);
   t.is(info.changes, 1);
   t.is(info.lastInsertRowid, 3);
 
@@ -253,9 +253,9 @@ test.serial("Database.transaction()", async (t) => {
     "INSERT INTO users(name, email) VALUES (:name, :email)"
   );
 
-  const insertMany = db.transaction((users) => {
+  const insertMany = db.transaction(async (users) => {
     t.is(db.inTransaction, true);
-    for (const user of users) insert.run(user);
+    for (const user of users) await insert.run(user);
   });
 
   t.is(db.inTransaction, false);
@@ -277,9 +277,9 @@ test.serial("Database.transaction().immediate()", async (t) => {
   const insert = await db.prepare(
     "INSERT INTO users(name, email) VALUES (:name, :email)"
   );
-  const insertMany = db.transaction((users) => {
+  const insertMany = db.transaction(async (users) => {
     t.is(db.inTransaction, true);
-    for (const user of users) insert.run(user);
+    for (const user of users) await insert.run(user);
   });
   t.is(db.inTransaction, false);
   await insertMany.immediate([

@@ -1,6 +1,6 @@
 "use strict";
 
-const { Database: NativeDb, databasePrepareSync, databaseSyncSync, databaseExecSync, statementIterateSync, iteratorNextSync } = require("./index.js");
+const { Database: NativeDb, databasePrepareSync, databaseSyncSync, databaseExecSync, statementRunSync, statementIterateSync, iteratorNextSync } = require("./index.js");
 const SqliteError = require("./sqlite-error.js");
 const Authorization = require("./auth");
 
@@ -263,7 +263,7 @@ class Statement {
    */
   run(...bindParameters) {
     try {
-      return this.stmt.run(...bindParameters);
+      return statementRunSync(this.stmt, ...bindParameters);
     } catch (err) {
       throw convertError(err);
     }

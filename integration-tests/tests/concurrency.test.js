@@ -63,7 +63,7 @@ test("Concurrent writes", async (t) => {
 
     const promises = [];
     for (let i = 0; i < 50; i++) {
-        promises.push(stmt.run({
+        promises.push(await stmt.run({
             id: generateUUID(),
             name: `User${i}`,
             email: `user${i}@example.com`
@@ -103,7 +103,7 @@ test("Concurrent reads and writes", async (t) => {
     const promises = [];
     for (let i = 0; i < 20; i++) {
         promises.push(readStmt.get(aliceId));
-        writeStmt.run({
+        await writeStmt.run({
             id: generateUUID(),
             name: `User${i}`,
             email: `user${i}@example.com`

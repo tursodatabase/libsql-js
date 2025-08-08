@@ -257,9 +257,9 @@ class Statement {
   /**
    * Executes the SQL statement and returns an info object.
    */
-  run(...bindParameters) {
+  async run(...bindParameters) {
     try {
-      return this.stmt.run(...bindParameters);
+      return await this.stmt.run(...bindParameters);
     } catch (err) {
       throw convertError(err);
     }

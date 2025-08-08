@@ -653,27 +653,32 @@ impl Statement {
     ///
     /// * `params` - The parameters to bind to the statement.
     #[napi]
-    pub fn run(&self, params: Option<napi::JsUnknown>) -> Result<RunResult> {
-        let rt = runtime()?;
-        rt.block_on(async move {
-            let total_changes_before = self.conn.total_changes();
-            let start = std::time::Instant::now();
-
-            let params = map_params(&self.stmt, params)?;
-            self.stmt.run(params).await.map_err(Error::from)?;
-            let changes = if self.conn.total_changes() == total_changes_before {
+    pub fn run(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsObject> {
+        self.stmt.reset();
+        let params = map_params(&self.stmt, params)?;
+        let total_changes_before = self.conn.total_changes();
+        let start = std::time::Instant::now();
+        let stmt = self.stmt.clone();
+        let conn = self.conn.clone();
+        
+        let future = async move {
+            stmt.run(params).await.map_err(Error::from)?;
+            let changes = if conn.total_changes() == total_changes_before {
                 0
             } else {
-                self.conn.changes()
+                conn.changes()
             };
-            let last_insert_row_id = self.conn.last_insert_rowid();
+            let last_insert_row_id = conn.last_insert_rowid();
             let duration = start.elapsed().as_secs_f64();
-            self.stmt.reset();
             Ok(RunResult {
                 changes: changes as f64,
                 duration,
                 lastInsertRowid: last_insert_row_id,
             })
+        };
+        
+        env.execute_tokio_future(future, move |&mut _env, result| {
+            Ok(result)
         })
     }
 
@@ -864,6 +869,32 @@ impl Statement {
         self.stmt.interrupt().map_err(Error::from)?;
         Ok(())
     }
+}
+
+/// Runs a statement in blocking mode.
+#[napi]
+pub fn statement_run_sync(stmt: &Statement, params: Option<napi::JsUnknown>) -> Result<RunResult> {
+    stmt.stmt.reset();
+    let rt = runtime()?;
+    rt.block_on(async move {
+        let params = map_params(&stmt.stmt, params)?;
+        let total_changes_before = stmt.conn.total_changes();
+        let start = std::time::Instant::now();
+
+        stmt.stmt.run(params).await.map_err(Error::from)?;
+        let changes = if stmt.conn.total_changes() == total_changes_before {
+            0
+        } else {
+            stmt.conn.changes()
+        };
+        let last_insert_row_id = stmt.conn.last_insert_rowid();
+        let duration = start.elapsed().as_secs_f64();
+        Ok(RunResult {
+            changes: changes as f64,
+            duration,
+            lastInsertRowid: last_insert_row_id,
+        })
+    })
 }
 
 #[napi]

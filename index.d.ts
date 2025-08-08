@@ -27,6 +27,8 @@ export declare function databasePrepareSync(db: Database, sql: string): Statemen
 export declare function databaseSyncSync(db: Database): SyncResult
 /** Executes SQL in blocking mode. */
 export declare function databaseExecSync(db: Database, sql: string): void
+/** Runs a statement in blocking mode. */
+export declare function statementRunSync(stmt: Statement, params?: unknown | undefined | null): RunResult
 export declare function statementIterateSync(stmt: Statement, params?: unknown | undefined | null): RowsIterator
 /** SQLite `run()` result object */
 export interface RunResult {
@@ -148,7 +150,7 @@ export declare class Statement {
    *
    * * `params` - The parameters to bind to the statement.
    */
-  run(params?: unknown | undefined | null): RunResult
+  run(params?: unknown | undefined | null): object
   /**
    * Executes a SQL statement and returns the first row.
    *
