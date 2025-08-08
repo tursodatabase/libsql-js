@@ -47,21 +47,21 @@ test.serial("Statement.run() [positional]", async (t) => {
   const db = t.context.db;
 
   const stmt = await db.prepare("INSERT INTO users(name, email) VALUES (?, ?)");
-  const info = stmt.run(["Carol", "carol@example.net"]);
+  const info = await stmt.run(["Carol", "carol@example.net"]);
   t.is(info.changes, 1);
   t.is(info.lastInsertRowid, 3);
 
   // Verify that the data is inserted
   const stmt2 = await db.prepare("SELECT * FROM users WHERE id = 3");
-  t.is(stmt2.get().name, "Carol");
-  t.is(stmt2.get().email, "carol@example.net");
+  t.is((await stmt2.get()).name, "Carol");
+  t.is((await stmt2.get()).email, "carol@example.net");
 });
 
 test.serial("Statement.get() returns no rows", async (t) => {
   const db = t.context.db;
 
   const stmt = await db.prepare("SELECT * FROM users WHERE id = 0");
-  t.is(stmt.get(), undefined);
+  t.is((await stmt.get()), undefined);
 });
 
 test.serial("Statement.get() [no parameters]", async (t) => {
@@ -70,7 +70,7 @@ test.serial("Statement.get() [no parameters]", async (t) => {
   var stmt = 0;
 
   stmt = await db.prepare("SELECT * FROM users");
-  t.is(stmt.get().name, "Alice");
+  t.is((await stmt.get()).name, "Alice");
   t.deepEqual(await stmt.raw().get(), [1, 'Alice', 'alice@example.org']);
 });
 
@@ -80,15 +80,15 @@ test.serial("Statement.get() [positional]", async (t) => {
   var stmt = 0;
 
   stmt = await db.prepare("SELECT * FROM users WHERE id = ?");
-  t.is(stmt.get(0), undefined);
-  t.is(stmt.get([0]), undefined);
-  t.is(stmt.get(1).name, "Alice");
-  t.is(stmt.get(2).name, "Bob");
+  t.is((await stmt.get(0)), undefined);
+  t.is((await stmt.get([0])), undefined);
+  t.is((await stmt.get(1)).name, "Alice");
+  t.is((await stmt.get(2)).name, "Bob");
 
   stmt = await db.prepare("SELECT * FROM users WHERE id = ?1");
-  t.is(stmt.get({1: 0}), undefined);
-  t.is(stmt.get({1: 1}).name, "Alice");
-  t.is(stmt.get({1: 2}).name, "Bob");
+  t.is((await stmt.get({1: 0})), undefined);
+  t.is((await stmt.get({1: 1})).name, "Alice");
+  t.is((await stmt.get({1: 2})).name, "Bob");
 });
 
 test.serial("Statement.get() [named]", async (t) => {
@@ -97,19 +97,19 @@ test.serial("Statement.get() [named]", async (t) => {
   var stmt = undefined;
 
   stmt = await db.prepare("SELECT * FROM users WHERE id = :id");
-  t.is(stmt.get({ id: 0 }), undefined);
-  t.is(stmt.get({ id: 1 }).name, "Alice");
-  t.is(stmt.get({ id: 2 }).name, "Bob");
+  t.is((await stmt.get({ id: 0 })), undefined);
+  t.is((await stmt.get({ id: 1 })).name, "Alice");
+  t.is((await stmt.get({ id: 2 })).name, "Bob");
 
   stmt = await db.prepare("SELECT * FROM users WHERE id = @id");
-  t.is(stmt.get({ id: 0 }), undefined);
-  t.is(stmt.get({ id: 1 }).name, "Alice");
-  t.is(stmt.get({ id: 2 }).name, "Bob");
+  t.is((await stmt.get({ id: 0 })), undefined);
+  t.is((await stmt.get({ id: 1 })).name, "Alice");
+  t.is((await stmt.get({ id: 2 })).name, "Bob");
 
   stmt = await db.prepare("SELECT * FROM users WHERE id = $id");
-  t.is(stmt.get({ id: 0 }), undefined);
-  t.is(stmt.get({ id: 1 }).name, "Alice");
-  t.is(stmt.get({ id: 2 }).name, "Bob");
+  t.is((await stmt.get({ id: 0 })), undefined);
+  t.is((await stmt.get({ id: 1 })).name, "Alice");
+  t.is((await stmt.get({ id: 2 })).name, "Bob");
 });
 
 
@@ -117,7 +117,7 @@ test.serial("Statement.get() [raw]", async (t) => {
   const db = t.context.db;
 
   const stmt = await db.prepare("SELECT * FROM users WHERE id = ?");
-  t.deepEqual(stmt.raw().get(1), [1, "Alice", "alice@example.org"]);
+  t.deepEqual(await stmt.raw().get(1), [1, "Alice", "alice@example.org"]);
 });
 
 test.serial("Statement.iterate() [empty]", async (t) => {
@@ -253,9 +253,9 @@ test.serial("Database.transaction()", async (t) => {
     "INSERT INTO users(name, email) VALUES (:name, :email)"
   );
 
-  const insertMany = db.transaction((users) => {
+  const insertMany = db.transaction(async (users) => {
     t.is(db.inTransaction, true);
-    for (const user of users) insert.run(user);
+    for (const user of users) await insert.run(user);
   });
 
   t.is(db.inTransaction, false);
@@ -267,9 +267,9 @@ test.serial("Database.transaction()", async (t) => {
   t.is(db.inTransaction, false);
 
   const stmt = await db.prepare("SELECT * FROM users WHERE id = ?");
-  t.is(stmt.get(3).name, "Joey");
-  t.is(stmt.get(4).name, "Sally");
-  t.is(stmt.get(5).name, "Junior");
+  t.is((await stmt.get(3)).name, "Joey");
+  t.is((await stmt.get(4)).name, "Sally");
+  t.is((await stmt.get(5)).name, "Junior");
 });
 
 test.serial("Database.transaction().immediate()", async (t) => {
@@ -277,9 +277,9 @@ test.serial("Database.transaction().immediate()", async (t) => {
   const insert = await db.prepare(
     "INSERT INTO users(name, email) VALUES (:name, :email)"
   );
-  const insertMany = db.transaction((users) => {
+  const insertMany = db.transaction(async (users) => {
     t.is(db.inTransaction, true);
-    for (const user of users) insert.run(user);
+    for (const user of users) await insert.run(user);
   });
   t.is(db.inTransaction, false);
   await insertMany.immediate([

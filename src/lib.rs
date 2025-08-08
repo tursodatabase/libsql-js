@@ -36,7 +36,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::{runtime::Runtime, sync::Mutex};
+use tokio::runtime::Runtime;
 use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
 struct Error(libsql::Error);
@@ -219,7 +219,7 @@ pub struct Database {
     // The libSQL database instance.
     db: libsql::Database,
     // The libSQL connection instance.
-    conn: Option<Arc<tokio::sync::Mutex<libsql::Connection>>>,
+    conn: Option<Arc<libsql::Connection>>,
     // Whether to use safe integers by default.
     default_safe_integers: AtomicBool,
     // Whether to use memory-only mode.
@@ -334,7 +334,7 @@ impl Database {
         }
         Ok(Database {
             db,
-            conn: Some(Arc::new(Mutex::new(conn))),
+            conn: Some(Arc::new(conn)),
             default_safe_integers,
             memory,
         })
@@ -349,15 +349,11 @@ impl Database {
     /// Returns whether the database is in a transaction.
     #[napi]
     pub fn in_transaction(&self) -> Result<bool> {
-        let rt = runtime()?;
         let conn = match &self.conn {
             Some(conn) => conn.clone(),
             None => return Ok(false),
         };
-        Ok(rt.block_on(async move {
-            let conn = conn.lock().await;
-            !conn.is_autocommit()
-        }))
+        Ok(!conn.is_autocommit())
     }
 
     /// Prepares a statement for execution.
@@ -381,10 +377,7 @@ impl Database {
                 ));
             }
         };
-        let stmt = {
-            let conn = conn.lock().await;
-            conn.prepare(&sql).await.map_err(Error::from)?
-        };
+        let stmt = { conn.prepare(&sql).await.map_err(Error::from)? };
         let mode = AccessMode {
             safe_ints: self.default_safe_integers.load(Ordering::SeqCst).into(),
             raw: false.into(),
@@ -453,10 +446,7 @@ impl Database {
             let auth_arc = auth_arc.clone();
             move |ctx: &libsql::AuthContext| auth_arc.authorize(ctx)
         };
-        let rt = runtime()?;
-        let guard_conn = rt.block_on(async { conn.lock().await });
-        guard_conn
-            .authorizer(Some(std::sync::Arc::new(closure)))
+        conn.authorizer(Some(std::sync::Arc::new(closure)))
             .map_err(Error::from)?;
         Ok(())
     }
@@ -482,7 +472,6 @@ impl Database {
             }
         };
         rt.block_on(async move {
-            let conn = conn.lock().await;
             conn.load_extension_enable().map_err(Error::from)?;
             if let Err(err) = conn.load_extension(&path, entry_point.as_deref()) {
                 let _ = conn.load_extension_disable();
@@ -512,17 +501,18 @@ impl Database {
     /// * `env` - The environment.
     /// * `sql` - The SQL statement to execute.
     #[napi]
-    pub fn exec(&self, env: Env, sql: String) -> Result<()> {
-        let rt = runtime()?;
+    pub async fn exec(&self, sql: String) -> Result<()> {
         let conn = match &self.conn {
             Some(conn) => conn.clone(),
-            None => return Err(throw_database_closed_error(&env).into()),
+            None => {
+                return Err(throw_sqlite_error(
+                    "The database connection is not open".to_string(),
+                    "SQLITE_NOTOPEN".to_string(),
+                    0,
+                ));
+            }
         };
-        rt.block_on(async move {
-            let conn = conn.lock().await;
-            conn.execute_batch(&sql).await
-        })
-        .map_err(Error::from)?;
+        conn.execute_batch(&sql).await.map_err(Error::from)?;
         Ok(())
     }
 
@@ -547,16 +537,11 @@ impl Database {
     /// * `env` - The environment.
     #[napi]
     pub fn interrupt(&self, env: Env) -> Result<()> {
-        let rt = runtime()?;
         let conn = match &self.conn {
             Some(conn) => conn.clone(),
             None => return Err(throw_database_closed_error(&env).into()),
         };
-        rt.block_on(async move {
-            let conn = conn.lock().await;
-            conn.interrupt()
-        })
-        .map_err(Error::from)?;
+        conn.interrupt().map_err(Error::from)?;
         Ok(())
     }
 
@@ -603,6 +588,13 @@ pub fn database_sync_sync(db: &Database) -> Result<SyncResult> {
     rt.block_on(async move { db.sync().await })
 }
 
+/// Executes SQL in blocking mode.
+#[napi]
+pub fn database_exec_sync(db: &Database, sql: String) -> Result<()> {
+    let rt = runtime()?;
+    rt.block_on(async move { db.exec(sql).await })
+}
+
 fn is_remote_path(path: &str) -> bool {
     path.starts_with("libsql://") || path.starts_with("http://") || path.starts_with("https://")
 }
@@ -618,9 +610,9 @@ fn throw_database_closed_error(env: &Env) -> napi::Error {
 #[napi]
 pub struct Statement {
     // The libSQL connection instance.
-    conn: Arc<tokio::sync::Mutex<libsql::Connection>>,
+    conn: Arc<libsql::Connection>,
     // The libSQL statement instance.
-    stmt: Arc<tokio::sync::Mutex<libsql::Statement>>,
+    stmt: Arc<libsql::Statement>,
     // The column names.
     column_names: Vec<std::ffi::CString>,
     // The access mode.
@@ -637,7 +629,7 @@ impl Statement {
     /// * `stmt` - The libSQL statement instance.
     /// * `mode` - The access mode.
     pub(crate) fn new(
-        conn: Arc<tokio::sync::Mutex<libsql::Connection>>,
+        conn: Arc<libsql::Connection>,
         stmt: libsql::Statement,
         mode: AccessMode,
     ) -> Self {
@@ -646,7 +638,7 @@ impl Statement {
             .iter()
             .map(|c| std::ffi::CString::new(c.name().to_string()).unwrap())
             .collect();
-        let stmt = Arc::new(tokio::sync::Mutex::new(stmt));
+        let stmt = Arc::new(stmt);
         Self {
             conn,
             stmt,
@@ -661,15 +653,15 @@ impl Statement {
     ///
     /// * `params` - The parameters to bind to the statement.
     #[napi]
-    pub fn run(&self, params: Option<napi::JsUnknown>) -> Result<RunResult> {
-        let rt = runtime()?;
-        rt.block_on(async move {
-            let conn = self.conn.lock().await;
-            let total_changes_before = conn.total_changes();
-            let start = std::time::Instant::now();
+    pub fn run(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsObject> {
+        self.stmt.reset();
+        let params = map_params(&self.stmt, params)?;
+        let total_changes_before = self.conn.total_changes();
+        let start = std::time::Instant::now();
+        let stmt = self.stmt.clone();
+        let conn = self.conn.clone();
 
-            let mut stmt = self.stmt.lock().await;
-            let params = map_params(&stmt, params)?;
+        let future = async move {
             stmt.run(params).await.map_err(Error::from)?;
             let changes = if conn.total_changes() == total_changes_before {
                 0
@@ -678,13 +670,14 @@ impl Statement {
             };
             let last_insert_row_id = conn.last_insert_rowid();
             let duration = start.elapsed().as_secs_f64();
-            stmt.reset();
             Ok(RunResult {
                 changes: changes as f64,
                 duration,
                 lastInsertRowid: last_insert_row_id,
             })
-        })
+        };
+
+        env.execute_tokio_future(future, move |&mut _env, result| Ok(result))
     }
 
     /// Executes a SQL statement and returns the first row.
@@ -694,36 +687,35 @@ impl Statement {
     /// * `env` - The environment.
     /// * `params` - The parameters to bind to the statement.
     #[napi]
-    pub fn get(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsUnknown> {
-        let rt = runtime()?;
-
+    pub fn get(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsObject> {
         let safe_ints = self.mode.safe_ints.load(Ordering::SeqCst);
         let raw = self.mode.raw.load(Ordering::SeqCst);
         let pluck = self.mode.pluck.load(Ordering::SeqCst);
         let timed = self.mode.timing.load(Ordering::SeqCst);
+
+        let params = map_params(&self.stmt, params)?;
+        let stmt = self.stmt.clone();
+        let column_names = self.column_names.clone();
 
         let start = if timed {
             Some(std::time::Instant::now())
         } else {
             None
         };
-        rt.block_on(async move {
-            let mut stmt = self.stmt.lock().await;
-            let params = map_params(&stmt, params)?;
-            let mut rows = stmt.query(params).await.map_err(Error::from)?;
+
+        let stmt_fut = stmt.clone();
+        let future = async move {
+            let mut rows = stmt_fut.query(params).await.map_err(Error::from)?;
             let row = rows.next().await.map_err(Error::from)?;
             let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
-            let result = Self::get_internal(
-                &env,
-                &row,
-                &self.column_names,
-                safe_ints,
-                raw,
-                pluck,
-                duration,
-            );
+            Ok((row, duration))
+        };
+
+        env.execute_tokio_future(future, move |&mut env, (row, duration)| {
+            let result =
+                Self::get_internal(&env, &row, &column_names, safe_ints, raw, pluck, duration);
             stmt.reset();
-            result
+            Ok(result)
         })
     }
 
@@ -769,22 +761,15 @@ impl Statement {
     /// * `params` - The parameters to bind to the statement.
     #[napi]
     pub fn iterate(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsObject> {
-        let rt = runtime()?;
         let safe_ints = self.mode.safe_ints.load(Ordering::SeqCst);
         let raw = self.mode.raw.load(Ordering::SeqCst);
         let pluck = self.mode.pluck.load(Ordering::SeqCst);
         let stmt = self.stmt.clone();
-        let params = {
-            let stmt = stmt.clone();
-            rt.block_on(async move {
-                let mut stmt = stmt.lock().await;
-                stmt.reset();
-                map_params(&stmt, params).unwrap()
-            })
-        };
+        stmt.reset();
+        let params = map_params(&stmt, params).unwrap();
         let stmt = self.stmt.clone();
         let future = async move {
-            let rows = stmt.lock().await.query(params).await.map_err(Error::from)?;
+            let rows = stmt.query(params).await.map_err(Error::from)?;
             Ok::<_, napi::Error>(rows)
         };
         let column_names = self.column_names.clone();
@@ -801,11 +786,7 @@ impl Statement {
 
     #[napi]
     pub fn raw(&self, raw: Option<bool>) -> Result<&Self> {
-        let rt = runtime()?;
-        let returns_data = rt.block_on(async move {
-            let stmt = self.stmt.lock().await;
-            !stmt.columns().is_empty()
-        });
+        let returns_data = !self.stmt.columns().is_empty();
         if !returns_data {
             return Err(napi::Error::from_reason(
                 "The raw() method is only for statements that return data",
@@ -833,42 +814,38 @@ impl Statement {
 
     #[napi]
     pub fn columns(&self, env: Env) -> Result<Array> {
-        let rt = runtime()?;
-        rt.block_on(async move {
-            let stmt = self.stmt.lock().await;
-            let columns = stmt.columns();
-            let mut js_array = env.create_array(columns.len() as u32)?;
-            for (i, col) in columns.iter().enumerate() {
-                let mut js_obj = env.create_object()?;
-                js_obj.set_named_property("name", env.create_string(col.name())?)?;
-                // origin_name -> column
-                if let Some(origin_name) = col.origin_name() {
-                    js_obj.set_named_property("column", env.create_string(origin_name)?)?;
-                } else {
-                    js_obj.set_named_property("column", env.get_null()?)?;
-                }
-                // table_name -> table
-                if let Some(table_name) = col.table_name() {
-                    js_obj.set_named_property("table", env.create_string(table_name)?)?;
-                } else {
-                    js_obj.set_named_property("table", env.get_null()?)?;
-                }
-                // database_name -> database
-                if let Some(database_name) = col.database_name() {
-                    js_obj.set_named_property("database", env.create_string(database_name)?)?;
-                } else {
-                    js_obj.set_named_property("database", env.get_null()?)?;
-                }
-                // decl_type -> type
-                if let Some(decl_type) = col.decl_type() {
-                    js_obj.set_named_property("type", env.create_string(decl_type)?)?;
-                } else {
-                    js_obj.set_named_property("type", env.get_null()?)?;
-                }
-                js_array.set(i as u32, js_obj)?;
+        let columns = self.stmt.columns();
+        let mut js_array = env.create_array(columns.len() as u32)?;
+        for (i, col) in columns.iter().enumerate() {
+            let mut js_obj = env.create_object()?;
+            js_obj.set_named_property("name", env.create_string(col.name())?)?;
+            // origin_name -> column
+            if let Some(origin_name) = col.origin_name() {
+                js_obj.set_named_property("column", env.create_string(origin_name)?)?;
+            } else {
+                js_obj.set_named_property("column", env.get_null()?)?;
             }
-            Ok(js_array)
-        })
+            // table_name -> table
+            if let Some(table_name) = col.table_name() {
+                js_obj.set_named_property("table", env.create_string(table_name)?)?;
+            } else {
+                js_obj.set_named_property("table", env.get_null()?)?;
+            }
+            // database_name -> database
+            if let Some(database_name) = col.database_name() {
+                js_obj.set_named_property("database", env.create_string(database_name)?)?;
+            } else {
+                js_obj.set_named_property("database", env.get_null()?)?;
+            }
+            // decl_type -> type
+            if let Some(decl_type) = col.decl_type() {
+                js_obj.set_named_property("type", env.create_string(decl_type)?)?;
+            } else {
+                js_obj.set_named_property("type", env.get_null()?)?;
+            }
+            js_array.set(i as u32, js_obj)?;
+        }
+        Ok(js_array)
     }
 
     #[napi]
@@ -881,14 +858,73 @@ impl Statement {
 
     #[napi]
     pub fn interrupt(&self) -> Result<()> {
-        let rt = runtime()?;
-        rt.block_on(async move {
-            let mut stmt = self.stmt.lock().await;
-            stmt.interrupt()
-        })
-        .map_err(Error::from)?;
+        self.stmt.interrupt().map_err(Error::from)?;
         Ok(())
     }
+}
+
+/// Gets first row from statement in blocking mode.
+#[napi]
+pub fn statement_get_sync(
+    stmt: &Statement,
+    env: Env,
+    params: Option<napi::JsUnknown>,
+) -> Result<napi::JsUnknown> {
+    let safe_ints = stmt.mode.safe_ints.load(Ordering::SeqCst);
+    let raw = stmt.mode.raw.load(Ordering::SeqCst);
+    let pluck = stmt.mode.pluck.load(Ordering::SeqCst);
+    let timed = stmt.mode.timing.load(Ordering::SeqCst);
+
+    let start = if timed {
+        Some(std::time::Instant::now())
+    } else {
+        None
+    };
+
+    let rt = runtime()?;
+    rt.block_on(async move {
+        let params = map_params(&stmt.stmt, params)?;
+        let mut rows = stmt.stmt.query(params).await.map_err(Error::from)?;
+        let row = rows.next().await.map_err(Error::from)?;
+        let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
+        let result = Statement::get_internal(
+            &env,
+            &row,
+            &stmt.column_names,
+            safe_ints,
+            raw,
+            pluck,
+            duration,
+        );
+        stmt.stmt.reset();
+        result
+    })
+}
+
+/// Runs a statement in blocking mode.
+#[napi]
+pub fn statement_run_sync(stmt: &Statement, params: Option<napi::JsUnknown>) -> Result<RunResult> {
+    stmt.stmt.reset();
+    let rt = runtime()?;
+    rt.block_on(async move {
+        let params = map_params(&stmt.stmt, params)?;
+        let total_changes_before = stmt.conn.total_changes();
+        let start = std::time::Instant::now();
+
+        stmt.stmt.run(params).await.map_err(Error::from)?;
+        let changes = if stmt.conn.total_changes() == total_changes_before {
+            0
+        } else {
+            stmt.conn.changes()
+        };
+        let last_insert_row_id = stmt.conn.last_insert_rowid();
+        let duration = start.elapsed().as_secs_f64();
+        Ok(RunResult {
+            changes: changes as f64,
+            duration,
+            lastInsertRowid: last_insert_row_id,
+        })
+    })
 }
 
 #[napi]
@@ -903,7 +939,6 @@ pub fn statement_iterate_sync(
     let pluck = stmt.mode.pluck.load(Ordering::SeqCst);
     let stmt = stmt.stmt.clone();
     let (rows, column_names) = rt.block_on(async move {
-        let mut stmt = stmt.lock().await;
         stmt.reset();
         let params = map_params(&stmt, params)?;
         let rows = stmt.query(params).await.map_err(Error::from)?;

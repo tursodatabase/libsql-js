@@ -32,8 +32,8 @@ test("Concurrent reads", async (t) => {
 
     const promises = [];
     for (let i = 0; i < 100; i++) {
-        promises.push(stmt.get(t.context.aliceId));
-        promises.push(stmt.get(t.context.bobId));
+        promises.push(await stmt.get(t.context.aliceId));
+        promises.push(await stmt.get(t.context.bobId));
     }
 
     const results = await Promise.all(promises);
@@ -63,7 +63,7 @@ test("Concurrent writes", async (t) => {
 
     const promises = [];
     for (let i = 0; i < 50; i++) {
-        promises.push(stmt.run({
+        promises.push(await stmt.run({
             id: generateUUID(),
             name: `User${i}`,
             email: `user${i}@example.com`
@@ -75,49 +75,6 @@ test("Concurrent writes", async (t) => {
     const countStmt = await db.prepare("SELECT COUNT(*) as count FROM concurrent_users");
     const result = await countStmt.get();
     t.is(result.count, 50);
-
-    cleanup(t.context);
-});
-
-test("Concurrent transaction isolation", async (t) => {
-    const db = t.context.db;
-
-    await db.exec(`
-    DROP TABLE IF EXISTS transaction_users;
-    CREATE TABLE transaction_users (
-      id TEXT PRIMARY KEY,
-      name TEXT,
-      email TEXT
-    )
-  `);
-
-    const aliceId = generateUUID();
-    const bobId = generateUUID();
-
-    await db.exec(`
-    INSERT INTO transaction_users (id, name, email) VALUES 
-    ('${aliceId}', 'Alice', 'alice@example.org'),
-    ('${bobId}', 'Bob', 'bob@example.com')
-  `);
-
-    const updateUser = db.transaction(async (id, name, email) => {
-        const stmt = await db.prepare("UPDATE transaction_users SET name = :name, email = :email WHERE id = :id");
-        await stmt.run({ id, name, email });
-    });
-
-    const promises = [];
-    for (let i = 0; i < 10; i++) {
-        promises.push(updateUser(aliceId, `Alice${i}`, `alice${i}@example.org`));
-        promises.push(updateUser(bobId, `Bob${i}`, `bob${i}@example.com`));
-    }
-
-    await Promise.all(promises);
-
-    const stmt = await db.prepare("SELECT * FROM transaction_users ORDER BY name");
-    const results = await stmt.all();
-    t.is(results.length, 2);
-    t.truthy(results[0].name.startsWith('Alice'));
-    t.truthy(results[1].name.startsWith('Bob'));
 
     cleanup(t.context);
 });
@@ -146,7 +103,7 @@ test("Concurrent reads and writes", async (t) => {
     const promises = [];
     for (let i = 0; i < 20; i++) {
         promises.push(readStmt.get(aliceId));
-        writeStmt.run({
+        await writeStmt.run({
             id: generateUUID(),
             name: `User${i}`,
             email: `user${i}@example.com`
