@@ -761,18 +761,12 @@ impl Statement {
     /// * `params` - The parameters to bind to the statement.
     #[napi]
     pub fn iterate(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsObject> {
-        let rt = runtime()?;
         let safe_ints = self.mode.safe_ints.load(Ordering::SeqCst);
         let raw = self.mode.raw.load(Ordering::SeqCst);
         let pluck = self.mode.pluck.load(Ordering::SeqCst);
         let stmt = self.stmt.clone();
-        let params = {
-            let stmt = stmt.clone();
-            rt.block_on(async move {
-                stmt.reset();
-                map_params(&stmt, params).unwrap()
-            })
-        };
+        stmt.reset();
+        let params = map_params(&stmt, params).unwrap();
         let stmt = self.stmt.clone();
         let future = async move {
             let rows = stmt.query(params).await.map_err(Error::from)?;
