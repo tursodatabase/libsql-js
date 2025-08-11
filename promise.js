@@ -1,6 +1,6 @@
 "use strict";
 
-const { Database: NativeDb } = require("./index.js");
+const { Database: NativeDb, connect: nativeConnect } = require("./index.js");
 const SqliteError = require("./sqlite-error.js");
 const Authorization = require("./auth");
 
@@ -29,6 +29,17 @@ function convertError(err) {
 }
 
 /**
+ * Creates a new database connection.
+ *
+ * @param {string} path - Path to the database file.
+ * @param {object} opts - Options.
+ */
+const connect = async (path, opts) => {
+  const db = await nativeConnect(path, opts);
+  return new Database(db);
+};
+
+/**
  * Database represents a connection that can prepare and execute SQL statements.
  */
 class Database {
@@ -38,10 +49,9 @@ class Database {
    * @constructor
    * @param {string} path - Path to the database file.
    */
-  constructor(path, opts) {
-    this.db = new NativeDb(path, opts);
+  constructor(db) {
+    this.db = db;
     this.memory = this.db.memory
-    const db = this.db;
     Object.defineProperties(this, {
       inTransaction: {
         get() {
@@ -346,6 +356,9 @@ class Statement {
   }
 }
 
-module.exports = Database;
-module.exports.SqliteError = SqliteError;
-module.exports.Authorization = Authorization;
+module.exports = {
+  Database,
+  connect,
+  SqliteError,
+  Authorization,
+};

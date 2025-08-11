@@ -310,9 +310,10 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { Database, databasePrepareSync, databaseSyncSync, databaseExecSync, Statement, statementGetSync, statementRunSync, statementIterateSync, RowsIterator, iteratorNextSync, Record } = nativeBinding
+const { Database, connect, databasePrepareSync, databaseSyncSync, databaseExecSync, Statement, statementGetSync, statementRunSync, statementIterateSync, RowsIterator, iteratorNextSync, Record } = nativeBinding
 
 module.exports.Database = Database
+module.exports.connect = connect
 module.exports.databasePrepareSync = databasePrepareSync
 module.exports.databaseSyncSync = databaseSyncSync
 module.exports.databaseExecSync = databaseExecSync

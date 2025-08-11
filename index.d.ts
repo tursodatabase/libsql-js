@@ -14,6 +14,7 @@ export interface Options {
   encryptionKey?: string
   remoteEncryptionKey?: string
 }
+export declare function connect(path: string, opts?: Options | undefined | null): Promise<Database>
 /** Result of a database sync operation. */
 export interface SyncResult {
   /** The number of frames synced. */

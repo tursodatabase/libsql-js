@@ -148,9 +148,9 @@ test("Concurrent operations with timeout should handle busy database", async (t)
 
 const connect = async (path_opt, options = {}) => {
     const path = path_opt ?? `test-${crypto.randomBytes(8).toString('hex')}.db`;
-    const x = await import("libsql/promise");
-    const db = new x.default(process.env.LIBSQL_DATABASE ?? path, options);
-    return [db, x.SqliteError, path];
+    const libsql = await import("libsql/promise");
+    const db = await libsql.connect(process.env.LIBSQL_DATABASE ?? path, options);
+    return [db, libsql.SqliteError, path];
 };
 
 const cleanup = async (context) => {

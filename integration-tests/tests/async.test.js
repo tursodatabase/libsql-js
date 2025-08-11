@@ -414,9 +414,9 @@ const connect = async (path_opt, options = {}) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;
   const database = process.env.LIBSQL_DATABASE ?? path;
-  const x = await import("libsql/promise");
-  const db = new x.default(database, options);
-  return [db, x.SqliteError];
+  const libsql = await import("libsql/promise");
+  const db = await libsql.connect(database, options);
+  return [db, libsql.SqliteError];
 };
 
 /// Generate a unique database filename

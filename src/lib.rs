@@ -233,6 +233,102 @@ impl Drop for Database {
 }
 
 #[napi]
+pub async fn connect(path: String, opts: Option<Options>) -> Result<Database> {
+    let remote = is_remote_path(&path);
+    let db = if remote {
+        let auth_token = opts
+            .as_ref()
+            .and_then(|o| o.authToken.as_ref())
+            .cloned()
+            .unwrap_or_default();
+        let mut builder = libsql::Builder::new_remote(path.clone(), auth_token);
+        if let Some(encryption_key) = opts
+            .as_ref()
+            .and_then(|o| o.remoteEncryptionKey.as_ref())
+            .cloned()
+        {
+            let encryption_context = libsql::EncryptionContext {
+                key: libsql::EncryptionKey::Base64Encoded(encryption_key),
+            };
+            builder = builder.remote_encryption(encryption_context);
+        }
+        builder.build().await.map_err(Error::from)?
+    } else if let Some(options) = &opts {
+        if let Some(sync_url) = &options.syncUrl {
+            let auth_token = options.authToken.as_ref().cloned().unwrap_or_default();
+
+            let encryption_cipher: String = opts
+                .as_ref()
+                .and_then(|o| o.encryptionCipher.as_ref())
+                .cloned()
+                .unwrap_or("aes256cbc".to_string());
+            let cipher = libsql::Cipher::from_str(&encryption_cipher).map_err(|_| {
+                throw_sqlite_error(
+                    "Invalid encryption cipher".to_string(),
+                    "SQLITE_INVALID_ENCRYPTION_CIPHER".to_string(),
+                    0,
+                )
+            })?;
+            let encryption_key = opts
+                .as_ref()
+                .and_then(|o| o.encryptionKey.as_ref())
+                .cloned()
+                .unwrap_or("".to_string());
+
+            let mut builder =
+                libsql::Builder::new_remote_replica(path.clone(), sync_url.clone(), auth_token);
+
+            let read_your_writes = options.readYourWrites.unwrap_or(true);
+            builder = builder.read_your_writes(read_your_writes);
+
+            if encryption_key.len() > 0 {
+                let encryption_config =
+                    libsql::EncryptionConfig::new(cipher, encryption_key.into());
+                builder = builder.encryption_config(encryption_config);
+            }
+
+            if let Some(remote_encryption_key) = &options.remoteEncryptionKey {
+                let encryption_context = libsql::EncryptionContext {
+                    key: libsql::EncryptionKey::Base64Encoded(remote_encryption_key.to_string()),
+                };
+                builder = builder.remote_encryption(encryption_context);
+            }
+
+            if let Some(period) = options.syncPeriod {
+                if period > 0.0 {
+                    builder = builder.sync_interval(std::time::Duration::from_secs_f64(period));
+                }
+            }
+
+            builder.build().await.map_err(Error::from)?
+        } else {
+            let builder = libsql::Builder::new_local(&path);
+            builder.build().await.map_err(Error::from)?
+        }
+    } else {
+        let builder = libsql::Builder::new_local(&path);
+        builder.build().await.map_err(Error::from)?
+    };
+    let conn = db.connect().map_err(Error::from)?;
+    let default_safe_integers = AtomicBool::new(false);
+    let memory = path == ":memory:";
+    let timeout = match opts {
+        Some(ref opts) => opts.timeout.unwrap_or(0.0),
+        None => 0.0,
+    };
+    if timeout > 0.0 {
+        conn.busy_timeout(Duration::from_millis(timeout as u64))
+            .map_err(Error::from)?
+    }
+    Ok(Database {
+        db,
+        conn: Some(Arc::new(conn)),
+        default_safe_integers,
+        memory,
+    })
+}
+
+#[napi]
 impl Database {
     /// Creates a new database instance.
     ///
@@ -244,100 +340,7 @@ impl Database {
     pub fn new(path: String, opts: Option<Options>) -> Result<Self> {
         ensure_logger();
         let rt = runtime()?;
-        let remote = is_remote_path(&path);
-        let db = if remote {
-            let auth_token = opts
-                .as_ref()
-                .and_then(|o| o.authToken.as_ref())
-                .cloned()
-                .unwrap_or_default();
-            let mut builder = libsql::Builder::new_remote(path.clone(), auth_token);
-            if let Some(encryption_key) = opts
-                .as_ref()
-                .and_then(|o| o.remoteEncryptionKey.as_ref())
-                .cloned()
-            {
-                let encryption_context = libsql::EncryptionContext {
-                    key: libsql::EncryptionKey::Base64Encoded(encryption_key),
-                };
-                builder = builder.remote_encryption(encryption_context);
-            }
-            rt.block_on(builder.build()).map_err(Error::from)?
-        } else if let Some(options) = &opts {
-            if let Some(sync_url) = &options.syncUrl {
-                let auth_token = options.authToken.as_ref().cloned().unwrap_or_default();
-
-                let encryption_cipher: String = opts
-                    .as_ref()
-                    .and_then(|o| o.encryptionCipher.as_ref())
-                    .cloned()
-                    .unwrap_or("aes256cbc".to_string());
-                let cipher = libsql::Cipher::from_str(&encryption_cipher).map_err(|_| {
-                    throw_sqlite_error(
-                        "Invalid encryption cipher".to_string(),
-                        "SQLITE_INVALID_ENCRYPTION_CIPHER".to_string(),
-                        0,
-                    )
-                })?;
-                let encryption_key = opts
-                    .as_ref()
-                    .and_then(|o| o.encryptionKey.as_ref())
-                    .cloned()
-                    .unwrap_or("".to_string());
-
-                let mut builder =
-                    libsql::Builder::new_remote_replica(path.clone(), sync_url.clone(), auth_token);
-
-                let read_your_writes = options.readYourWrites.unwrap_or(true);
-                builder = builder.read_your_writes(read_your_writes);
-
-                if encryption_key.len() > 0 {
-                    let encryption_config =
-                        libsql::EncryptionConfig::new(cipher, encryption_key.into());
-                    builder = builder.encryption_config(encryption_config);
-                }
-
-                if let Some(remote_encryption_key) = &options.remoteEncryptionKey {
-                    let encryption_context = libsql::EncryptionContext {
-                        key: libsql::EncryptionKey::Base64Encoded(
-                            remote_encryption_key.to_string(),
-                        ),
-                    };
-                    builder = builder.remote_encryption(encryption_context);
-                }
-
-                if let Some(period) = options.syncPeriod {
-                    if period > 0.0 {
-                        builder = builder.sync_interval(std::time::Duration::from_secs_f64(period));
-                    }
-                }
-
-                rt.block_on(builder.build()).map_err(Error::from)?
-            } else {
-                let builder = libsql::Builder::new_local(&path);
-                rt.block_on(builder.build()).map_err(Error::from)?
-            }
-        } else {
-            let builder = libsql::Builder::new_local(&path);
-            rt.block_on(builder.build()).map_err(Error::from)?
-        };
-        let conn = db.connect().map_err(Error::from)?;
-        let default_safe_integers = AtomicBool::new(false);
-        let memory = path == ":memory:";
-        let timeout = match opts {
-            Some(ref opts) => opts.timeout.unwrap_or(0.0),
-            None => 0.0,
-        };
-        if timeout > 0.0 {
-            conn.busy_timeout(Duration::from_millis(timeout as u64))
-                .map_err(Error::from)?
-        }
-        Ok(Database {
-            db,
-            conn: Some(Arc::new(conn)),
-            default_safe_integers,
-            memory,
-        })
+        rt.block_on(connect(path, opts))
     }
 
     /// Returns whether the database is in memory-only mode.
