@@ -1,5 +1,5 @@
 {
-  "name": "@libsql/darwin-arm64",
+  "name": "libsql-darwin-arm64",
   "version": "0.6.0-pre.9",
   "repository": {
     "type": "git",
