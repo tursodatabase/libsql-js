@@ -357,8 +357,9 @@ class Statement {
 }
 
 module.exports = {
-  Database,
-  connect,
-  SqliteError,
   Authorization,
+  Database,
+  SqliteError,
+  Statement,
+  connect,
 };
