@@ -195,3 +195,8 @@ Cargo.lock
 !.yarn/versions
 
 *.node
+
+auth.d.ts
+compat.d.ts
+promise.d.ts
+sqlite-error.d.ts

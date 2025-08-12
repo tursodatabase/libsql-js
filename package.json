@@ -17,18 +17,30 @@
     "wasm32",
     "arm"
   ],
-  "main": "wrapper.js",
-  "types": "index.d.ts",
+  "main": "compat.js",
+  "types": "compat.d.ts",
   "exports": {
     ".": {
-      "default": "./wrapper.js",
-      "types": "./index.d.ts"
+      "default": "./compat.js",
+      "types": "./compat.d.ts"
     },
     "./promise": {
       "default": "./promise.js",
       "types": "./promise.d.ts"
     }
   },
+  "files": [
+    "auth.d.ts",
+    "auth.js",
+    "compat.d.ts",
+    "compat.js",
+    "index.d.ts",
+    "index.js",
+    "promise.d.ts",
+    "promise.js",
+    "sqlite-error.d.ts",
+    "sqlite-error.js"
+  ],
   "napi": {
     "name": "libsql",
     "triples": {
@@ -43,7 +55,8 @@
   "license": "MIT",
   "devDependencies": {
     "@napi-rs/cli": "^2.18.4",
-    "ava": "^6.0.1"
+    "ava": "^6.0.1",
+    "typescript": "^5.9.2"
   },
   "ava": {
     "timeout": "3m"
@@ -53,12 +66,21 @@
   },
   "scripts": {
     "artifacts": "napi artifacts",
-    "build": "napi build --platform --release",
+    "build": "npm exec tsc && napi build --platform --release",
     "build:debug": "napi build --platform",
-    "prepublishOnly": "napi prepublish -t npm",
+    "prepublishOnly": "npm exec tsc && napi prepublish -t npm",
     "test": "cd integration-tests && npm i && npm run test",
     "universal": "napi universal",
     "version": "napi version"
   },
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e",
+  "optionalDependencies": {
+    "libsql-win32-x64-msvc": "0.6.0-pre.14",
+    "libsql-darwin-x64": "0.6.0-pre.14",
+    "libsql-linux-x64-gnu": "0.6.0-pre.14",
+    "libsql-darwin-arm64": "0.6.0-pre.14",
+    "libsql-linux-arm64-gnu": "0.6.0-pre.14",
+    "libsql-linux-arm64-musl": "0.6.0-pre.14",
+    "libsql-linux-x64-musl": "0.6.0-pre.14"
+  }
 }
