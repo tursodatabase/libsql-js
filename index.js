@@ -23,7 +23,33 @@ function requireNative() {
   if (target === "linux-arm-gnueabihf" && familySync() == MUSL) {
       target = "linux-arm-musleabihf";
   }
-  return require(`@libsql/${target}`);
+
+  // JS bundlers (webpack, turbopack, rspack, rollup, etc.) use basic static
+  // analysis to determine what paths to include. `target` is not trivially
+  // determinable, so write this code in a way that is. Otherwise we may include
+  // all of `@libsql/*`, which can include other unintended packages/files.
+  switch (target) {
+    case "darwin-arm64":
+      return require("@libsql/darwin-arm64");
+    case "linux-arm64-gnu":
+      return require("@libsql/linux-arm64-gnu");
+    case "linux-arm64-musl":
+      return require("@libsql/linux-arm64-musl");
+    case "darwin-x64":
+      return require("@libsql/darwin-x64");
+    case "win32-x64-msvc":
+      return require("@libsql/win32-x64-msvc");
+    case "linux-x64-gnu":
+      return require("@libsql/linux-x64-gnu");
+    case "linux-x64-musl":
+      return require("@libsql/linux-x64-musl");
+    case "linux-arm-gnueabihf":
+      return require("@libsql/linux-arm-gnueabihf");
+    case "linux-arm-musleabihf":
+      return require("@libsql/linux-arm-musleabihf");
+    default:
+      throw new Error(`unsupported platform: ${target}`);
+  }
 }
 
 const {
