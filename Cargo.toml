@@ -10,7 +10,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-libsql = { version = "0.9.22", features = ["encryption"]  }
+libsql = { version = "0.9.23", features = ["encryption"]  }
 napi = { version = "2", default-features = false, features = ["napi6", "tokio_rt", "async"] }
 napi-derive = "2"
 once_cell = "1.18.0"
