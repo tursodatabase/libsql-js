@@ -23,7 +23,93 @@ function requireNative() {
   if (target === "linux-arm-gnueabihf" && familySync() == MUSL) {
       target = "linux-arm-musleabihf";
   }
-  return require(`@libsql/${target}`);
+
+  // JS bundlers (webpack, turbopack, rspack, rollup, etc.) use basic static
+  // analysis to determine what paths to include. `target` is not trivially
+  // determinable, so write this code in a way that is. Otherwise we may include
+  // all of `@libsql/*`, which can include other unintended packages/files.
+  //
+  // esbuild requires that every `require` is inside of a try-catch, otherwise
+  // it will emit a compile-time error. If it's inside of a try-catch, it will
+  // emit a runtime error.
+  let nativeBinding;
+  let loadError;
+  switch (target) {
+    case "darwin-arm64":
+      try {
+        nativeBinding = require("@libsql/darwin-arm64");
+      } catch (e) {
+        loadError = e;
+      }
+      break;
+    case "linux-arm64-gnu":
+      try {
+        nativeBinding = require("@libsql/linux-arm64-gnu");
+      } catch (e) {
+        loadError = e;
+      }
+      break;
+    case "linux-arm64-musl":
+      try {
+        nativeBinding = require("@libsql/linux-arm64-musl");
+      } catch (e) {
+        loadError = e;
+      }
+      break;
+    case "darwin-x64":
+      try {
+        nativeBinding = require("@libsql/darwin-x64");
+      } catch (e) {
+        loadError = e;
+      }
+      break;
+    case "win32-x64-msvc":
+      try {
+        nativeBinding = require("@libsql/win32-x64-msvc");
+      } catch (e) {
+        loadError = e;
+      }
+      break;
+    case "linux-x64-gnu":
+      try {
+        nativeBinding = require("@libsql/linux-x64-gnu");
+      } catch (e) {
+        loadError = e;
+      }
+      break;
+    case "linux-x64-musl":
+      try {
+        nativeBinding = require("@libsql/linux-x64-musl");
+      } catch (e) {
+        loadError = e;
+      }
+      break;
+    case "linux-arm-gnueabihf":
+      try {
+        nativeBinding = require("@libsql/linux-arm-gnueabihf");
+      } catch (e) {
+        loadError = e;
+      }
+      break;
+    case "linux-arm-musleabihf":
+      try {
+        nativeBinding = require("@libsql/linux-arm-musleabihf");
+      } catch (e) {
+        loadError = e;
+      }
+      break;
+    default:
+      throw new Error(`unsupported platform: ${target}`);
+  }
+
+  if (!nativeBinding) {
+    if (loadError) {
+      throw loadError;
+    }
+    throw new Error(`Failed to load native binding`);
+  }
+
+  return nativeBinding;
 }
 
 const {
