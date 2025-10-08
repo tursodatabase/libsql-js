@@ -4,6 +4,10 @@ const { Database: NativeDb, connect: nativeConnect } = require("./index.js");
 const SqliteError = require("./sqlite-error.js");
 const Authorization = require("./auth");
 
+/**
+ * @import {Options as NativeOptions, Statement as NativeStatement} from './index.js'
+ */
+
 function convertError(err) {
   // Handle errors from Rust with JSON-encoded message
   if (typeof err.message === 'string') {
@@ -32,7 +36,7 @@ function convertError(err) {
  * Creates a new database connection.
  *
  * @param {string} path - Path to the database file.
- * @param {object} opts - Options.
+ * @param {NativeOptions} opts - Options.
  */
 const connect = async (path, opts) => {
   const db = await nativeConnect(path, opts);
@@ -47,7 +51,7 @@ class Database {
    * Creates a new database connection. If the database file pointed to by `path` does not exists, it will be created.
    *
    * @constructor
-   * @param {string} path - Path to the database file.
+   * @param {NativeDb} db - Database object
    */
   constructor(db) {
     this.db = db;
@@ -124,6 +128,12 @@ class Database {
     return properties.default.value;
   }
 
+  /**
+   * Execute a pragma statement
+   * @param {string} source - The pragma statement to execute, without the `PRAGMA` prefix.
+   * @param {object} [options] - Options object.
+   * @param {boolean} [options.simple] - If true, return a single value for single-column results.
+   */
   async pragma(source, options) {
     if (options == null) options = {};
     if (typeof source !== 'string') throw new TypeError('Expected first argument to be a string');
@@ -161,6 +171,10 @@ class Database {
     }
   }
 
+  /**
+   * Loads an extension into the database
+   * @param {Parameters<NativeDb['loadExtension']>} args - Arguments to pass to the underlying loadExtension method
+   */
   loadExtension(...args) {
     try {
       this.db.loadExtension(...args);
@@ -211,6 +225,7 @@ class Database {
 
   /**
    * Toggle 64-bit integer support.
+   * @param {boolean} [toggle] - Whether to use safe integers by default.
    */
   defaultSafeIntegers(toggle) {
     this.db.defaultSafeIntegers(toggle);
@@ -226,6 +241,9 @@ class Database {
  * Statement represents a prepared SQL statement that can be executed.
  */
 class Statement {
+  /**
+   * @param {NativeStatement} stmt
+   */
   constructor(stmt) {
     this.stmt = stmt;
   }
@@ -233,7 +251,7 @@ class Statement {
   /**
    * Toggle raw mode.
    *
-   * @param raw Enable or disable raw mode. If you don't pass the parameter, raw mode is enabled.
+   * @param {boolean} [raw] - Enable or disable raw mode. If you don't pass the parameter, raw mode is enabled.
    */
   raw(raw) {
     this.stmt.raw(raw);
@@ -243,7 +261,7 @@ class Statement {
   /**
    * Toggle pluck mode.
    *
-   * @param pluckMode Enable or disable pluck mode. If you don't pass the parameter, pluck mode is enabled.
+   * @param {boolean} [pluckMode] - Enable or disable pluck mode. If you don't pass the parameter, pluck mode is enabled.
    */
   pluck(pluckMode) {
     this.stmt.pluck(pluckMode);
@@ -253,7 +271,7 @@ class Statement {
   /**
    * Toggle query timing.
    *
-   * @param timing Enable or disable query timing. If you don't pass the parameter, query timing is enabled.
+   * @param {boolean} [timingMode] - Enable or disable query timing. If you don't pass the parameter, query timing is enabled.
    */
   timing(timingMode) {
     this.stmt.timing(timingMode);
