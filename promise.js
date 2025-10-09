@@ -8,6 +8,15 @@ const Authorization = require("./auth");
  * @import {Options as NativeOptions, Statement as NativeStatement} from './index.js'
  */
 
+/**
+ * better-sqlite3-compatible types for db.transaction()
+ * @typedef {(...params: any[]) => unknown} VariableArgFunction
+ */
+/**
+ * @template {VariableArgFunction} F
+ * @typedef {F extends (...args: infer A) => unknown ? A : never} ArgumentTypes
+ */
+
 function convertError(err) {
   // Handle errors from Rust with JSON-encoded message
   if (typeof err.message === 'string') {
@@ -56,6 +65,10 @@ class Database {
   constructor(db) {
     this.db = db;
     this.memory = this.db.memory
+
+    /** @type boolean */
+    this.inTransaction;
+
     Object.defineProperties(this, {
       inTransaction: {
         get() {
@@ -94,7 +107,15 @@ class Database {
   /**
    * Returns a function that executes the given function in a transaction.
    *
-   * @param {function} fn - The function to wrap in a transaction.
+   * @template {VariableArgFunction} F
+   * @param {F} fn - The function to wrap in a transaction.
+   * @returns {{
+   *  (...bindParameters: ArgumentTypes<F>): Promise<ReturnType<F>>;
+   *  default(...bindParameters: ArgumentTypes<F>): Promise<ReturnType<F>>;
+   *  deferred(...bindParameters: ArgumentTypes<F>): Promise<ReturnType<F>>;
+   *  immediate(...bindParameters: ArgumentTypes<F>): Promise<ReturnType<F>>;
+   *  exclusive(...bindParameters: ArgumentTypes<F>): Promise<ReturnType<F>>;
+   * }}
    */
   transaction(fn) {
     if (typeof fn !== "function")
