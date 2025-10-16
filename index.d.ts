@@ -153,7 +153,7 @@ export declare class Statement {
    *
    * * `params` - The parameters to bind to the statement.
    */
-  run(params?: unknown | undefined | null): object
+  run(params?: unknown | undefined | null): RunResult
   /**
    * Executes a SQL statement and returns the first row.
    *
