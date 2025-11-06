@@ -97,6 +97,10 @@ jobs:
         run: ${{ matrix.settings.setup }}
         if: ${{ matrix.settings.setup }}
         shell: bash
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.settings.target }}
+        if: ${{ !matrix.settings.docker }}
+        shell: bash
       - name: Setup node x86
         if: matrix.settings.target == 'i686-pc-windows-msvc'
         run: yarn config set supportedArchitectures.cpu "ia32"
