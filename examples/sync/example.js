@@ -8,6 +8,22 @@ if (!url) {
 const authToken = process.env.LIBSQL_AUTH_TOKEN;
 
 const options = { syncUrl: url, authToken: authToken };
+
+// Sync also supports Turso Cloud encryption.
+// 
+// Documentation: https://docs.turso.tech/cloud/encryption
+//
+//
+//   export LIBSQL_ENCRYPTION_KEY="encryption key in base64 format"
+//
+// The encryption key must be encoded in base64 format.
+
+const encryptionKey = process.env.LIBSQL_ENCRYPTION_KEY;
+
+if (encryptionKey) {
+  options.remoteEncryptionKey = encryptionKey;
+}
+
 const db = new Database("hello.db", options);
 
 db.sync();
