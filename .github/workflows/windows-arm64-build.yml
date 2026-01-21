@@ -36,6 +36,13 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64_arm64
+      - name: Configure ARM64 linker
+        shell: pwsh
+        run: |
+          $linker = Join-Path $env:VCToolsInstallDir 'bin\Hostx64\arm64\link.exe'
+          $lib = Join-Path $env:VCToolsInstallDir 'bin\Hostx64\arm64\lib.exe'
+          "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=$linker" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_AR=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Ensure Rust target
         run: rustup target add aarch64-pc-windows-msvc
         shell: bash
