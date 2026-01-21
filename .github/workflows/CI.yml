@@ -109,6 +109,10 @@ jobs:
         if: matrix.settings.target == 'aarch64-pc-windows-msvc'
         with:
           arch: x64_arm64
+      - name: Ensure Rust target
+        if: matrix.settings.target == 'aarch64-pc-windows-msvc'
+        run: rustup target add aarch64-pc-windows-msvc
+        shell: bash
       - name: Setup node x86
         if: matrix.settings.target == 'i686-pc-windows-msvc'
         run: yarn config set supportedArchitectures.cpu "ia32"

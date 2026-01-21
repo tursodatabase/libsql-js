@@ -36,6 +36,9 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64_arm64
+      - name: Ensure Rust target
+        run: rustup target add aarch64-pc-windows-msvc
+        shell: bash
       - name: Install dependencies
         run: yarn install
       - name: Build
