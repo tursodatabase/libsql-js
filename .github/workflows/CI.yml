@@ -31,6 +31,9 @@ jobs:
           - host: windows-latest
             build: yarn build --target x86_64-pc-windows-msvc
             target: x86_64-pc-windows-msvc
+          - host: windows-latest
+            build: yarn build --target aarch64-pc-windows-msvc
+            target: aarch64-pc-windows-msvc
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
@@ -101,6 +104,11 @@ jobs:
         run: rustup target add ${{ matrix.settings.target }}
         if: ${{ !matrix.settings.docker }}
         shell: bash
+      - name: Setup MSVC for ARM64
+        uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.settings.target == 'aarch64-pc-windows-msvc'
+        with:
+          arch: x64_arm64
       - name: Setup node x86
         if: matrix.settings.target == 'i686-pc-windows-msvc'
         run: yarn config set supportedArchitectures.cpu "ia32"
