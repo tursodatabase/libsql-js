@@ -255,7 +255,7 @@ class Statement {
   }
 
   get reader() {
-    throw new Error("not implemented");
+    return this.stmt.columns().length > 0;
   }
 
   /**

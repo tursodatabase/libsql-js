@@ -179,6 +179,10 @@ Toggle query duration timing.
 
 Returns the columns in the result set returned by this prepared statement.
 
+### reader ⇒ boolean
+
+Returns `true` if the statement returns data (i.e., it is a `SELECT` statement or an `INSERT`/`UPDATE`/`DELETE` with a `RETURNING` clause), `false` otherwise.
+
 ### bind([...bindParameters]) ⇒ this
 
 This function is currently not supported.
