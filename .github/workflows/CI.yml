@@ -31,6 +31,9 @@ jobs:
           - host: windows-latest
             build: yarn build --target x86_64-pc-windows-msvc
             target: x86_64-pc-windows-msvc
+          - host: windows-latest
+            build: yarn build --target aarch64-pc-windows-msvc
+            target: aarch64-pc-windows-msvc
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
@@ -100,6 +103,23 @@ jobs:
       - name: Add Rust target
         run: rustup target add ${{ matrix.settings.target }}
         if: ${{ !matrix.settings.docker }}
+        shell: bash
+      - name: Setup MSVC for ARM64
+        uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.settings.target == 'aarch64-pc-windows-msvc'
+        with:
+          arch: x64_arm64
+      - name: Configure ARM64 linker
+        if: matrix.settings.target == 'aarch64-pc-windows-msvc'
+        shell: pwsh
+        run: |
+          $linker = Join-Path $env:VCToolsInstallDir 'bin\Hostx64\arm64\link.exe'
+          $lib = Join-Path $env:VCToolsInstallDir 'bin\Hostx64\arm64\lib.exe'
+          "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=$linker" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_AR=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Ensure Rust target
+        if: matrix.settings.target == 'aarch64-pc-windows-msvc'
+        run: rustup target add aarch64-pc-windows-msvc
         shell: bash
       - name: Setup node x86
         if: matrix.settings.target == 'i686-pc-windows-msvc'
