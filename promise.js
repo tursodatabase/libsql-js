@@ -41,6 +41,26 @@ function convertError(err) {
   return err;
 }
 
+function isQueryOptions(value) {
+  return value != null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.prototype.hasOwnProperty.call(value, "queryTimeout");
+}
+
+function splitBindParameters(bindParameters) {
+  if (bindParameters.length === 0) {
+    return { params: undefined, queryOptions: undefined };
+  }
+  if (bindParameters.length > 1 && isQueryOptions(bindParameters[bindParameters.length - 1])) {
+    return {
+      params: bindParameters.length === 2 ? bindParameters[0] : bindParameters.slice(0, -1),
+      queryOptions: bindParameters[bindParameters.length - 1],
+    };
+  }
+  return { params: bindParameters.length === 1 ? bindParameters[0] : bindParameters, queryOptions: undefined };
+}
+
 /**
  * Creates a new database connection.
  *
@@ -217,9 +237,9 @@ class Database {
    *
    * @param {string} sql - The SQL statement string to execute.
    */
-  async exec(sql) {
+  async exec(sql, queryOptions) {
     try {
-      await this.db.exec(sql);
+      await this.db.exec(sql, queryOptions);
     } catch (err) {
       throw convertError(err);
     }
@@ -308,7 +328,8 @@ class Statement {
    */
   async run(...bindParameters) {
     try {
-      return await this.stmt.run(...bindParameters);
+      const { params, queryOptions } = splitBindParameters(bindParameters);
+      return await this.stmt.run(params, queryOptions);
     } catch (err) {
       throw convertError(err);
     }
@@ -321,7 +342,8 @@ class Statement {
    */
   async get(...bindParameters) {
     try {
-      return await this.stmt.get(...bindParameters);
+      const { params, queryOptions } = splitBindParameters(bindParameters);
+      return await this.stmt.get(params, queryOptions);
     } catch (err) {
       throw convertError(err);
     }
@@ -334,7 +356,8 @@ class Statement {
    */
   async iterate(...bindParameters) {
     try {
-      const it = await this.stmt.iterate(...bindParameters);
+      const { params, queryOptions } = splitBindParameters(bindParameters);
+      const it = await this.stmt.iterate(params, queryOptions);
       return {
         next() {
           return it.next();

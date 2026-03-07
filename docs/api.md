@@ -22,6 +22,7 @@ You can use the `options` parameter to specify various options. Options supporte
 - `syncPeriod`: synchronize the database periodically every `syncPeriod` seconds.
 - `authToken`: authentication token for the provider URL (optional).
 - `timeout`: number of milliseconds to wait on locked database before returning `SQLITE_BUSY` error
+- `defaultQueryTimeout`: default maximum number of milliseconds a query is allowed to run before being interrupted with `SQLITE_INTERRUPT` error
 
 The function returns a `Database` object.
 
@@ -97,13 +98,14 @@ const stmt = db.prepare("SELECT * FROM users");
 
 Loads a SQLite3 extension
 
-### exec(sql) ⇒ this
+### exec(sql[, queryOptions]) ⇒ this
 
 Executes a SQL statement.
 
 | Param  | Type                | Description                          |
 | ------ | ------------------- | ------------------------------------ |
 | sql    | <code>string</code> | The SQL statement string to execute. |
+| queryOptions | <code>object</code> | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
 
 ### interrupt() ⇒ this
 
@@ -119,39 +121,43 @@ Closes the database connection.
 
 ## Methods
 
-### run([...bindParameters]) ⇒ object
+### run([...bindParameters][, queryOptions]) ⇒ object
 
 Executes the SQL statement and returns an info object.
 
 | Param          | Type                          | Description                                      |
 | -------------- | ----------------------------- | ------------------------------------------------ |
 | bindParameters | <code>array of objects</code> | The bind parameters for executing the statement. |
+| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
 
 The returned info object contains two properties: `changes` that describes the number of modified rows and `info.lastInsertRowid` that represents the `rowid` of the last inserted row.
 
-### get([...bindParameters]) ⇒ row
+### get([...bindParameters][, queryOptions]) ⇒ row
 
 Executes the SQL statement and returns the first row.
 
 | Param          | Type                          | Description                                      |
 | -------------- | ----------------------------- | ------------------------------------------------ |
 | bindParameters | <code>array of objects</code> | The bind parameters for executing the statement. |
+| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
 
-### all([...bindParameters]) ⇒ array of rows
+### all([...bindParameters][, queryOptions]) ⇒ array of rows
 
 Executes the SQL statement and returns an array of the resulting rows.
 
 | Param          | Type                          | Description                                      |
 | -------------- | ----------------------------- | ------------------------------------------------ |
 | bindParameters | <code>array of objects</code> | The bind parameters for executing the statement. |
+| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
 
-### iterate([...bindParameters]) ⇒ iterator
+### iterate([...bindParameters][, queryOptions]) ⇒ iterator
 
 Executes the SQL statement and returns an iterator to the resulting rows.
 
 | Param          | Type                          | Description                                      |
 | -------------- | ----------------------------- | ------------------------------------------------ |
 | bindParameters | <code>array of objects</code> | The bind parameters for executing the statement. |
+| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
 
 ### pluck([toggleState]) ⇒ this
 

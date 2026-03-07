@@ -13,6 +13,11 @@ export interface Options {
   encryptionCipher?: string
   encryptionKey?: string
   remoteEncryptionKey?: string
+  defaultQueryTimeout?: number
+}
+/** Per-query execution options. */
+export interface QueryOptions {
+  queryTimeout?: number
 }
 export declare function connect(path: string, opts?: Options | undefined | null): Promise<Database>
 /** Result of a database sync operation. */
@@ -27,12 +32,12 @@ export declare function databasePrepareSync(db: Database, sql: string): Statemen
 /** Syncs the database in blocking mode. */
 export declare function databaseSyncSync(db: Database): SyncResult
 /** Executes SQL in blocking mode. */
-export declare function databaseExecSync(db: Database, sql: string): void
+export declare function databaseExecSync(db: Database, sql: string, queryOptions?: QueryOptions | undefined | null): void
 /** Gets first row from statement in blocking mode. */
-export declare function statementGetSync(stmt: Statement, params?: unknown | undefined | null): unknown
+export declare function statementGetSync(stmt: Statement, params?: unknown | undefined | null, queryOptions?: QueryOptions | undefined | null): unknown
 /** Runs a statement in blocking mode. */
-export declare function statementRunSync(stmt: Statement, params?: unknown | undefined | null): RunResult
-export declare function statementIterateSync(stmt: Statement, params?: unknown | undefined | null): RowsIterator
+export declare function statementRunSync(stmt: Statement, params?: unknown | undefined | null, queryOptions?: QueryOptions | undefined | null): RunResult
+export declare function statementIterateSync(stmt: Statement, params?: unknown | undefined | null, queryOptions?: QueryOptions | undefined | null): RowsIterator
 /** SQLite `run()` result object */
 export interface RunResult {
   changes: number
@@ -116,7 +121,7 @@ export declare class Database {
    * * `env` - The environment.
    * * `sql` - The SQL statement to execute.
    */
-  exec(sql: string): Promise<void>
+  exec(sql: string, queryOptions?: QueryOptions | undefined | null): Promise<void>
   /**
    * Syncs the database.
    *
@@ -153,7 +158,7 @@ export declare class Statement {
    *
    * * `params` - The parameters to bind to the statement.
    */
-  run(params?: unknown | undefined | null): RunResult
+  run(params?: unknown | undefined | null, queryOptions?: QueryOptions | undefined | null): object
   /**
    * Executes a SQL statement and returns the first row.
    *
@@ -162,7 +167,7 @@ export declare class Statement {
    * * `env` - The environment.
    * * `params` - The parameters to bind to the statement.
    */
-  get(params?: unknown | undefined | null): object
+  get(params?: unknown | undefined | null, queryOptions?: QueryOptions | undefined | null): object
   /**
    * Create an iterator over the rows of a statement.
    *
@@ -171,7 +176,7 @@ export declare class Statement {
    * * `env` - The environment.
    * * `params` - The parameters to bind to the statement.
    */
-  iterate(params?: unknown | undefined | null): object
+  iterate(params?: unknown | undefined | null, queryOptions?: QueryOptions | undefined | null): object
   raw(raw?: boolean | undefined | null): this
   pluck(pluck?: boolean | undefined | null): this
   timing(timing?: boolean | undefined | null): this

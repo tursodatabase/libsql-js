@@ -457,6 +457,75 @@ test.serial("Timeout option", async (t) => {
   fs.unlinkSync(path);
 });
 
+test.serial("Query timeout option interrupts long-running query", async (t) => {
+  if (t.context.provider === "sqlite") {
+    t.assert(true);
+    return;
+  }
+
+  const [db, errorType] = await connect(":memory:", { defaultQueryTimeout: 100 });
+  const stmt = db.prepare(
+    "WITH RECURSIVE infinite_loop(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM infinite_loop) SELECT * FROM infinite_loop;"
+  );
+
+  t.throws(() => {
+    stmt.all();
+  }, {
+    instanceOf: errorType,
+    message: "interrupted",
+    code: "SQLITE_INTERRUPT",
+  });
+
+  db.close();
+});
+
+test.serial("Query timeout option allows short-running query", async (t) => {
+  if (t.context.provider === "sqlite") {
+    t.assert(true);
+    return;
+  }
+
+  const [db] = await connect(":memory:", { defaultQueryTimeout: 100 });
+  const stmt = db.prepare("SELECT 1 AS value");
+  t.deepEqual(stmt.get(), { value: 1 });
+  db.close();
+});
+
+test.serial("Per-query timeout option interrupts long-running Statement.all()", async (t) => {
+  if (t.context.provider === "sqlite") {
+    t.assert(true);
+    return;
+  }
+
+  const [db, errorType] = await connect(":memory:");
+  const stmt = db.prepare(
+    "WITH RECURSIVE infinite_loop(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM infinite_loop) SELECT * FROM infinite_loop;"
+  );
+
+  t.throws(() => {
+    stmt.all(undefined, { queryTimeout: 100 });
+  }, {
+    instanceOf: errorType,
+    message: "interrupted",
+    code: "SQLITE_INTERRUPT",
+  });
+
+  db.close();
+});
+
+test.serial("Per-query timeout option is accepted by Database.exec()", async (t) => {
+  if (t.context.provider === "sqlite") {
+    t.assert(true);
+    return;
+  }
+
+  const [db] = await connect(":memory:");
+  db.exec("SELECT 1", { queryTimeout: 100 });
+  t.pass();
+
+  db.close();
+});
+
 test.serial("Statement.reader [SELECT is true]", async (t) => {
   const db = t.context.db;
   const stmt = db.prepare("SELECT * FROM users WHERE id = ?");
