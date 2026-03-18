@@ -344,6 +344,10 @@ test.serial("Database.interrupt()", async (t) => {
   const db = t.context.db;
   const stmt = await db.prepare("WITH RECURSIVE infinite_loop(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM infinite_loop) SELECT * FROM infinite_loop;");
   const fut = stmt.all();
+  // Wait for the query to start executing on the tokio runtime before
+  // interrupting, otherwise the interrupt flag may be set before the first
+  // sqlite3_step() and get consumed without effect on some platforms.
+  await new Promise(resolve => setTimeout(resolve, 100));
   db.interrupt();
   await t.throwsAsync(async () => {
     await fut;
@@ -359,6 +363,7 @@ test.serial("Statement.interrupt()", async (t) => {
   const db = t.context.db;
   const stmt = await db.prepare("WITH RECURSIVE infinite_loop(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM infinite_loop) SELECT * FROM infinite_loop;");
   const fut = stmt.all();
+  await new Promise(resolve => setTimeout(resolve, 100));
   stmt.interrupt();
   await t.throwsAsync(async () => {
     await fut;
