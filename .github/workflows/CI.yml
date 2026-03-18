@@ -164,7 +164,9 @@ jobs:
         run: ls -R .
         shell: bash
       - name: Test bindings
-        run: yarn test
+        # Skip test:sqlite (better-sqlite3 compat) — better-sqlite3
+        # segfaults on exit with Node 22 on Windows (upstream issue).
+        run: cd integration-tests && npm i && npm run test:libsql && npm run test:async && npm run test:extensions && npm run test:concurrency
   test-linux-x64-gnu-binding:
     name: Test bindings on Linux-x64-gnu - node@${{ matrix.node }}
     needs:
