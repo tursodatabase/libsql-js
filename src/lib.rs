@@ -217,7 +217,7 @@ struct AccessMode {
 #[napi]
 pub struct Database {
     // The libSQL database instance.
-    db: libsql::Database,
+    db: Option<libsql::Database>,
     // The libSQL connection instance.
     conn: Option<Arc<libsql::Connection>>,
     // Whether to use safe integers by default.
@@ -229,6 +229,7 @@ pub struct Database {
 impl Drop for Database {
     fn drop(&mut self) {
         self.conn = None;
+        self.db = None;
     }
 }
 
@@ -321,7 +322,7 @@ pub async fn connect(path: String, opts: Option<Options>) -> Result<Database> {
             .map_err(Error::from)?
     }
     Ok(Database {
-        db,
+        db: Some(db),
         conn: Some(Arc::new(conn)),
         default_safe_integers,
         memory,
@@ -493,7 +494,11 @@ impl Database {
     /// The maximum write replication index.
     #[napi]
     pub fn max_write_replication_index(&self) -> Result<f64> {
-        let result = self.db.max_write_replication_index();
+        let db = match &self.db {
+            Some(db) => db,
+            None => return Ok(0.0),
+        };
+        let result = db.max_write_replication_index();
         Ok(result.unwrap_or(0) as f64)
     }
 
@@ -526,7 +531,17 @@ impl Database {
     /// A `SyncResult` instance.
     #[napi]
     pub async fn sync(&self) -> Result<SyncResult> {
-        let result = self.db.sync().await.map_err(Error::from)?;
+        let db = match &self.db {
+            Some(db) => db,
+            None => {
+                return Err(throw_sqlite_error(
+                    "The database connection is not open".to_string(),
+                    "SQLITE_NOTOPEN".to_string(),
+                    0,
+                ));
+            }
+        };
+        let result = db.sync().await.map_err(Error::from)?;
         Ok(SyncResult {
             frames_synced: result.frames_synced() as f64,
             replication_index: result.frame_no().unwrap_or(0) as f64,
@@ -552,6 +567,7 @@ impl Database {
     #[napi]
     pub fn close(&mut self) -> Result<()> {
         self.conn = None;
+        self.db = None;
         Ok(())
     }
 
