@@ -68,7 +68,7 @@ jobs:
       fail-fast: false
       matrix:
         target: [x86_64-apple-darwin]
-    runs-on: macos-13
+    runs-on: macos-14-large
     permissions:
       contents: write
     steps:
