@@ -175,7 +175,7 @@ jobs:
           fi
 
           # Publish platform packages first
-          for tgz in dist/*.tgz; do
+          for tgz in ./dist/*.tgz; do
             if [ -f "$tgz" ]; then
               echo "Publishing $tgz..."
               npm publish "$tgz" --access public --provenance $TAG_ARGS
