@@ -1,15 +1,33 @@
-name: publish
+name: CI
 
 on:
   push:
-    tags:
-      - v*
+    branches:
+      - main
+      - v0.5
+    tags-ignore:
+      - '**'
+  pull_request:
 
 permissions:
   contents: write
   id-token: write
 
 jobs:
+  test:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: cd integration-tests && npm ci && npm run test
+
   build:
     strategy:
       fail-fast: false
