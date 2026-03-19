@@ -49,7 +49,7 @@ jobs:
       fail-fast: false
       matrix:
         target: [aarch64-apple-darwin]
-    runs-on: macos-13-xlarge
+    runs-on: macos-14-xlarge
     permissions:
       contents: write
     steps:
