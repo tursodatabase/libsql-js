@@ -135,8 +135,29 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: List packages
-        run: ls -R artifacts/
+      - name: Collect platform tarballs
+        run: |
+          mkdir -p dist
+          for dir in artifacts/bindings-*; do
+            cp "$dir"/*.tgz dist/
+          done
+          ls -la dist/
+        shell: bash
+      - name: Set optionalDependencies
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const targets = pkg.neon.targets;
+            pkg.optionalDependencies = {};
+            for (const [rustTarget, npmName] of Object.entries(targets)) {
+              pkg.optionalDependencies[npmName] = '${VERSION}';
+            }
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          echo "optionalDependencies set:"
+          node -p "JSON.stringify(require('./package.json').optionalDependencies, null, 2)"
         shell: bash
       - name: Publish
         run: |
@@ -154,17 +175,15 @@ jobs:
           fi
 
           # Publish platform packages first
-          for dir in artifacts/bindings-*; do
-            for tgz in "$dir"/*.tgz; do
-              if [ -f "$tgz" ]; then
-                echo "Publishing $tgz..."
-                npm publish "$tgz" --access public --provenance $TAG_ARGS
-              fi
-            done
+          for tgz in dist/*.tgz; do
+            if [ -f "$tgz" ]; then
+              echo "Publishing $tgz..."
+              npm publish "$tgz" --access public --provenance $TAG_ARGS
+            fi
           done
 
-          # Publish main package
-          npm publish --access public --provenance $TAG_ARGS
+          # Publish main package (skip prepack/neon install-builds since we set optionalDependencies above)
+          npm publish --access public --provenance --ignore-scripts $TAG_ARGS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
