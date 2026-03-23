@@ -28,6 +28,26 @@ function convertError(err) {
   return err;
 }
 
+function isQueryOptions(value) {
+  return value != null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.prototype.hasOwnProperty.call(value, "queryTimeout");
+}
+
+function splitBindParameters(bindParameters) {
+  if (bindParameters.length === 0) {
+    return { params: undefined, queryOptions: undefined };
+  }
+  if (bindParameters.length > 1 && isQueryOptions(bindParameters[bindParameters.length - 1])) {
+    return {
+      params: bindParameters.length === 2 ? bindParameters[0] : bindParameters.slice(0, -1),
+      queryOptions: bindParameters[bindParameters.length - 1],
+    };
+  }
+  return { params: bindParameters.length === 1 ? bindParameters[0] : bindParameters, queryOptions: undefined };
+}
+
 /**
  * Database represents a connection that can prepare and execute SQL statements.
  */
@@ -176,9 +196,9 @@ class Database {
    *
    * @param {string} sql - The SQL statement string to execute.
    */
-  exec(sql) {
+  exec(sql, queryOptions) {
     try {
-      databaseExecSync(this.db, sql);
+      databaseExecSync(this.db, sql, queryOptions);
     } catch (err) {
       throw convertError(err);
     }
@@ -263,7 +283,8 @@ class Statement {
    */
   run(...bindParameters) {
     try {
-      return statementRunSync(this.stmt, ...bindParameters);
+      const { params, queryOptions } = splitBindParameters(bindParameters);
+      return statementRunSync(this.stmt, params, queryOptions);
     } catch (err) {
       throw convertError(err);
     }
@@ -276,7 +297,8 @@ class Statement {
    */
   get(...bindParameters) {
     try {
-      return statementGetSync(this.stmt, ...bindParameters);
+      const { params, queryOptions } = splitBindParameters(bindParameters);
+      return statementGetSync(this.stmt, params, queryOptions);
     } catch (err) {
       throw convertError(err);
     }
@@ -289,7 +311,8 @@ class Statement {
    */
   iterate(...bindParameters) {
     try {
-      const it = statementIterateSync(this.stmt, ...bindParameters);
+      const { params, queryOptions } = splitBindParameters(bindParameters);
+      const it = statementIterateSync(this.stmt, params, queryOptions);
       return {
         next: () => iteratorNextSync(it),
         [Symbol.iterator]() {

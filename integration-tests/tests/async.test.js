@@ -398,6 +398,56 @@ test.serial("Timeout option", async (t) => {
   fs.unlinkSync(path);
 });
 
+test.serial("Query timeout option interrupts long-running query", async (t) => {
+  const queryTimeout = 100;
+  const [db, errorType] = await connect(":memory:", { defaultQueryTimeout: queryTimeout });
+  const stmt = await db.prepare(
+    "WITH RECURSIVE infinite_loop(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM infinite_loop) SELECT * FROM infinite_loop;"
+  );
+
+  await t.throwsAsync(async () => {
+    await stmt.all();
+  }, {
+    instanceOf: errorType,
+    message: "interrupted",
+    code: "SQLITE_INTERRUPT",
+  });
+
+  db.close();
+});
+
+test.serial("Query timeout option allows short-running query", async (t) => {
+  const [db] = await connect(":memory:", { defaultQueryTimeout: 100 });
+  const stmt = await db.prepare("SELECT 1 AS value");
+  t.deepEqual(await stmt.get(), { value: 1 });
+  db.close();
+});
+
+test.serial("Per-query timeout option interrupts long-running Statement.all()", async (t) => {
+  const [db, errorType] = await connect(":memory:");
+  const stmt = await db.prepare(
+    "WITH RECURSIVE infinite_loop(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM infinite_loop) SELECT * FROM infinite_loop;"
+  );
+
+  await t.throwsAsync(async () => {
+    await stmt.all(undefined, { queryTimeout: 100 });
+  }, {
+    instanceOf: errorType,
+    message: "interrupted",
+    code: "SQLITE_INTERRUPT",
+  });
+
+  db.close();
+});
+
+test.serial("Per-query timeout option is accepted by Database.exec()", async (t) => {
+  const [db] = await connect(":memory:");
+  await db.exec("SELECT 1", { queryTimeout: 100 });
+  t.pass();
+
+  db.close();
+});
+
 test.serial("Concurrent writes over same connection", async (t) => {
   const db = t.context.db;
   await db.exec(`

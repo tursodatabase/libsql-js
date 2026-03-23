@@ -21,6 +21,7 @@
 #![allow(deprecated)]
 
 mod auth;
+mod query_timeout;
 
 use napi::{
     bindgen_prelude::{Array, FromNapiValue, ToNapiValue},
@@ -28,6 +29,7 @@ use napi::{
 };
 use napi_derive::napi;
 use once_cell::sync::OnceCell;
+use query_timeout::{QueryTimeoutManager, TimeoutGuard};
 use std::{
     str::FromStr,
     sync::{
@@ -200,6 +202,15 @@ pub struct Options {
     pub encryptionKey: Option<String>,
     // Encryption key for remote encryption at rest.
     pub remoteEncryptionKey: Option<String>,
+    // Default maximum time in milliseconds that a query is allowed to run.
+    pub defaultQueryTimeout: Option<f64>,
+}
+
+/// Per-query execution options.
+#[napi(object)]
+pub struct QueryOptions {
+    // Maximum time in milliseconds that this query is allowed to run.
+    pub queryTimeout: Option<f64>,
 }
 
 /// Access mode.
@@ -224,10 +235,15 @@ pub struct Database {
     default_safe_integers: AtomicBool,
     // Whether to use memory-only mode.
     memory: bool,
+    // Maximum time in milliseconds that a query is allowed to run.
+    query_timeout: Option<Duration>,
+    // Shared timeout manager for efficient query timeout handling.
+    timeout_manager: Arc<QueryTimeoutManager>,
 }
 
 impl Drop for Database {
     fn drop(&mut self) {
+        self.timeout_manager.shutdown();
         self.conn = None;
         self.db = None;
     }
@@ -321,11 +337,18 @@ pub async fn connect(path: String, opts: Option<Options>) -> Result<Database> {
         conn.busy_timeout(Duration::from_millis(timeout as u64))
             .map_err(Error::from)?
     }
+    let query_timeout = opts
+        .as_ref()
+        .and_then(|o| o.defaultQueryTimeout)
+        .and_then(query_timeout_duration);
+    let timeout_manager = Arc::new(QueryTimeoutManager::new());
     Ok(Database {
         db: Some(db),
         conn: Some(Arc::new(conn)),
         default_safe_integers,
         memory,
+        query_timeout,
+        timeout_manager,
     })
 }
 
@@ -388,7 +411,13 @@ impl Database {
             pluck: false.into(),
             timing: false.into(),
         };
-        Ok(Statement::new(conn, stmt, mode))
+        Ok(Statement::new(
+            conn,
+            stmt,
+            mode,
+            self.query_timeout,
+            self.timeout_manager.clone(),
+        ))
     }
 
     /// Sets the authorizer for the database.
@@ -509,7 +538,7 @@ impl Database {
     /// * `env` - The environment.
     /// * `sql` - The SQL statement to execute.
     #[napi]
-    pub async fn exec(&self, sql: String) -> Result<()> {
+    pub async fn exec(&self, sql: String, query_options: Option<QueryOptions>) -> Result<()> {
         let conn = match &self.conn {
             Some(conn) => conn.clone(),
             None => {
@@ -520,6 +549,11 @@ impl Database {
                 ));
             }
         };
+        let query_timeout = match query_options.and_then(|o| o.queryTimeout) {
+            Some(timeout_ms) => query_timeout_duration(timeout_ms),
+            None => self.query_timeout,
+        };
+        let _guard = query_timeout.map(|t| self.timeout_manager.register(&conn, t));
         conn.execute_batch(&sql).await.map_err(Error::from)?;
         Ok(())
     }
@@ -566,6 +600,7 @@ impl Database {
     /// Closes the database connection.
     #[napi]
     pub fn close(&mut self) -> Result<()> {
+        self.timeout_manager.shutdown();
         self.conn = None;
         self.db = None;
         Ok(())
@@ -609,9 +644,13 @@ pub fn database_sync_sync(db: &Database) -> Result<SyncResult> {
 
 /// Executes SQL in blocking mode.
 #[napi]
-pub fn database_exec_sync(db: &Database, sql: String) -> Result<()> {
+pub fn database_exec_sync(
+    db: &Database,
+    sql: String,
+    query_options: Option<QueryOptions>,
+) -> Result<()> {
     let rt = runtime()?;
-    rt.block_on(async move { db.exec(sql).await })
+    rt.block_on(async move { db.exec(sql, query_options).await })
 }
 
 fn is_remote_path(path: &str) -> bool {
@@ -625,6 +664,14 @@ fn throw_database_closed_error(env: &Env) -> napi::Error {
     err
 }
 
+fn query_timeout_duration(timeout_ms: f64) -> Option<Duration> {
+    if timeout_ms.is_finite() && timeout_ms > 0.0 {
+        Some(Duration::from_millis(timeout_ms as u64))
+    } else {
+        None
+    }
+}
+
 /// SQLite statement object.
 #[napi]
 pub struct Statement {
@@ -636,6 +683,10 @@ pub struct Statement {
     column_names: Vec<std::ffi::CString>,
     // The access mode.
     mode: AccessMode,
+    // Maximum time in milliseconds that a query is allowed to run.
+    query_timeout: Option<Duration>,
+    // Shared timeout manager.
+    timeout_manager: Arc<QueryTimeoutManager>,
 }
 
 #[napi]
@@ -651,6 +702,8 @@ impl Statement {
         conn: Arc<libsql::Connection>,
         stmt: libsql::Statement,
         mode: AccessMode,
+        query_timeout: Option<Duration>,
+        timeout_manager: Arc<QueryTimeoutManager>,
     ) -> Self {
         let column_names: Vec<std::ffi::CString> = stmt
             .columns()
@@ -663,6 +716,8 @@ impl Statement {
             stmt,
             column_names,
             mode,
+            query_timeout,
+            timeout_manager,
         }
     }
 
@@ -672,15 +727,22 @@ impl Statement {
     ///
     /// * `params` - The parameters to bind to the statement.
     #[napi]
-    pub fn run(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsObject> {
+    pub fn run(
+        &self,
+        env: Env,
+        params: Option<napi::JsUnknown>,
+        query_options: Option<QueryOptions>,
+    ) -> Result<napi::JsObject> {
         self.stmt.reset();
         let params = map_params(&self.stmt, params)?;
         let total_changes_before = self.conn.total_changes();
         let start = std::time::Instant::now();
         let stmt = self.stmt.clone();
         let conn = self.conn.clone();
+        let guard = self.start_timeout_guard(query_options);
 
         let future = async move {
+            let _guard = guard;
             stmt.run(params).await.map_err(Error::from)?;
             let changes = if conn.total_changes() == total_changes_before {
                 0
@@ -706,7 +768,12 @@ impl Statement {
     /// * `env` - The environment.
     /// * `params` - The parameters to bind to the statement.
     #[napi]
-    pub fn get(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsObject> {
+    pub fn get(
+        &self,
+        env: Env,
+        params: Option<napi::JsUnknown>,
+        query_options: Option<QueryOptions>,
+    ) -> Result<napi::JsObject> {
         let safe_ints = self.mode.safe_ints.load(Ordering::SeqCst);
         let raw = self.mode.raw.load(Ordering::SeqCst);
         let pluck = self.mode.pluck.load(Ordering::SeqCst);
@@ -723,7 +790,9 @@ impl Statement {
         };
 
         let stmt_fut = stmt.clone();
+        let guard = self.start_timeout_guard(query_options);
         let future = async move {
+            let _guard = guard;
             let mut rows = stmt_fut.query(params).await.map_err(Error::from)?;
             let row = rows.next().await.map_err(Error::from)?;
             let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
@@ -779,7 +848,12 @@ impl Statement {
     /// * `env` - The environment.
     /// * `params` - The parameters to bind to the statement.
     #[napi]
-    pub fn iterate(&self, env: Env, params: Option<napi::JsUnknown>) -> Result<napi::JsObject> {
+    pub fn iterate(
+        &self,
+        env: Env,
+        params: Option<napi::JsUnknown>,
+        query_options: Option<QueryOptions>,
+    ) -> Result<napi::JsObject> {
         let safe_ints = self.mode.safe_ints.load(Ordering::SeqCst);
         let raw = self.mode.raw.load(Ordering::SeqCst);
         let pluck = self.mode.pluck.load(Ordering::SeqCst);
@@ -787,6 +861,7 @@ impl Statement {
         stmt.reset();
         let params = map_params(&stmt, params).unwrap();
         let stmt = self.stmt.clone();
+        let guard = self.start_timeout_guard(query_options);
         let future = async move {
             let rows = stmt.query(params).await.map_err(Error::from)?;
             Ok::<_, napi::Error>(rows)
@@ -799,6 +874,7 @@ impl Statement {
                 safe_ints,
                 raw,
                 pluck,
+                guard,
             ))
         })
     }
@@ -882,12 +958,27 @@ impl Statement {
     }
 }
 
+impl Statement {
+    fn resolve_query_timeout(&self, query_options: Option<QueryOptions>) -> Option<Duration> {
+        match query_options.and_then(|o| o.queryTimeout) {
+            Some(timeout_ms) => query_timeout_duration(timeout_ms),
+            None => self.query_timeout,
+        }
+    }
+
+    fn start_timeout_guard(&self, query_options: Option<QueryOptions>) -> Option<TimeoutGuard> {
+        self.resolve_query_timeout(query_options)
+            .map(|t| self.timeout_manager.register(&self.conn, t))
+    }
+}
+
 /// Gets first row from statement in blocking mode.
 #[napi]
 pub fn statement_get_sync(
     stmt: &Statement,
     env: Env,
     params: Option<napi::JsUnknown>,
+    query_options: Option<QueryOptions>,
 ) -> Result<napi::JsUnknown> {
     let safe_ints = stmt.mode.safe_ints.load(Ordering::SeqCst);
     let raw = stmt.mode.raw.load(Ordering::SeqCst);
@@ -901,6 +992,7 @@ pub fn statement_get_sync(
     };
 
     let rt = runtime()?;
+    let _guard = stmt.start_timeout_guard(query_options);
     rt.block_on(async move {
         let params = map_params(&stmt.stmt, params)?;
         let mut rows = stmt.stmt.query(params).await.map_err(Error::from)?;
@@ -922,9 +1014,14 @@ pub fn statement_get_sync(
 
 /// Runs a statement in blocking mode.
 #[napi]
-pub fn statement_run_sync(stmt: &Statement, params: Option<napi::JsUnknown>) -> Result<RunResult> {
+pub fn statement_run_sync(
+    stmt: &Statement,
+    params: Option<napi::JsUnknown>,
+    query_options: Option<QueryOptions>,
+) -> Result<RunResult> {
     stmt.stmt.reset();
     let rt = runtime()?;
+    let _guard = stmt.start_timeout_guard(query_options);
     rt.block_on(async move {
         let params = map_params(&stmt.stmt, params)?;
         let total_changes_before = stmt.conn.total_changes();
@@ -951,16 +1048,18 @@ pub fn statement_iterate_sync(
     stmt: &Statement,
     _env: Env,
     params: Option<napi::JsUnknown>,
+    query_options: Option<QueryOptions>,
 ) -> Result<RowsIterator> {
     let rt = runtime()?;
     let safe_ints = stmt.mode.safe_ints.load(Ordering::SeqCst);
     let raw = stmt.mode.raw.load(Ordering::SeqCst);
     let pluck = stmt.mode.pluck.load(Ordering::SeqCst);
-    let stmt = stmt.stmt.clone();
+    let guard = stmt.start_timeout_guard(query_options);
+    let inner_stmt = stmt.stmt.clone();
     let (rows, column_names) = rt.block_on(async move {
-        stmt.reset();
-        let params = map_params(&stmt, params)?;
-        let rows = stmt.query(params).await.map_err(Error::from)?;
+        inner_stmt.reset();
+        let params = map_params(&inner_stmt, params)?;
+        let rows = inner_stmt.query(params).await.map_err(Error::from)?;
         let mut column_names = Vec::new();
         for i in 0..rows.column_count() {
             column_names
@@ -974,6 +1073,7 @@ pub fn statement_iterate_sync(
         safe_ints,
         raw,
         pluck,
+        guard,
     ))
 }
 
@@ -1120,6 +1220,7 @@ pub struct RowsIterator {
     safe_ints: bool,
     raw: bool,
     pluck: bool,
+    _timeout_guard: Option<TimeoutGuard>,
 }
 
 #[napi]
@@ -1130,6 +1231,7 @@ impl RowsIterator {
         safe_ints: bool,
         raw: bool,
         pluck: bool,
+        timeout_guard: Option<TimeoutGuard>,
     ) -> Self {
         Self {
             rows,
@@ -1137,6 +1239,7 @@ impl RowsIterator {
             safe_ints,
             raw,
             pluck,
+            _timeout_guard: timeout_guard,
         }
     }
 
