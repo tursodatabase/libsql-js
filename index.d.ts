@@ -183,6 +183,8 @@ export declare class Statement {
   columns(): unknown[]
   safeIntegers(toggle?: boolean | undefined | null): this
   interrupt(): void
+  /** Closes the statement. */
+  close(): void
 }
 /** A raw iterator over rows. The JavaScript layer wraps this in a iterable. */
 export declare class RowsIterator {

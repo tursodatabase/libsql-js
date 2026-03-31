@@ -664,6 +664,14 @@ fn throw_database_closed_error(env: &Env) -> napi::Error {
     err
 }
 
+fn throw_not_open_error() -> napi::Error {
+    throw_sqlite_error(
+        "The database connection is not open".to_string(),
+        "SQLITE_NOTOPEN".to_string(),
+        0,
+    )
+}
+
 fn query_timeout_duration(timeout_ms: f64) -> Option<Duration> {
     if timeout_ms.is_finite() && timeout_ms > 0.0 {
         Some(Duration::from_millis(timeout_ms as u64))
@@ -676,9 +684,9 @@ fn query_timeout_duration(timeout_ms: f64) -> Option<Duration> {
 #[napi]
 pub struct Statement {
     // The libSQL connection instance.
-    conn: Arc<libsql::Connection>,
+    conn: Option<Arc<libsql::Connection>>,
     // The libSQL statement instance.
-    stmt: Arc<libsql::Statement>,
+    stmt: Option<Arc<libsql::Statement>>,
     // The column names.
     column_names: Vec<std::ffi::CString>,
     // The access mode.
@@ -712,8 +720,8 @@ impl Statement {
             .collect();
         let stmt = Arc::new(stmt);
         Self {
-            conn,
-            stmt,
+            conn: Some(conn),
+            stmt: Some(stmt),
             column_names,
             mode,
             query_timeout,
@@ -733,13 +741,13 @@ impl Statement {
         params: Option<napi::JsUnknown>,
         query_options: Option<QueryOptions>,
     ) -> Result<napi::JsObject> {
-        self.stmt.reset();
-        let params = map_params(&self.stmt, params)?;
-        let total_changes_before = self.conn.total_changes();
+        let stmt = self.statement()?;
+        let conn = self.connection()?;
+        stmt.reset();
+        let params = map_params(stmt.as_ref(), params)?;
+        let total_changes_before = conn.total_changes();
         let start = std::time::Instant::now();
-        let stmt = self.stmt.clone();
-        let conn = self.conn.clone();
-        let guard = self.start_timeout_guard(query_options);
+        let guard = self.start_timeout_guard(&conn, query_options);
 
         let future = async move {
             let _guard = guard;
@@ -774,13 +782,14 @@ impl Statement {
         params: Option<napi::JsUnknown>,
         query_options: Option<QueryOptions>,
     ) -> Result<napi::JsObject> {
+        let stmt = self.statement()?;
+        let conn = self.connection()?;
         let safe_ints = self.mode.safe_ints.load(Ordering::SeqCst);
         let raw = self.mode.raw.load(Ordering::SeqCst);
         let pluck = self.mode.pluck.load(Ordering::SeqCst);
         let timed = self.mode.timing.load(Ordering::SeqCst);
 
-        let params = map_params(&self.stmt, params)?;
-        let stmt = self.stmt.clone();
+        let params = map_params(stmt.as_ref(), params)?;
         let column_names = self.column_names.clone();
 
         let start = if timed {
@@ -790,7 +799,7 @@ impl Statement {
         };
 
         let stmt_fut = stmt.clone();
-        let guard = self.start_timeout_guard(query_options);
+        let guard = self.start_timeout_guard(&conn, query_options);
         let future = async move {
             let _guard = guard;
             let mut rows = stmt_fut.query(params).await.map_err(Error::from)?;
@@ -854,14 +863,14 @@ impl Statement {
         params: Option<napi::JsUnknown>,
         query_options: Option<QueryOptions>,
     ) -> Result<napi::JsObject> {
+        let stmt = self.statement()?;
+        let conn = self.connection()?;
         let safe_ints = self.mode.safe_ints.load(Ordering::SeqCst);
         let raw = self.mode.raw.load(Ordering::SeqCst);
         let pluck = self.mode.pluck.load(Ordering::SeqCst);
-        let stmt = self.stmt.clone();
         stmt.reset();
-        let params = map_params(&stmt, params).unwrap();
-        let stmt = self.stmt.clone();
-        let guard = self.start_timeout_guard(query_options);
+        let params = map_params(stmt.as_ref(), params)?;
+        let guard = self.start_timeout_guard(&conn, query_options);
         let future = async move {
             let rows = stmt.query(params).await.map_err(Error::from)?;
             Ok::<_, napi::Error>(rows)
@@ -881,7 +890,8 @@ impl Statement {
 
     #[napi]
     pub fn raw(&self, raw: Option<bool>) -> Result<&Self> {
-        let returns_data = !self.stmt.columns().is_empty();
+        let stmt = self.statement()?;
+        let returns_data = !stmt.columns().is_empty();
         if !returns_data {
             return Err(napi::Error::from_reason(
                 "The raw() method is only for statements that return data",
@@ -909,7 +919,8 @@ impl Statement {
 
     #[napi]
     pub fn columns(&self, env: Env) -> Result<Array> {
-        let columns = self.stmt.columns();
+        let stmt = self.statement()?;
+        let columns = stmt.columns();
         let mut js_array = env.create_array(columns.len() as u32)?;
         for (i, col) in columns.iter().enumerate() {
             let mut js_obj = env.create_object()?;
@@ -953,12 +964,29 @@ impl Statement {
 
     #[napi]
     pub fn interrupt(&self) -> Result<()> {
-        self.stmt.interrupt().map_err(Error::from)?;
+        let stmt = self.statement()?;
+        stmt.interrupt().map_err(Error::from)?;
+        Ok(())
+    }
+
+    /// Closes the statement.
+    #[napi]
+    pub fn close(&mut self) -> Result<()> {
+        self.stmt = None;
+        self.conn = None;
         Ok(())
     }
 }
 
 impl Statement {
+    fn statement(&self) -> Result<Arc<libsql::Statement>> {
+        self.stmt.clone().ok_or_else(throw_not_open_error)
+    }
+
+    fn connection(&self) -> Result<Arc<libsql::Connection>> {
+        self.conn.clone().ok_or_else(throw_not_open_error)
+    }
+
     fn resolve_query_timeout(&self, query_options: Option<QueryOptions>) -> Option<Duration> {
         match query_options.and_then(|o| o.queryTimeout) {
             Some(timeout_ms) => query_timeout_duration(timeout_ms),
@@ -966,9 +994,13 @@ impl Statement {
         }
     }
 
-    fn start_timeout_guard(&self, query_options: Option<QueryOptions>) -> Option<TimeoutGuard> {
+    fn start_timeout_guard(
+        &self,
+        conn: &Arc<libsql::Connection>,
+        query_options: Option<QueryOptions>,
+    ) -> Option<TimeoutGuard> {
         self.resolve_query_timeout(query_options)
-            .map(|t| self.timeout_manager.register(&self.conn, t))
+            .map(|t| self.timeout_manager.register(conn, t))
     }
 }
 
@@ -980,6 +1012,8 @@ pub fn statement_get_sync(
     params: Option<napi::JsUnknown>,
     query_options: Option<QueryOptions>,
 ) -> Result<napi::JsUnknown> {
+    let inner_stmt = stmt.statement()?;
+    let conn = stmt.connection()?;
     let safe_ints = stmt.mode.safe_ints.load(Ordering::SeqCst);
     let raw = stmt.mode.raw.load(Ordering::SeqCst);
     let pluck = stmt.mode.pluck.load(Ordering::SeqCst);
@@ -992,10 +1026,10 @@ pub fn statement_get_sync(
     };
 
     let rt = runtime()?;
-    let _guard = stmt.start_timeout_guard(query_options);
+    let _guard = stmt.start_timeout_guard(&conn, query_options);
     rt.block_on(async move {
-        let params = map_params(&stmt.stmt, params)?;
-        let mut rows = stmt.stmt.query(params).await.map_err(Error::from)?;
+        let params = map_params(inner_stmt.as_ref(), params)?;
+        let mut rows = inner_stmt.query(params).await.map_err(Error::from)?;
         let row = rows.next().await.map_err(Error::from)?;
         let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
         let result = Statement::get_internal(
@@ -1007,7 +1041,7 @@ pub fn statement_get_sync(
             pluck,
             duration,
         );
-        stmt.stmt.reset();
+        inner_stmt.reset();
         result
     })
 }
@@ -1019,21 +1053,23 @@ pub fn statement_run_sync(
     params: Option<napi::JsUnknown>,
     query_options: Option<QueryOptions>,
 ) -> Result<RunResult> {
-    stmt.stmt.reset();
+    let inner_stmt = stmt.statement()?;
+    let conn = stmt.connection()?;
+    inner_stmt.reset();
     let rt = runtime()?;
-    let _guard = stmt.start_timeout_guard(query_options);
+    let _guard = stmt.start_timeout_guard(&conn, query_options);
     rt.block_on(async move {
-        let params = map_params(&stmt.stmt, params)?;
-        let total_changes_before = stmt.conn.total_changes();
+        let params = map_params(inner_stmt.as_ref(), params)?;
+        let total_changes_before = conn.total_changes();
         let start = std::time::Instant::now();
 
-        stmt.stmt.run(params).await.map_err(Error::from)?;
-        let changes = if stmt.conn.total_changes() == total_changes_before {
+        inner_stmt.run(params).await.map_err(Error::from)?;
+        let changes = if conn.total_changes() == total_changes_before {
             0
         } else {
-            stmt.conn.changes()
+            conn.changes()
         };
-        let last_insert_row_id = stmt.conn.last_insert_rowid();
+        let last_insert_row_id = conn.last_insert_rowid();
         let duration = start.elapsed().as_secs_f64();
         Ok(RunResult {
             changes: changes as f64,
@@ -1051,14 +1087,15 @@ pub fn statement_iterate_sync(
     query_options: Option<QueryOptions>,
 ) -> Result<RowsIterator> {
     let rt = runtime()?;
+    let conn = stmt.connection()?;
     let safe_ints = stmt.mode.safe_ints.load(Ordering::SeqCst);
     let raw = stmt.mode.raw.load(Ordering::SeqCst);
     let pluck = stmt.mode.pluck.load(Ordering::SeqCst);
-    let guard = stmt.start_timeout_guard(query_options);
-    let inner_stmt = stmt.stmt.clone();
+    let guard = stmt.start_timeout_guard(&conn, query_options);
+    let inner_stmt = stmt.statement()?;
     let (rows, column_names) = rt.block_on(async move {
         inner_stmt.reset();
-        let params = map_params(&inner_stmt, params)?;
+        let params = map_params(inner_stmt.as_ref(), params)?;
         let rows = inner_stmt.query(params).await.map_err(Error::from)?;
         let mut column_names = Vec::new();
         for i in 0..rows.column_count() {
