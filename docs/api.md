@@ -68,31 +68,112 @@ This function is currently not supported.
 
 This function is currently not supported.
 
-### authorizer(rules) ⇒ this
+### authorizer(config) ⇒ this
 
-Configure authorization rules. The `rules` object is a map from table name to
-`Authorization` object, which defines if access to table is allowed or denied.
-If a table has no authorization rule, access to it is _denied_ by default.
+Configure authorization rules for the database. Accepts three formats:
 
-Example:
+- **Legacy format** — a map from table name to `Authorization.ALLOW` or `Authorization.DENY`
+- **Rule-based format** — an `AuthorizerConfig` object with ordered rules and pattern matching
+- **`null`** — removes the authorizer entirely
+
+#### Legacy format
+
+A simple object mapping table names to `Authorization.ALLOW` (0) or `Authorization.DENY` (1).
+Tables without an entry are denied by default.
 
 ```javascript
-db.authorizer({
-  "users": Authorization.ALLOW
-});
-
-// Access is allowed.
-const stmt = db.prepare("SELECT * FROM users");
+const { Authorization } = require('libsql');
 
 db.authorizer({
-  "users": Authorization.DENY
+  "users": Authorization.ALLOW,
+  "secrets": Authorization.DENY,
 });
 
-// Access is denied.
+// Access to "users" is allowed.
 const stmt = db.prepare("SELECT * FROM users");
+
+// Access to "secrets" throws SQLITE_AUTH.
+const stmt = db.prepare("SELECT * FROM secrets"); // Error!
 ```
 
-**Note: This is an experimental API and, therefore, subject to change.**
+#### Rule-based format
+
+An object with a `rules` array and an optional `defaultPolicy`. Rules are evaluated in order — **first match wins**. If no rule matches, `defaultPolicy` applies (defaults to `DENY`).
+
+```javascript
+const { Authorization, Action } = require('libsql');
+
+db.authorizer({
+  rules: [
+    // Hide sensitive columns (returns NULL instead of the real value)
+    { action: Action.READ, table: "users", column: "password_hash", policy: Authorization.IGNORE },
+    { action: Action.READ, table: "users", column: "ssn", policy: Authorization.IGNORE },
+
+    // Allow all reads
+    { action: Action.READ, policy: Authorization.ALLOW },
+
+    // Allow inserts on tables matching a glob pattern
+    { action: Action.INSERT, table: { glob: "logs_*" }, policy: Authorization.ALLOW },
+
+    // Deny DDL operations
+    { action: [Action.CREATE_TABLE, Action.DROP_TABLE, Action.ALTER_TABLE], policy: Authorization.DENY },
+
+    // Allow transactions and selects
+    { action: Action.TRANSACTION, policy: Authorization.ALLOW },
+    { action: Action.SELECT, policy: Authorization.ALLOW },
+  ],
+  defaultPolicy: Authorization.DENY,
+});
+```
+
+#### AuthRule fields
+
+| Field    | Type                                      | Description                                                          |
+| -------- | ----------------------------------------- | -------------------------------------------------------------------- |
+| action   | <code>number \| number[]</code>           | Action code(s) to match (from `Action`). Omit to match all actions.  |
+| table    | <code>string \| { glob: string }</code>   | Table name pattern. Omit to match any table.                         |
+| column   | <code>string \| { glob: string }</code>   | Column name pattern (relevant for READ/UPDATE). Omit to match any.   |
+| entity   | <code>string \| { glob: string }</code>   | Entity name (index, trigger, view, pragma, function). Omit to match any. |
+| policy   | <code>number</code>                       | `Authorization.ALLOW`, `Authorization.DENY`, or `Authorization.IGNORE`. |
+
+#### Pattern matching
+
+Pattern fields (`table`, `column`, `entity`) accept either:
+
+- A **plain string** for exact matching: `"users"`
+- An **object with a `glob` key** for glob matching: `{ glob: "logs_*" }`
+
+Glob patterns support `*` (match any number of characters) and `?` (match exactly one character).
+
+```javascript
+// Exact match
+{ action: Action.READ, table: "users", policy: Authorization.ALLOW }
+
+// Glob: all tables starting with "logs_"
+{ action: Action.READ, table: { glob: "logs_*" }, policy: Authorization.ALLOW }
+
+// Glob: single-character wildcard
+{ action: Action.READ, table: { glob: "t?_data" }, policy: Authorization.ALLOW }
+
+// Glob: match all tables
+{ action: Action.READ, table: { glob: "*" }, policy: Authorization.ALLOW }
+```
+
+#### Authorization values
+
+| Value                      | Effect                                                                 |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `Authorization.ALLOW` (0)  | Permit the operation.                                                  |
+| `Authorization.DENY` (1)   | Reject the entire SQL statement with a `SQLITE_AUTH` error.            |
+| `Authorization.IGNORE` (2) | For READ: return NULL instead of the column value. Otherwise: deny.    |
+
+#### Removing the authorizer
+
+Pass `null` to remove the authorizer and allow all operations:
+
+```javascript
+db.authorizer(null);
+```
 
 ### loadExtension(path, [entryPoint]) ⇒ this
 

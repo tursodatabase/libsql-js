@@ -2,7 +2,7 @@
 
 const { Database: NativeDb, connect: nativeConnect } = require("./index.js");
 const SqliteError = require("./sqlite-error.js");
-const Authorization = require("./auth");
+const { Authorization, Action } = require("./auth");
 
 /**
  * @import {Options as NativeOptions, Statement as NativeStatement} from './index.js'
@@ -204,14 +204,6 @@ class Database {
     throw new Error("not implemented");
   }
 
-  authorizer(rules) {
-    try {
-      this.db.authorizer(rules);
-    } catch (err) {
-      throw convertError(err);
-    }
-  }
-
   /**
    * Loads an extension into the database
    * @param {Parameters<NativeDb['loadExtension']>} args - Arguments to pass to the underlying loadExtension method
@@ -259,8 +251,12 @@ class Database {
     this.db.close();
   }
 
-  authorizer(hook) {
-    this.db.authorizer(hook);
+  authorizer(config) {
+    try {
+      this.db.authorizer(config);
+    } catch (err) {
+      throw convertError(err);
+    }
     return this;
   }
 
@@ -419,6 +415,7 @@ class Statement {
 }
 
 module.exports = {
+  Action,
   Authorization,
   Database,
   SqliteError,

@@ -111,7 +111,7 @@ dist
 .vscode-test
 
 # End of https://www.toptal.com/developers/gitignore/api/node
-
+integration-tests/*.db
 # Created by https://www.toptal.com/developers/gitignore/api/macos
 # Edit at https://www.toptal.com/developers/gitignore?templates=macos
 

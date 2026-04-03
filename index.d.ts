@@ -76,25 +76,12 @@ export declare class Database {
   /**
    * Sets the authorizer for the database.
    *
-   * # Arguments
-   *
-   * * `env` - The environment.
-   * * `rules_obj` - The rules object.
-   *
-   * The `rules_obj` is a JavaScript object with the following properties:
-   *
-   * * `Authorization.ALLOW` - Allow access to the table.
-   * * `Authorization.DENY` - Deny access to the table.
-   *
-   * Example:
-   *
-   * ```javascript
-   * db.authorizer({
-   *     "users": Authorization.ALLOW
-   * });
-   * ```
+   * Accepts either:
+   * - Legacy format: `{ [tableName: string]: 0 | 1 }`
+   * - Full format: `{ rules: AuthRule[], defaultPolicy?: 0 | 1 | 2 }`
+   * - `null` to remove the authorizer
    */
-  authorizer(rulesObj: object): void
+  authorizer(config: unknown): void
   /**
    * Loads an extension into the database.
    *
