@@ -133,7 +133,7 @@ test.serial("Rule-based: glob pattern on table name", async (t) => {
 
   db.authorizer({
     rules: [
-      { action: Action.READ, table: "logs_*", policy: Authorization.ALLOW },
+      { action: Action.READ, table: { glob: "logs_*" }, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
     defaultPolicy: Authorization.DENY,
@@ -260,7 +260,7 @@ test.serial("Glob: ? matches exactly one character", async (t) => {
 
   db.authorizer({
     rules: [
-      { action: Action.READ, table: "log_?", policy: Authorization.ALLOW },
+      { action: Action.READ, table: { glob: "log_?" }, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
     defaultPolicy: Authorization.DENY,
@@ -287,7 +287,7 @@ test.serial("Glob: ? does not match zero or multiple characters", async (t) => {
 
   db.authorizer({
     rules: [
-      { action: Action.READ, table: "item_?", policy: Authorization.ALLOW },
+      { action: Action.READ, table: { glob: "item_?" }, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
     defaultPolicy: Authorization.DENY,
@@ -312,7 +312,7 @@ test.serial("Glob: * at start of pattern", async (t) => {
 
   db.authorizer({
     rules: [
-      { action: Action.READ, table: "*_users", policy: Authorization.ALLOW },
+      { action: Action.READ, table: { glob: "*_users" }, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
     defaultPolicy: Authorization.DENY,
@@ -330,7 +330,7 @@ test.serial("Glob: * in middle of pattern", async (t) => {
 
   db.authorizer({
     rules: [
-      { action: Action.READ, table: "app_*_logs", policy: Authorization.ALLOW },
+      { action: Action.READ, table: { glob: "app_*_logs" }, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
     defaultPolicy: Authorization.DENY,
@@ -353,7 +353,7 @@ test.serial("Glob: multiple wildcards in one pattern", async (t) => {
 
   db.authorizer({
     rules: [
-      { action: Action.READ, table: "*_data_*", policy: Authorization.ALLOW },
+      { action: Action.READ, table: { glob: "*_data_*" }, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
     defaultPolicy: Authorization.DENY,
@@ -369,7 +369,7 @@ test.serial("Glob: on column name", async (t) => {
   // IGNORE columns matching e* → email gets NULL, everything else readable
   db.authorizer({
     rules: [
-      { action: Action.READ, table: "users", column: "e*", policy: Authorization.IGNORE },
+      { action: Action.READ, table: "users", column: { glob: "e*" }, policy: Authorization.IGNORE },
       { action: Action.READ, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
@@ -387,7 +387,7 @@ test.serial("Glob: on entity name (pragma)", async (t) => {
 
   db.authorizer({
     rules: [
-      { action: Action.PRAGMA, entity: "table_*", policy: Authorization.ALLOW },
+      { action: Action.PRAGMA, entity: { glob: "table_*" }, policy: Authorization.ALLOW },
       { action: Action.READ, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
@@ -420,7 +420,7 @@ test.serial("Glob: table + column combo", async (t) => {
   // For any table matching user*, IGNORE columns matching e*
   db.authorizer({
     rules: [
-      { action: Action.READ, table: "user*", column: "e*", policy: Authorization.IGNORE },
+      { action: Action.READ, table: { glob: "user*" }, column: { glob: "e*" }, policy: Authorization.IGNORE },
       { action: Action.READ, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
@@ -438,7 +438,7 @@ test.serial("Glob: wildcard-only pattern * matches everything", async (t) => {
 
   db.authorizer({
     rules: [
-      { action: Action.READ, table: "*", policy: Authorization.ALLOW },
+      { action: Action.READ, table: { glob: "*" }, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
     defaultPolicy: Authorization.DENY,
@@ -453,7 +453,7 @@ test.serial("Glob: pattern with no match denies correctly", async (t) => {
 
   db.authorizer({
     rules: [
-      { action: Action.READ, table: "nonexistent_*", policy: Authorization.ALLOW },
+      { action: Action.READ, table: { glob: "nonexistent_*" }, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
     defaultPolicy: Authorization.DENY,

@@ -426,6 +426,32 @@ impl Database {
     /// - Legacy format: `{ [tableName: string]: 0 | 1 }`
     /// - Full format: `{ rules: AuthRule[], defaultPolicy?: 0 | 1 | 2 }`
     /// - `null` to remove the authorizer
+    ///
+    /// Pattern fields (`table`, `column`, `entity`) accept a plain string for
+    /// exact matching, or `{ glob: "pattern" }` for glob matching with `*` and `?`.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// const { Authorization, Action } = require('libsql');
+    ///
+    /// // Legacy table-level allow/deny
+    /// db.authorizer({ "users": Authorization.ALLOW });
+    ///
+    /// // Rule-based with glob patterns
+    /// db.authorizer({
+    ///   rules: [
+    ///     { action: Action.READ, table: "users", column: "password", policy: Authorization.IGNORE },
+    ///     { action: Action.INSERT, table: { glob: "logs_*" }, policy: Authorization.ALLOW },
+    ///     { action: Action.READ, policy: Authorization.ALLOW },
+    ///     { action: Action.SELECT, policy: Authorization.ALLOW },
+    ///   ],
+    ///   defaultPolicy: Authorization.DENY,
+    /// });
+    ///
+    /// // Remove authorizer
+    /// db.authorizer(null);
+    /// ```
     #[napi]
     pub fn authorizer(&self, env: Env, config: JsUnknown) -> Result<()> {
         let conn = match &self.conn {
@@ -727,20 +753,29 @@ fn parse_single_rule(rule_obj: &napi::JsObject) -> Result<crate::auth::AuthRule>
     })
 }
 
-/// Parse a pattern value: plain string or glob (auto-detected by `*` or `?`).
+/// Parse a pattern value: plain string (exact match) or `{ glob: "pattern" }`.
 fn parse_pattern(val: JsUnknown, field_name: &str) -> Result<crate::auth::PatternMatcher> {
     match val.get_type()? {
         ValueType::String => {
             let s: napi::JsString = val.coerce_to_string()?;
             let owned = s.into_utf8()?.into_owned()?;
-            if owned.contains('*') || owned.contains('?') {
+            Ok(crate::auth::PatternMatcher::Exact(owned))
+        }
+        ValueType::Object => {
+            let obj: napi::JsObject = val.coerce_to_object()?;
+            if obj.has_named_property("glob")? {
+                let s: napi::JsString = obj.get_named_property("glob")?;
+                let owned = s.into_utf8()?.into_owned()?;
                 Ok(crate::auth::PatternMatcher::Glob(owned))
             } else {
-                Ok(crate::auth::PatternMatcher::Exact(owned))
+                Err(napi::Error::from_reason(format!(
+                    "{} must be a string or {{ glob: \"pattern\" }}",
+                    field_name
+                )))
             }
         }
         _ => Err(napi::Error::from_reason(format!(
-            "{} must be a string",
+            "{} must be a string or {{ glob: \"pattern\" }}",
             field_name
         ))),
     }
