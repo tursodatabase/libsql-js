@@ -2,7 +2,7 @@
 
 const { Database: NativeDb, databasePrepareSync, databaseSyncSync, databaseExecSync, statementRunSync, statementGetSync, statementIterateSync, iteratorNextSync } = require("./index.js");
 const SqliteError = require("./sqlite-error.js");
-const Authorization = require("./auth");
+const { Authorization, Action } = require("./auth");
 
 function convertError(err) {
   // Handle errors from Rust with JSON-encoded message
@@ -167,14 +167,6 @@ class Database {
     throw new Error("not implemented");
   }
 
-  authorizer(rules) {
-    try {
-      this.db.authorizer(rules);
-    } catch (err) {
-      throw convertError(err);
-    }
-  }
-
   loadExtension(...args) {
     try {
       this.db.loadExtension(...args);
@@ -218,8 +210,12 @@ class Database {
     this.db.close();
   }
 
-  authorizer(hook) {
-    this.db.authorizer(hook);
+  authorizer(config) {
+    try {
+      this.db.authorizer(config);
+    } catch (err) {
+      throw convertError(err);
+    }
     return this;
   }
 
@@ -372,3 +368,4 @@ class Statement {
 module.exports = Database;
 module.exports.SqliteError = SqliteError;
 module.exports.Authorization = Authorization;
+module.exports.Action = Action;
