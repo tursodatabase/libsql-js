@@ -727,56 +727,20 @@ fn parse_single_rule(rule_obj: &napi::JsObject) -> Result<crate::auth::AuthRule>
     })
 }
 
-/// Parse a pattern value: string (exact or glob) or RegExp.
+/// Parse a pattern value: plain string or glob (auto-detected by `*` or `?`).
 fn parse_pattern(val: JsUnknown, field_name: &str) -> Result<crate::auth::PatternMatcher> {
     match val.get_type()? {
         ValueType::String => {
             let s: napi::JsString = val.coerce_to_string()?;
             let owned = s.into_utf8()?.into_owned()?;
-            // Auto-detect glob: if the string contains * or ?, treat as glob
             if owned.contains('*') || owned.contains('?') {
                 Ok(crate::auth::PatternMatcher::Glob(owned))
             } else {
                 Ok(crate::auth::PatternMatcher::Exact(owned))
             }
         }
-        ValueType::Object => {
-            // Check if it's a RegExp by checking for .source property
-            let obj: napi::JsObject = val.coerce_to_object()?;
-            if obj.has_named_property("source")? {
-                let source_js: napi::JsString = obj.get_named_property("source")?;
-                let source = source_js.into_utf8()?.into_owned()?;
-
-                // Check for flags (we support 'i' for case-insensitive)
-                let flags_str = if obj.has_named_property("flags")? {
-                    let flags_js: napi::JsString = obj.get_named_property("flags")?;
-                    flags_js.into_utf8()?.into_owned()?
-                } else {
-                    String::new()
-                };
-
-                let pattern = if flags_str.contains('i') {
-                    format!("(?i){}", source)
-                } else {
-                    source
-                };
-
-                let re = regex::Regex::new(&pattern).map_err(|e| {
-                    napi::Error::from_reason(format!(
-                        "Invalid regex pattern for {}: {}",
-                        field_name, e
-                    ))
-                })?;
-                Ok(crate::auth::PatternMatcher::Regex(re))
-            } else {
-                Err(napi::Error::from_reason(format!(
-                    "{} must be a string or RegExp",
-                    field_name
-                )))
-            }
-        }
         _ => Err(napi::Error::from_reason(format!(
-            "{} must be a string or RegExp",
+            "{} must be a string",
             field_name
         ))),
     }

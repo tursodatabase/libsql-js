@@ -20,8 +20,6 @@ pub enum PatternMatcher {
     Exact(String),
     /// Glob pattern (supports `*` and `?` wildcards).
     Glob(String),
-    /// Compiled regular expression.
-    Regex(regex::Regex),
 }
 
 impl PatternMatcher {
@@ -29,7 +27,6 @@ impl PatternMatcher {
         match self {
             PatternMatcher::Exact(s) => s == value,
             PatternMatcher::Glob(pattern) => glob_match::glob_match(pattern, value),
-            PatternMatcher::Regex(re) => re.is_match(value),
         }
     }
 }
@@ -404,7 +401,25 @@ impl AuthorizerBuilder {
 
         // Table-bearing action codes (actions where the old authorizer checked tables)
         let table_actions: Vec<i32> = vec![
-            1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 14, 16, 18, 20, 23, 26, 29, 30,
+            SQLITE_CREATE_INDEX,
+            SQLITE_CREATE_TABLE,
+            SQLITE_CREATE_TEMP_INDEX,
+            SQLITE_CREATE_TEMP_TABLE,
+            SQLITE_CREATE_TEMP_TRIGGER,
+            SQLITE_CREATE_TRIGGER,
+            SQLITE_DELETE,
+            SQLITE_DROP_INDEX,
+            SQLITE_DROP_TABLE,
+            SQLITE_DROP_TEMP_INDEX,
+            SQLITE_DROP_TEMP_TABLE,
+            SQLITE_DROP_TEMP_TRIGGER,
+            SQLITE_DROP_TRIGGER,
+            SQLITE_INSERT,
+            SQLITE_READ,
+            SQLITE_UPDATE,
+            SQLITE_ALTER_TABLE,
+            SQLITE_CREATE_VTABLE,
+            SQLITE_DROP_VTABLE,
         ];
 
         // Deny rules first
@@ -431,7 +446,7 @@ impl AuthorizerBuilder {
 
         // Legacy behavior: always allow SELECT (no table context)
         rules.push(AuthRule {
-            actions: vec![21], // SELECT
+            actions: vec![SQLITE_SELECT],
             table: None,
             column: None,
             entity: None,

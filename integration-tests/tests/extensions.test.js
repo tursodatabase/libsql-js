@@ -152,22 +152,6 @@ test.serial("Rule-based: glob pattern on table name", async (t) => {
   });
 });
 
-test.serial("Rule-based: regex pattern on table name", async (t) => {
-  const db = t.context.db;
-
-  db.authorizer({
-    rules: [
-      { action: Action.READ, table: /^users$/, policy: Authorization.ALLOW },
-      { action: Action.SELECT, policy: Authorization.ALLOW },
-    ],
-    defaultPolicy: Authorization.DENY,
-  });
-
-  const stmt = db.prepare("SELECT * FROM users");
-  const users = stmt.all();
-  t.is(users.length, 2);
-});
-
 test.serial("Rule-based: IGNORE returns NULL for READ columns", async (t) => {
   const db = t.context.db;
 
@@ -192,7 +176,7 @@ test.serial("Rule-based: entity pattern for functions", async (t) => {
 
   db.authorizer({
     rules: [
-      { action: Action.FUNCTION, entity: /^(lower|upper|length)$/, policy: Authorization.ALLOW },
+      { action: Action.FUNCTION, entity: "upper", policy: Authorization.ALLOW },
       { action: Action.READ, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
@@ -430,193 +414,13 @@ test.serial("Glob: exact string without wildcards is exact match", async (t) => 
   t.is(rows.length, 2);
 });
 
-// ---- Regex pattern tests ----
-
-test.serial("Regex: case-insensitive flag", async (t) => {
+test.serial("Glob: table + column combo", async (t) => {
   const db = t.context.db;
 
-  db.exec("CREATE TABLE IF NOT EXISTS Users_CI (id INTEGER PRIMARY KEY, val TEXT)");
-  db.exec("INSERT INTO Users_CI (id, val) VALUES (1, 'test')");
-
+  // For any table matching user*, IGNORE columns matching e*
   db.authorizer({
     rules: [
-      { action: Action.READ, table: /^users_ci$/i, policy: Authorization.ALLOW },
-      { action: Action.SELECT, policy: Authorization.ALLOW },
-    ],
-    defaultPolicy: Authorization.DENY,
-  });
-
-  const rows = db.prepare("SELECT * FROM Users_CI").all();
-  t.is(rows.length, 1);
-});
-
-test.serial("Regex: partial match (no anchors)", async (t) => {
-  const db = t.context.db;
-
-  // /user/ without anchors should match "users" (partial match)
-  db.authorizer({
-    rules: [
-      { action: Action.READ, table: /user/, policy: Authorization.ALLOW },
-      { action: Action.SELECT, policy: Authorization.ALLOW },
-    ],
-    defaultPolicy: Authorization.DENY,
-  });
-
-  const rows = db.prepare("SELECT * FROM users").all();
-  t.is(rows.length, 2);
-});
-
-test.serial("Regex: anchored pattern rejects partial matches", async (t) => {
-  const db = t.context.db;
-
-  // /^user$/ should NOT match "users" (has trailing s)
-  db.authorizer({
-    rules: [
-      { action: Action.READ, table: /^user$/, policy: Authorization.ALLOW },
-      { action: Action.SELECT, policy: Authorization.ALLOW },
-    ],
-    defaultPolicy: Authorization.DENY,
-  });
-
-  await t.throwsAsync(async () => {
-    return await db.prepare("SELECT * FROM users");
-  }, { instanceOf: t.context.errorType, code: "SQLITE_AUTH" });
-});
-
-test.serial("Regex: alternation pattern", async (t) => {
-  const db = t.context.db;
-
-  db.exec("CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY, pname TEXT)");
-  db.exec("INSERT INTO products (id, pname) VALUES (1, 'Widget')");
-
-  db.authorizer({
-    rules: [
-      { action: Action.READ, table: /^(users|products)$/, policy: Authorization.ALLOW },
-      { action: Action.SELECT, policy: Authorization.ALLOW },
-    ],
-    defaultPolicy: Authorization.DENY,
-  });
-
-  const u = db.prepare("SELECT * FROM users").all();
-  t.is(u.length, 2);
-  const p = db.prepare("SELECT * FROM products").all();
-  t.is(p.length, 1);
-});
-
-test.serial("Regex: character class pattern", async (t) => {
-  const db = t.context.db;
-
-  db.exec("CREATE TABLE IF NOT EXISTS t1_data (id INTEGER PRIMARY KEY)");
-  db.exec("CREATE TABLE IF NOT EXISTS t2_data (id INTEGER PRIMARY KEY)");
-  db.exec("INSERT INTO t1_data (id) VALUES (1)");
-  db.exec("INSERT INTO t2_data (id) VALUES (1)");
-
-  db.authorizer({
-    rules: [
-      { action: Action.READ, table: /^t[0-9]_data$/, policy: Authorization.ALLOW },
-      { action: Action.SELECT, policy: Authorization.ALLOW },
-    ],
-    defaultPolicy: Authorization.DENY,
-  });
-
-  const r1 = db.prepare("SELECT * FROM t1_data").all();
-  t.is(r1.length, 1);
-  const r2 = db.prepare("SELECT * FROM t2_data").all();
-  t.is(r2.length, 1);
-
-  // users shouldn't match
-  await t.throwsAsync(async () => {
-    return await db.prepare("SELECT * FROM users");
-  }, { instanceOf: t.context.errorType, code: "SQLITE_AUTH" });
-});
-
-test.serial("Regex: on column name with IGNORE", async (t) => {
-  const db = t.context.db;
-
-  // IGNORE any column ending in "il" → email gets NULL
-  db.authorizer({
-    rules: [
-      { action: Action.READ, table: "users", column: /il$/, policy: Authorization.IGNORE },
-      { action: Action.READ, policy: Authorization.ALLOW },
-      { action: Action.SELECT, policy: Authorization.ALLOW },
-    ],
-    defaultPolicy: Authorization.DENY,
-  });
-
-  const row = db.prepare("SELECT id, name, email FROM users WHERE id = 1").get();
-  t.is(row.id, 1);
-  t.is(row.name, "Alice");
-  t.is(row.email, null); // "email" ends in "il"
-});
-
-test.serial("Regex: on entity name for allowed functions", async (t) => {
-  const db = t.context.db;
-
-  // Allow only functions starting with lowercase letters
-  db.authorizer({
-    rules: [
-      { action: Action.FUNCTION, entity: /^[a-z]/, policy: Authorization.ALLOW },
-      { action: Action.READ, policy: Authorization.ALLOW },
-      { action: Action.SELECT, policy: Authorization.ALLOW },
-    ],
-    defaultPolicy: Authorization.DENY,
-  });
-
-  const row = db.prepare("SELECT length(name) as len FROM users WHERE id = 1").get();
-  t.is(row.len, 5); // "Alice" = 5 chars
-});
-
-test.serial("Regex: non-matching regex denies correctly", async (t) => {
-  const db = t.context.db;
-
-  // Only allow tables starting with "archive_"
-  db.authorizer({
-    rules: [
-      { action: Action.READ, table: /^archive_/, policy: Authorization.ALLOW },
-      { action: Action.SELECT, policy: Authorization.ALLOW },
-    ],
-    defaultPolicy: Authorization.DENY,
-  });
-
-  // users doesn't start with archive_
-  await t.throwsAsync(async () => {
-    return await db.prepare("SELECT * FROM users");
-  }, { instanceOf: t.context.errorType, code: "SQLITE_AUTH" });
-});
-
-test.serial("Regex: complex pattern with quantifiers", async (t) => {
-  const db = t.context.db;
-
-  db.exec("CREATE TABLE IF NOT EXISTS logs_2024_01 (id INTEGER PRIMARY KEY, msg TEXT)");
-  db.exec("INSERT INTO logs_2024_01 (id, msg) VALUES (1, 'jan')");
-
-  // Match logs_YYYY_MM pattern
-  db.authorizer({
-    rules: [
-      { action: Action.READ, table: /^logs_\d{4}_\d{2}$/, policy: Authorization.ALLOW },
-      { action: Action.SELECT, policy: Authorization.ALLOW },
-    ],
-    defaultPolicy: Authorization.DENY,
-  });
-
-  const rows = db.prepare("SELECT * FROM logs_2024_01").all();
-  t.is(rows.length, 1);
-
-  // users doesn't match the date pattern
-  await t.throwsAsync(async () => {
-    return await db.prepare("SELECT * FROM users");
-  }, { instanceOf: t.context.errorType, code: "SQLITE_AUTH" });
-});
-
-// ---- Combined glob/regex with multiple fields ----
-
-test.serial("Glob table + regex column combo", async (t) => {
-  const db = t.context.db;
-
-  // For any table matching user*, IGNORE columns matching a secret-ish pattern
-  db.authorizer({
-    rules: [
-      { action: Action.READ, table: "user*", column: /^(email|password|ssn)$/, policy: Authorization.IGNORE },
+      { action: Action.READ, table: "user*", column: "e*", policy: Authorization.IGNORE },
       { action: Action.READ, policy: Authorization.ALLOW },
       { action: Action.SELECT, policy: Authorization.ALLOW },
     ],
@@ -626,26 +430,7 @@ test.serial("Glob table + regex column combo", async (t) => {
   const row = db.prepare("SELECT id, name, email FROM users WHERE id = 2").get();
   t.is(row.id, 2);
   t.is(row.name, "Bob");
-  t.is(row.email, null); // email matched the regex, users matched user*
-});
-
-test.serial("Regex table + glob column combo", async (t) => {
-  const db = t.context.db;
-
-  // For tables matching /^users$/, IGNORE columns matching e*
-  db.authorizer({
-    rules: [
-      { action: Action.READ, table: /^users$/, column: "e*", policy: Authorization.IGNORE },
-      { action: Action.READ, policy: Authorization.ALLOW },
-      { action: Action.SELECT, policy: Authorization.ALLOW },
-    ],
-    defaultPolicy: Authorization.DENY,
-  });
-
-  const row = db.prepare("SELECT id, name, email FROM users WHERE id = 1").get();
-  t.is(row.id, 1);
-  t.is(row.name, "Alice");
-  t.is(row.email, null);
+  t.is(row.email, null); // email matches e*, users matches user*
 });
 
 test.serial("Glob: wildcard-only pattern * matches everything", async (t) => {
@@ -700,11 +485,7 @@ test.beforeEach(async (t) => {
       DROP TABLE IF EXISTS audit_users;
       DROP TABLE IF EXISTS app_prod_logs;
       DROP TABLE IF EXISTS x_data_y;
-      DROP TABLE IF EXISTS Users_CI;
       DROP TABLE IF EXISTS products;
-      DROP TABLE IF EXISTS t1_data;
-      DROP TABLE IF EXISTS t2_data;
-      DROP TABLE IF EXISTS logs_2024_01;
       CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)
   `);
   db.exec(
