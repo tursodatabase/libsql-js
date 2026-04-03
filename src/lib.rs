@@ -422,58 +422,38 @@ impl Database {
 
     /// Sets the authorizer for the database.
     ///
-    /// # Arguments
-    ///
-    /// * `env` - The environment.
-    /// * `rules_obj` - The rules object.
-    ///
-    /// The `rules_obj` is a JavaScript object with the following properties:
-    ///
-    /// * `Authorization.ALLOW` - Allow access to the table.
-    /// * `Authorization.DENY` - Deny access to the table.
-    ///
-    /// Example:
-    ///
-    /// ```javascript
-    /// db.authorizer({
-    ///     "users": Authorization.ALLOW
-    /// });
-    /// ```
+    /// Accepts either:
+    /// - Legacy format: `{ [tableName: string]: 0 | 1 }`
+    /// - Full format: `{ rules: AuthRule[], defaultPolicy?: 0 | 1 | 2 }`
+    /// - `null` to remove the authorizer
     #[napi]
-    pub fn authorizer(&self, env: Env, rules_obj: napi::JsObject) -> Result<()> {
+    pub fn authorizer(&self, env: Env, config: JsUnknown) -> Result<()> {
         let conn = match &self.conn {
             Some(c) => c.clone(),
             None => {
                 return Err(throw_database_closed_error(&env).into());
             }
         };
-        let mut builder = crate::auth::AuthorizerBuilder::new();
-        let prop_names = rules_obj.get_property_names()?;
-        let len = prop_names.get_array_length()?;
-        for idx in 0..len {
-            let key_js: napi::JsString = prop_names.get_element::<napi::JsString>(idx)?;
-            let key = key_js.into_utf8()?.into_owned()?;
-            let value_js: napi::JsNumber = rules_obj.get_named_property(&key)?;
-            let value = value_js.get_int32()?;
-            match value {
-                0 => {
-                    // Authorization.ALLOW
-                    builder.allow(&key);
-                }
-                1 => {
-                    // Authorization.DENY
-                    builder.deny(&key);
-                }
-                _ => {
-                    let msg = format!(
-                        "Invalid authorization rule value '{}' for table '{}'. Expected 0 (ALLOW) or 1 (DENY).",
-                        value, key
-                    );
-                    return Err(napi::Error::from_reason(msg));
-                }
-            }
+
+        // null/undefined → remove authorizer
+        let val_type = config.get_type()?;
+        if val_type == ValueType::Null || val_type == ValueType::Undefined {
+            let none_hook: Option<libsql::AuthHook> = None;
+            conn.authorizer(none_hook).map_err(Error::from)?;
+            return Ok(());
         }
-        let authorizer = builder.build();
+
+        let obj: napi::JsObject = config.coerce_to_object()?;
+
+        // Detect format: if "rules" property exists, use new format; otherwise legacy
+        let has_rules = obj.has_named_property("rules")?;
+
+        let authorizer = if has_rules {
+            parse_rule_config(&obj)?
+        } else {
+            parse_legacy_config(&obj)?
+        };
+
         let auth_arc = std::sync::Arc::new(authorizer);
         let closure = {
             let auth_arc = auth_arc.clone();
@@ -616,6 +596,189 @@ impl Database {
         self.default_safe_integers
             .store(toggle.unwrap_or(true), Ordering::SeqCst);
         Ok(())
+    }
+}
+
+fn int_to_authorization(val: i32) -> Result<libsql::Authorization> {
+    match val {
+        0 => Ok(libsql::Authorization::Allow),
+        1 => Ok(libsql::Authorization::Deny),
+        2 => Ok(libsql::Authorization::Ignore),
+        _ => Err(napi::Error::from_reason(format!(
+            "Invalid authorization value '{val}'. Expected 0 (ALLOW), 1 (DENY), or 2 (IGNORE).",
+        ))),
+    }
+}
+
+/// Parse legacy `{ tableName: 0|1 }` format.
+fn parse_legacy_config(obj: &napi::JsObject) -> Result<crate::auth::Authorizer> {
+    let mut builder = crate::auth::AuthorizerBuilder::new();
+    let prop_names = obj.get_property_names()?;
+    let len = prop_names.get_array_length()?;
+    for idx in 0..len {
+        let key_js: napi::JsString = prop_names.get_element::<napi::JsString>(idx)?;
+        let key = key_js.into_utf8()?.into_owned()?;
+        let value_js: napi::JsNumber = obj.get_named_property(&key)?;
+        let value = value_js.get_int32()?;
+        match value {
+            0 => {
+                builder.allow(&key);
+            }
+            1 => {
+                builder.deny(&key);
+            }
+            _ => {
+                let msg = format!(
+                    "Invalid authorization rule value '{value}' for table '{key}'. Expected 0 (ALLOW) or 1 (DENY).",
+                );
+                return Err(napi::Error::from_reason(msg));
+            }
+        }
+    }
+    Ok(builder.build())
+}
+
+/// Parse new `{ rules: [...], defaultPolicy?: number }` format.
+fn parse_rule_config(obj: &napi::JsObject) -> Result<crate::auth::Authorizer> {
+    let rules_arr: napi::JsObject = obj.get_named_property("rules")?;
+    let rules_len = rules_arr.get_array_length()?;
+
+    let default_policy = if obj.has_named_property("defaultPolicy")? {
+        let val: napi::JsNumber = obj.get_named_property("defaultPolicy")?;
+        int_to_authorization(val.get_int32()?)?
+    } else {
+        libsql::Authorization::Deny
+    };
+
+    let mut rules = Vec::with_capacity(rules_len as usize);
+    for i in 0..rules_len {
+        let rule_obj: napi::JsObject = rules_arr.get_element(i)?;
+        rules.push(parse_single_rule(&rule_obj)?);
+    }
+
+    Ok(crate::auth::Authorizer::new(rules, default_policy))
+}
+
+/// Parse a single rule object from the JS rules array.
+fn parse_single_rule(rule_obj: &napi::JsObject) -> Result<crate::auth::AuthRule> {
+    // Parse action(s)
+    let actions = if rule_obj.has_named_property("action")? {
+        let action_val: JsUnknown = rule_obj.get_named_property("action")?;
+        match action_val.get_type()? {
+            ValueType::Number => {
+                let n: napi::JsNumber = action_val.coerce_to_number()?;
+                vec![n.get_int32()?]
+            }
+            ValueType::Object => {
+                // Array of numbers
+                let arr: napi::JsObject = action_val.coerce_to_object()?;
+                let len = arr.get_array_length()?;
+                let mut v = Vec::with_capacity(len as usize);
+                for j in 0..len {
+                    let n: napi::JsNumber = arr.get_element(j)?;
+                    v.push(n.get_int32()?);
+                }
+                v
+            }
+            _ => {
+                return Err(napi::Error::from_reason(
+                    "action must be a number or array of numbers".to_string(),
+                ));
+            }
+        }
+    } else {
+        vec![]
+    };
+
+    // Parse table pattern
+    let table = if rule_obj.has_named_property("table")? {
+        let val: JsUnknown = rule_obj.get_named_property("table")?;
+        Some(parse_pattern(val, "table")?)
+    } else {
+        None
+    };
+
+    // Parse column pattern
+    let column = if rule_obj.has_named_property("column")? {
+        let val: JsUnknown = rule_obj.get_named_property("column")?;
+        Some(parse_pattern(val, "column")?)
+    } else {
+        None
+    };
+
+    // Parse entity pattern
+    let entity = if rule_obj.has_named_property("entity")? {
+        let val: JsUnknown = rule_obj.get_named_property("entity")?;
+        Some(parse_pattern(val, "entity")?)
+    } else {
+        None
+    };
+
+    // Parse policy (required)
+    let policy_val: napi::JsNumber = rule_obj.get_named_property("policy")?;
+    let authorization = int_to_authorization(policy_val.get_int32()?)?;
+
+    Ok(crate::auth::AuthRule {
+        actions,
+        table,
+        column,
+        entity,
+        authorization,
+    })
+}
+
+/// Parse a pattern value: string (exact or glob) or RegExp.
+fn parse_pattern(val: JsUnknown, field_name: &str) -> Result<crate::auth::PatternMatcher> {
+    match val.get_type()? {
+        ValueType::String => {
+            let s: napi::JsString = val.coerce_to_string()?;
+            let owned = s.into_utf8()?.into_owned()?;
+            // Auto-detect glob: if the string contains * or ?, treat as glob
+            if owned.contains('*') || owned.contains('?') {
+                Ok(crate::auth::PatternMatcher::Glob(owned))
+            } else {
+                Ok(crate::auth::PatternMatcher::Exact(owned))
+            }
+        }
+        ValueType::Object => {
+            // Check if it's a RegExp by checking for .source property
+            let obj: napi::JsObject = val.coerce_to_object()?;
+            if obj.has_named_property("source")? {
+                let source_js: napi::JsString = obj.get_named_property("source")?;
+                let source = source_js.into_utf8()?.into_owned()?;
+
+                // Check for flags (we support 'i' for case-insensitive)
+                let flags_str = if obj.has_named_property("flags")? {
+                    let flags_js: napi::JsString = obj.get_named_property("flags")?;
+                    flags_js.into_utf8()?.into_owned()?
+                } else {
+                    String::new()
+                };
+
+                let pattern = if flags_str.contains('i') {
+                    format!("(?i){}", source)
+                } else {
+                    source
+                };
+
+                let re = regex::Regex::new(&pattern).map_err(|e| {
+                    napi::Error::from_reason(format!(
+                        "Invalid regex pattern for {}: {}",
+                        field_name, e
+                    ))
+                })?;
+                Ok(crate::auth::PatternMatcher::Regex(re))
+            } else {
+                Err(napi::Error::from_reason(format!(
+                    "{} must be a string or RegExp",
+                    field_name
+                )))
+            }
+        }
+        _ => Err(napi::Error::from_reason(format!(
+            "{} must be a string or RegExp",
+            field_name
+        ))),
     }
 }
 
