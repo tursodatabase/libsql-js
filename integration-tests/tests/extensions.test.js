@@ -464,6 +464,90 @@ test.serial("Glob: pattern with no match denies correctly", async (t) => {
   }, { instanceOf: t.context.errorType, code: "SQLITE_AUTH" });
 });
 
+// ---- Accessor (view-scoped authorization) ----
+
+test.serial("Accessor: allows reads through a view when accessor matches", async (t) => {
+  const db = t.context.db;
+
+  // Create a view over users
+  db.exec("CREATE TEMPORARY VIEW users_view AS SELECT id, name FROM users");
+
+  db.authorizer({
+    rules: [
+      { action: Action.SELECT, policy: Authorization.ALLOW },
+      // Allow reads from the view itself
+      { action: Action.READ, table: "users_view", policy: Authorization.ALLOW },
+      // Allow reads from users ONLY when accessed via users_view
+      { action: Action.READ, table: "users", accessor: "users_view", policy: Authorization.ALLOW },
+    ],
+    defaultPolicy: Authorization.DENY,
+  });
+
+  const stmt = db.prepare("SELECT * FROM users_view");
+  const rows = stmt.all();
+  t.is(rows.length, 2);
+});
+
+test.serial("Accessor: blocks direct table access when accessor doesn't match", async (t) => {
+  const db = t.context.db;
+
+  db.exec("CREATE TEMPORARY VIEW IF NOT EXISTS users_view AS SELECT id, name FROM users");
+
+  db.authorizer({
+    rules: [
+      { action: Action.SELECT, policy: Authorization.ALLOW },
+      { action: Action.READ, table: "users_view", policy: Authorization.ALLOW },
+      { action: Action.READ, table: "users", accessor: "users_view", policy: Authorization.ALLOW },
+    ],
+    defaultPolicy: Authorization.DENY,
+  });
+
+  // Direct access has accessor=null, which doesn't match "users_view"
+  await t.throwsAsync(async () => {
+    return await db.prepare("SELECT * FROM users");
+  }, { instanceOf: t.context.errorType, code: "SQLITE_AUTH" });
+});
+
+test.serial("Accessor: glob pattern matching", async (t) => {
+  const db = t.context.db;
+
+  db.exec("CREATE TEMPORARY VIEW IF NOT EXISTS users_view AS SELECT id, name FROM users");
+
+  db.authorizer({
+    rules: [
+      { action: Action.SELECT, policy: Authorization.ALLOW },
+      { action: Action.READ, table: "users_view", policy: Authorization.ALLOW },
+      // Allow reads from users when accessed via any view matching the glob
+      { action: Action.READ, table: "users", accessor: { glob: "*_view" }, policy: Authorization.ALLOW },
+    ],
+    defaultPolicy: Authorization.DENY,
+  });
+
+  const stmt = db.prepare("SELECT * FROM users_view");
+  const rows = stmt.all();
+  t.is(rows.length, 2);
+});
+
+test.serial("Accessor: blocks subquery escape to underlying table", async (t) => {
+  const db = t.context.db;
+
+  db.exec("CREATE TEMPORARY VIEW IF NOT EXISTS users_view AS SELECT id, name FROM users");
+
+  db.authorizer({
+    rules: [
+      { action: Action.SELECT, policy: Authorization.ALLOW },
+      { action: Action.READ, table: "users_view", policy: Authorization.ALLOW },
+      { action: Action.READ, table: "users", accessor: "users_view", policy: Authorization.ALLOW },
+    ],
+    defaultPolicy: Authorization.DENY,
+  });
+
+  // Subquery directly referencing users table (accessor=null for the subquery)
+  await t.throwsAsync(async () => {
+    return await db.prepare("SELECT * FROM users_view WHERE id IN (SELECT id FROM users)");
+  }, { instanceOf: t.context.errorType, code: "SQLITE_AUTH" });
+});
+
 // ---- Setup ----
 
 const connect = async (path_opt) => {
