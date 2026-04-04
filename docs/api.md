@@ -134,11 +134,37 @@ db.authorizer({
 | table    | <code>string \| { glob: string }</code>   | Table name pattern. Omit to match any table.                         |
 | column   | <code>string \| { glob: string }</code>   | Column name pattern (relevant for READ/UPDATE). Omit to match any.   |
 | entity   | <code>string \| { glob: string }</code>   | Entity name (index, trigger, view, pragma, function). Omit to match any. |
+| accessor | <code>string \| { glob: string }</code>   | The innermost trigger or view that caused this access. See below.    |
 | policy   | <code>number</code>                       | `Authorization.ALLOW`, `Authorization.DENY`, or `Authorization.IGNORE`. |
+
+#### Accessor field
+
+The `accessor` field corresponds to the 4th argument of SQLite's C-level authorizer callback. When a READ occurs because a view is being expanded, SQLite sets this to the view name. For direct table access, it is `null`.
+
+This enables **view-scoped authorization**: you can allow reads from an underlying table only when accessed through a specific view, while blocking direct access.
+
+```javascript
+db.authorizer({
+  rules: [
+    { action: Action.SELECT, policy: Authorization.ALLOW },
+    // Allow reads from the view itself
+    { action: Action.READ, table: "my_view", policy: Authorization.ALLOW },
+    // Allow reads from the underlying table ONLY when accessed via my_view
+    { action: Action.READ, table: "underlying_data", accessor: "my_view", policy: Authorization.ALLOW },
+  ],
+  defaultPolicy: Authorization.DENY,
+});
+
+// Works — accessed through the view
+db.prepare("SELECT * FROM my_view");
+
+// Blocked — direct access has accessor=null, which doesn't match "my_view"
+db.prepare("SELECT * FROM underlying_data"); // Error: SQLITE_AUTH
+```
 
 #### Pattern matching
 
-Pattern fields (`table`, `column`, `entity`) accept either:
+Pattern fields (`table`, `column`, `entity`, `accessor`) accept either:
 
 - A **plain string** for exact matching: `"users"`
 - An **object with a `glob` key** for glob matching: `{ glob: "logs_*" }`

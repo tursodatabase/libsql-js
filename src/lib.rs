@@ -740,6 +740,14 @@ fn parse_single_rule(rule_obj: &napi::JsObject) -> Result<crate::auth::AuthRule>
         None
     };
 
+    // Parse accessor pattern
+    let accessor = if rule_obj.has_named_property("accessor")? {
+        let val: JsUnknown = rule_obj.get_named_property("accessor")?;
+        Some(parse_pattern(val, "accessor")?)
+    } else {
+        None
+    };
+
     // Parse policy (required)
     let policy_val: napi::JsNumber = rule_obj.get_named_property("policy")?;
     let authorization = int_to_authorization(policy_val.get_int32()?)?;
@@ -749,6 +757,7 @@ fn parse_single_rule(rule_obj: &napi::JsObject) -> Result<crate::auth::AuthRule>
         table,
         column,
         entity,
+        accessor,
         authorization,
     })
 }
