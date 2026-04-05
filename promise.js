@@ -61,6 +61,9 @@ function splitBindParameters(bindParameters) {
   return { params: bindParameters.length === 1 ? bindParameters[0] : bindParameters, queryOptions: undefined };
 }
 
+const symbolDispose = typeof Symbol.dispose === "symbol" ? Symbol.dispose : null;
+const hasWeakRef = typeof WeakRef === "function";
+
 /**
  * Creates a new database connection.
  *
@@ -85,6 +88,8 @@ class Database {
   constructor(db) {
     this.db = db;
     this.memory = this.db.memory
+    this._closed = false;
+    this._statements = hasWeakRef ? new Set() : null;
 
     /** @type boolean */
     this.inTransaction;
@@ -118,7 +123,13 @@ class Database {
   async prepare(sql) {
     try {
       const stmt = await this.db.prepare(sql);
-      return new Statement(stmt);
+      const wrappedStmt = new Statement(stmt, this);
+      if (this._statements != null) {
+        const statementRef = new WeakRef(wrappedStmt);
+        wrappedStmt._statementRef = statementRef;
+        this._statements.add(statementRef);
+      }
+      return wrappedStmt;
     } catch (err) {
       throw convertError(err);
     }
@@ -248,6 +259,21 @@ class Database {
    * Closes the database connection.
    */
   close() {
+    if (this._closed) {
+      return;
+    }
+    this._closed = true;
+    if (this._statements != null) {
+      for (const statementRef of Array.from(this._statements)) {
+        const statement = statementRef.deref();
+        if (statement == null) {
+          this._statements.delete(statementRef);
+          continue;
+        }
+        statement.close();
+      }
+      this._statements.clear();
+    }
     this.db.close();
   }
 
@@ -281,8 +307,36 @@ class Statement {
   /**
    * @param {NativeStatement} stmt
    */
-  constructor(stmt) {
+  constructor(stmt, database) {
     this.stmt = stmt;
+    this.database = database;
+    this._statementRef = null;
+    this._closed = false;
+  }
+
+  close() {
+    if (this._closed) {
+      return this;
+    }
+    this._closed = true;
+    if (this.database != null && this.database._statements != null && this._statementRef != null) {
+      this.database._statements.delete(this._statementRef);
+    }
+    if (this.database != null) {
+      this.database = null;
+    }
+    if (this.stmt != null) {
+      this.stmt.close();
+      this.stmt = null;
+    }
+    return this;
+  }
+
+  _getNativeStatement() {
+    if (this._closed || this.stmt == null) {
+      throw new TypeError("The database connection is not open");
+    }
+    return this.stmt;
   }
 
   /**
@@ -291,7 +345,7 @@ class Statement {
    * @param {boolean} [raw] - Enable or disable raw mode. If you don't pass the parameter, raw mode is enabled.
    */
   raw(raw) {
-    this.stmt.raw(raw);
+    this._getNativeStatement().raw(raw);
     return this;
   }
 
@@ -301,7 +355,7 @@ class Statement {
    * @param {boolean} [pluckMode] - Enable or disable pluck mode. If you don't pass the parameter, pluck mode is enabled.
    */
   pluck(pluckMode) {
-    this.stmt.pluck(pluckMode);
+    this._getNativeStatement().pluck(pluckMode);
     return this;
   }
 
@@ -311,12 +365,12 @@ class Statement {
    * @param {boolean} [timingMode] - Enable or disable query timing. If you don't pass the parameter, query timing is enabled.
    */
   timing(timingMode) {
-    this.stmt.timing(timingMode);
+    this._getNativeStatement().timing(timingMode);
     return this;
   }
 
   get reader() {
-    return this.stmt.columns().length > 0;
+    return this._getNativeStatement().columns().length > 0;
   }
 
   /**
@@ -325,7 +379,7 @@ class Statement {
   async run(...bindParameters) {
     try {
       const { params, queryOptions } = splitBindParameters(bindParameters);
-      return await this.stmt.run(params, queryOptions);
+      return await this._getNativeStatement().run(params, queryOptions);
     } catch (err) {
       throw convertError(err);
     }
@@ -339,7 +393,7 @@ class Statement {
   async get(...bindParameters) {
     try {
       const { params, queryOptions } = splitBindParameters(bindParameters);
-      return await this.stmt.get(params, queryOptions);
+      return await this._getNativeStatement().get(params, queryOptions);
     } catch (err) {
       throw convertError(err);
     }
@@ -353,7 +407,7 @@ class Statement {
   async iterate(...bindParameters) {
     try {
       const { params, queryOptions } = splitBindParameters(bindParameters);
-      const it = await this.stmt.iterate(params, queryOptions);
+      const it = await this._getNativeStatement().iterate(params, queryOptions);
       return {
         next() {
           return it.next();
@@ -394,7 +448,7 @@ class Statement {
    * Interrupts the statement.
    */
   interrupt() {
-    this.stmt.interrupt();
+    this._getNativeStatement().interrupt();
     return this;
   }
 
@@ -402,16 +456,21 @@ class Statement {
    * Returns the columns in the result set returned by this prepared statement.
    */
   columns() {
-    return this.stmt.columns();
+    return this._getNativeStatement().columns();
   }
 
   /**
    * Toggle 64-bit integer support.
    */
   safeIntegers(toggle) {
-    this.stmt.safeIntegers(toggle);
+    this._getNativeStatement().safeIntegers(toggle);
     return this;
   }
+}
+
+if (symbolDispose != null) {
+  Database.prototype[symbolDispose] = Database.prototype.close;
+  Statement.prototype[symbolDispose] = Statement.prototype.close;
 }
 
 module.exports = {

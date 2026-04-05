@@ -223,6 +223,7 @@ Cancel ongoing operations and make them return at earliest opportunity.
 ### close() ⇒ this
 
 Closes the database connection.
+All statements created from this database are closed as well.
 
 # class Statement
 
@@ -265,6 +266,10 @@ Executes the SQL statement and returns an iterator to the resulting rows.
 | -------------- | ----------------------------- | ------------------------------------------------ |
 | bindParameters | <code>array of objects</code> | The bind parameters for executing the statement. |
 | queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
+
+### close() ⇒ this
+
+Closes the prepared statement and releases its resources.
 
 ### pluck([toggleState]) ⇒ this
 

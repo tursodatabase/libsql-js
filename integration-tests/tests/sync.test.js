@@ -433,6 +433,34 @@ test.serial("Database.exec() after close()", async (t) => {
   });
 });
 
+test.serial("Statement.get() after Database.close()", async (t) => {
+  const db = t.context.db;
+  const stmt = db.prepare("SELECT 1");
+  db.close();
+  t.throws(() => {
+    stmt.get();
+  }, {
+    instanceOf: TypeError,
+    message: "The database connection is not open"
+  });
+});
+
+test.serial("Statement.close()", async (t) => {
+  const db = t.context.db;
+  const stmt = db.prepare("SELECT 1");
+  if (typeof stmt.close !== "function") {
+    t.pass();
+    return;
+  }
+  stmt.close();
+  t.throws(() => {
+    stmt.get();
+  }, {
+    instanceOf: TypeError,
+    message: "The database connection is not open"
+  });
+});
+
 test.serial("Timeout option", async (t) => {
   const timeout = 1000;
   const path = genDatabaseFilename();
