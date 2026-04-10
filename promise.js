@@ -354,16 +354,41 @@ class Statement {
     try {
       const { params, queryOptions } = splitBindParameters(bindParameters);
       const it = await this.stmt.iterate(params, queryOptions);
+      let closed = false;
+      const close = () => {
+        if (closed) {
+          return;
+        }
+        closed = true;
+        if (typeof it.close === "function") {
+          it.close();
+        }
+      };
+      const next = async () => {
+        try {
+          const record = await it.next();
+          if (record.done) {
+            close();
+          }
+          return record;
+        } catch (err) {
+          close();
+          throw err;
+        }
+      };
       return {
         next() {
-          return it.next();
+          return next();
+        },
+        return(value) {
+          close();
+          return Promise.resolve({
+            done: true,
+            value,
+          });
         },
         [Symbol.asyncIterator]() {
-          return {
-            next() {
-              return it.next();
-            }
-          };
+          return this;
         }
       };
     } catch (err) {

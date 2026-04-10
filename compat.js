@@ -309,12 +309,39 @@ class Statement {
     try {
       const { params, queryOptions } = splitBindParameters(bindParameters);
       const it = statementIterateSync(this.stmt, params, queryOptions);
-      return {
-        next: () => iteratorNextSync(it),
-        [Symbol.iterator]() {
-          return {
-            next: () => iteratorNextSync(it),
+      let closed = false;
+      const close = () => {
+        if (closed) {
+          return;
+        }
+        closed = true;
+        if (typeof it.close === "function") {
+          it.close();
+        }
+      };
+      const next = () => {
+        try {
+          const record = iteratorNextSync(it);
+          if (record.done) {
+            close();
           }
+          return record;
+        } catch (err) {
+          close();
+          throw err;
+        }
+      };
+      return {
+        next,
+        return(value) {
+          close();
+          return {
+            done: true,
+            value,
+          };
+        },
+        [Symbol.iterator]() {
+          return this;
         },
       };
     } catch (err) {
