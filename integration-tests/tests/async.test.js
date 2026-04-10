@@ -423,6 +423,28 @@ test.serial("Query timeout option allows short-running query", async (t) => {
   db.close();
 });
 
+test.serial("Stale timeout guard from exhausted iterator does not interrupt later queries", async (t) => {
+  const TIMEOUT = 500;
+  const [db] = await connect(":memory:", { defaultQueryTimeout: TIMEOUT });
+  await db.exec("CREATE TABLE t(x INTEGER)");
+  const insert = await db.prepare("INSERT INTO t VALUES (?)");
+  for (let i = 0; i < 10000; i++) {
+    await insert.run(i);
+  }
+
+  // Run many sequential queries via stmt.all() (which uses iterate() internally).
+  // Each query finishes well under the timeout, but if the RowsIterator's
+  // TimeoutGuard is not released until GC, stale guards will fire and
+  // interrupt unrelated later queries.
+  const stmt = await db.prepare("SELECT * FROM t ORDER BY x ASC");
+  for (let i = 0; i < 100; i++) {
+    const rows = await stmt.all();
+    t.is(rows.length, 10000);
+  }
+
+  db.close();
+});
+
 test.serial("Per-query timeout option interrupts long-running Statement.all()", async (t) => {
   const [db, errorType] = await connect(":memory:");
   const stmt = await db.prepare(

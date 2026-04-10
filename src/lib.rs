@@ -34,7 +34,7 @@ use std::{
     str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     time::Duration,
 };
@@ -1391,7 +1391,7 @@ pub struct RowsIterator {
     safe_ints: bool,
     raw: bool,
     pluck: bool,
-    _timeout_guard: Option<TimeoutGuard>,
+    timeout_guard: Mutex<Option<TimeoutGuard>>,
 }
 
 #[napi]
@@ -1410,14 +1410,33 @@ impl RowsIterator {
             safe_ints,
             raw,
             pluck,
-            _timeout_guard: timeout_guard,
+            timeout_guard: Mutex::new(timeout_guard),
         }
+    }
+
+    fn release_timeout_guard(&self) {
+        let mut guard = self.timeout_guard.lock().unwrap();
+        guard.take();
+    }
+
+    #[napi]
+    pub fn close(&self) {
+        self.release_timeout_guard();
     }
 
     #[napi]
     pub async fn next(&self) -> Result<Record> {
         let mut rows = self.rows.lock().await;
-        let row = rows.next().await.map_err(Error::from)?;
+        let row = match rows.next().await {
+            Ok(row) => row,
+            Err(err) => {
+                self.release_timeout_guard();
+                return Err(Error::from(err).into());
+            }
+        };
+        if row.is_none() {
+            self.release_timeout_guard();
+        }
         Ok(Record {
             row,
             column_names: self.column_names.clone(),
