@@ -354,18 +354,7 @@ class Statement {
     try {
       const { params, queryOptions } = splitBindParameters(bindParameters);
       const it = await this.stmt.iterate(params, queryOptions);
-      return {
-        next() {
-          return it.next();
-        },
-        [Symbol.asyncIterator]() {
-          return {
-            next() {
-              return it.next();
-            }
-          };
-        }
-      };
+      return wrappedIter(it);
     } catch (err) {
       throw convertError(err);
     }
@@ -380,11 +369,17 @@ class Statement {
     try {
       const result = [];
       const iterator = await this.iterate(...bindParameters);
-      let next;
-      while (!(next = await iterator.next()).done) {
-        result.push(next.value);
+      try {
+        let next;
+        while (!(next = await iterator.next()).done) {
+          result.push(next.value);
+        }
+        return result;
+      } finally {
+        if (typeof iterator.return === "function") {
+          await iterator.return();
+        }
       }
-      return result;
     } catch (err) {
       throw convertError(err);
     }
@@ -412,6 +407,26 @@ class Statement {
     this.stmt.safeIntegers(toggle);
     return this;
   }
+}
+
+function wrappedIter(it) {
+  return {
+    next() {
+      return it.next();
+    },
+    return(value) {
+      if (typeof it.close === "function") {
+        it.close();
+      }
+      return {
+        done: true,
+        value,
+      };
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    }
+  };
 }
 
 module.exports = {
