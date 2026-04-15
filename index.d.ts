@@ -80,6 +80,32 @@ export declare class Database {
    * - Legacy format: `{ [tableName: string]: 0 | 1 }`
    * - Full format: `{ rules: AuthRule[], defaultPolicy?: 0 | 1 | 2 }`
    * - `null` to remove the authorizer
+   *
+   * Pattern fields (`table`, `column`, `entity`) accept a plain string for
+   * exact matching, or `{ glob: "pattern" }` for glob matching with `*` and `?`.
+   *
+   * # Examples
+   *
+   * ```javascript
+   * const { Authorization, Action } = require('libsql');
+   *
+   * // Legacy table-level allow/deny
+   * db.authorizer({ "users": Authorization.ALLOW });
+   *
+   * // Rule-based with glob patterns
+   * db.authorizer({
+   *   rules: [
+   *     { action: Action.READ, table: "users", column: "password", policy: Authorization.IGNORE },
+   *     { action: Action.INSERT, table: { glob: "logs_*" }, policy: Authorization.ALLOW },
+   *     { action: Action.READ, policy: Authorization.ALLOW },
+   *     { action: Action.SELECT, policy: Authorization.ALLOW },
+   *   ],
+   *   defaultPolicy: Authorization.DENY,
+   * });
+   *
+   * // Remove authorizer
+   * db.authorizer(null);
+   * ```
    */
   authorizer(config: unknown): void
   /**
@@ -173,6 +199,7 @@ export declare class Statement {
 }
 /** A raw iterator over rows. The JavaScript layer wraps this in a iterable. */
 export declare class RowsIterator {
+  close(): void
   next(): Promise<Record>
 }
 export declare class Record {

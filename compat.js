@@ -309,14 +309,7 @@ class Statement {
     try {
       const { params, queryOptions } = splitBindParameters(bindParameters);
       const it = statementIterateSync(this.stmt, params, queryOptions);
-      return {
-        next: () => iteratorNextSync(it),
-        [Symbol.iterator]() {
-          return {
-            next: () => iteratorNextSync(it),
-          }
-        },
-      };
+      return wrappedIter(it);
     } catch (err) {
       throw convertError(err);
     }
@@ -331,11 +324,17 @@ class Statement {
     try {
       const result = [];
       const iterator = this.iterate(...bindParameters);
-      let next;
-      while (!(next = iterator.next()).done) {
-        result.push(next.value);
+      try {
+        let next;
+        while (!(next = iterator.next()).done) {
+          result.push(next.value);
+        }
+        return result;
+      } finally {
+        if (typeof iterator.return === "function") {
+          iterator.return();
+        }
       }
-      return result;
     } catch (err) {
       throw convertError(err);
     }
@@ -363,6 +362,26 @@ class Statement {
     this.stmt.safeIntegers(toggle);
     return this;
   }
+}
+
+function wrappedIter(it) {
+  return {
+    next() {
+      return iteratorNextSync(it);
+    },
+    return(value) {
+      if (typeof it.close === "function") {
+        it.close();
+      }
+      return {
+        done: true,
+        value,
+      };
+    },
+    [Symbol.iterator]() {
+      return this;
+    },
+  };
 }
 
 module.exports = Database;
