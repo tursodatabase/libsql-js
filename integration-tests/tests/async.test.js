@@ -416,6 +416,29 @@ test.serial("Query timeout option interrupts long-running query", async (t) => {
   db.close();
 });
 
+test.serial("Query timeout option interrupts long-running Statement.get()", async (t) => {
+  const [db, errorType] = await connect(":memory:", { defaultQueryTimeout: 100 });
+  const stmt = await db.prepare(`
+    WITH RECURSIVE numbers(value) AS (
+      SELECT 1
+      UNION ALL
+      SELECT value + 1 FROM numbers WHERE value < 1000000000
+    )
+    SELECT sum(value) FROM numbers;
+  `);
+
+  const error = await t.throwsAsync(async () => {
+    await stmt.get();
+  });
+  t.truthy(error);
+  t.true(error instanceof Error);
+  t.true(error instanceof errorType);
+  t.true(error.message.toLowerCase().includes("interrupt"));
+  t.is(error.code, "SQLITE_INTERRUPT");
+
+  db.close();
+});
+
 test.serial("Query timeout option allows short-running query", async (t) => {
   const [db] = await connect(":memory:", { defaultQueryTimeout: 100 });
   const stmt = await db.prepare("SELECT 1 AS value");
@@ -460,6 +483,57 @@ test.serial("Per-query timeout option interrupts long-running Statement.all()", 
     message: "interrupted",
     code: "SQLITE_INTERRUPT",
   });
+
+  db.close();
+});
+
+test.serial("Per-query timeout option interrupts long-running Statement.get()", async (t) => {
+  const [db, errorType] = await connect(":memory:");
+  const stmt = await db.prepare(`
+    WITH RECURSIVE numbers(value) AS (
+      SELECT 1
+      UNION ALL
+      SELECT value + 1 FROM numbers WHERE value < 1000000000
+    )
+    SELECT sum(value) FROM numbers;
+  `);
+
+  const error = await t.throwsAsync(async () => {
+    await stmt.get(undefined, { queryTimeout: 100 });
+  });
+  t.truthy(error);
+  t.true(error instanceof Error);
+  t.true(error instanceof errorType);
+  t.true(error.message.toLowerCase().includes("interrupt"));
+  t.is(error.code, "SQLITE_INTERRUPT");
+
+  db.close();
+});
+
+test.serial("Timeout on Statement.get() does not leak into later prepare()/EXPLAIN", async (t) => {
+  t.timeout(30_000);
+  const [db, errorType] = await connect(":memory:");
+  const longRunningStmt = await db.prepare(`
+    WITH RECURSIVE numbers(value) AS (
+      SELECT 1
+      UNION ALL
+      SELECT value + 1 FROM numbers WHERE value < 1000000000
+    )
+    SELECT sum(value) FROM numbers;
+  `);
+
+  for (let i = 0; i < 20; i++) {
+    const error = await t.throwsAsync(async () => {
+      await longRunningStmt.get(undefined, { queryTimeout: 50 });
+    });
+    t.truthy(error);
+    t.true(error instanceof errorType);
+    t.true(error.message.toLowerCase().includes("interrupt"));
+
+    const explainStmt = await db.prepare("EXPLAIN QUERY PLAN SELECT 1");
+    const explainRows = await explainStmt.all();
+    t.true(explainRows.length > 0);
+  }
 
   db.close();
 });

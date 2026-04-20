@@ -29,7 +29,7 @@ use napi::{
 };
 use napi_derive::napi;
 use once_cell::sync::OnceCell;
-use query_timeout::{QueryTimeoutManager, TimeoutGuard};
+use query_timeout::{QueryTimeoutGuard, QueryTimeoutManager};
 use std::{
     str::FromStr,
     sync::{
@@ -239,6 +239,8 @@ pub struct Database {
     query_timeout: Option<Duration>,
     // Shared timeout manager for efficient query timeout handling.
     timeout_manager: Arc<QueryTimeoutManager>,
+    // Ensures only one operation executes per connection at a time.
+    execution_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Drop for Database {
@@ -326,7 +328,7 @@ pub async fn connect(path: String, opts: Option<Options>) -> Result<Database> {
         let builder = libsql::Builder::new_local(&path);
         builder.build().await.map_err(Error::from)?
     };
-    let conn = db.connect().map_err(Error::from)?;
+    let conn = Arc::new(db.connect().map_err(Error::from)?);
     let default_safe_integers = AtomicBool::new(false);
     let memory = path == ":memory:";
     let timeout = match opts {
@@ -341,14 +343,16 @@ pub async fn connect(path: String, opts: Option<Options>) -> Result<Database> {
         .as_ref()
         .and_then(|o| o.defaultQueryTimeout)
         .and_then(query_timeout_duration);
-    let timeout_manager = Arc::new(QueryTimeoutManager::new());
+    let timeout_manager = Arc::new(QueryTimeoutManager::new(&conn));
+    let execution_lock = Arc::new(tokio::sync::Mutex::new(()));
     Ok(Database {
         db: Some(db),
-        conn: Some(Arc::new(conn)),
+        conn: Some(conn),
         default_safe_integers,
         memory,
         query_timeout,
         timeout_manager,
+        execution_lock,
     })
 }
 
@@ -404,7 +408,15 @@ impl Database {
                 ));
             }
         };
-        let stmt = { conn.prepare(&sql).await.map_err(Error::from)? };
+        let _execution_guard = self.execution_lock.clone().lock_owned().await;
+        let stmt = match conn.prepare(&sql).await {
+            Ok(stmt) => stmt,
+            Err(err) if is_sqlite_interrupt(&err) => {
+                clear_stale_interrupt(&conn).await;
+                conn.prepare(&sql).await.map_err(Error::from)?
+            }
+            Err(err) => return Err(Error::from(err).into()),
+        };
         let mode = AccessMode {
             safe_ints: self.default_safe_integers.load(Ordering::SeqCst).into(),
             raw: false.into(),
@@ -417,6 +429,7 @@ impl Database {
             mode,
             self.query_timeout,
             self.timeout_manager.clone(),
+            self.execution_lock.clone(),
         ))
     }
 
@@ -559,7 +572,8 @@ impl Database {
             Some(timeout_ms) => query_timeout_duration(timeout_ms),
             None => self.query_timeout,
         };
-        let _guard = query_timeout.map(|t| self.timeout_manager.register(&conn, t));
+        let _execution_guard = self.execution_lock.clone().lock_owned().await;
+        let _timeout_guard = query_timeout.map(|t| self.timeout_manager.register(t));
         conn.execute_batch(&sql).await.map_err(Error::from)?;
         Ok(())
     }
@@ -843,6 +857,25 @@ fn query_timeout_duration(timeout_ms: f64) -> Option<Duration> {
     }
 }
 
+fn is_sqlite_interrupt(err: &libsql::Error) -> bool {
+    matches!(
+        err,
+        libsql::Error::SqliteFailure(raw_code, _) if *raw_code == libsql::ffi::SQLITE_INTERRUPT
+    )
+}
+
+async fn clear_stale_interrupt(conn: &Arc<libsql::Connection>) {
+    // If a timeout interrupt races with operation completion, the next operation
+    // can observe a stale SQLITE_INTERRUPT. Probe the connection to consume it.
+    for _ in 0..3 {
+        match conn.execute_batch("SELECT 1").await {
+            Ok(_) => break,
+            Err(err) if is_sqlite_interrupt(&err) => continue,
+            Err(_) => break,
+        }
+    }
+}
+
 /// SQLite statement object.
 #[napi]
 pub struct Statement {
@@ -858,6 +891,8 @@ pub struct Statement {
     query_timeout: Option<Duration>,
     // Shared timeout manager.
     timeout_manager: Arc<QueryTimeoutManager>,
+    // Shared per-connection execution lock.
+    execution_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 #[napi]
@@ -875,6 +910,7 @@ impl Statement {
         mode: AccessMode,
         query_timeout: Option<Duration>,
         timeout_manager: Arc<QueryTimeoutManager>,
+        execution_lock: Arc<tokio::sync::Mutex<()>>,
     ) -> Self {
         let column_names: Vec<std::ffi::CString> = stmt
             .columns()
@@ -889,6 +925,7 @@ impl Statement {
             mode,
             query_timeout,
             timeout_manager,
+            execution_lock,
         }
     }
 
@@ -910,10 +947,13 @@ impl Statement {
         let start = std::time::Instant::now();
         let stmt = self.stmt.clone();
         let conn = self.conn.clone();
-        let guard = self.start_timeout_guard(query_options);
+        let query_timeout = self.resolve_query_timeout(query_options);
+        let timeout_manager = self.timeout_manager.clone();
+        let execution_lock = self.execution_lock.clone();
 
         let future = async move {
-            let _guard = guard;
+            let _execution_guard = execution_lock.lock_owned().await;
+            let _timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
             stmt.run(params).await.map_err(Error::from)?;
             let changes = if conn.total_changes() == total_changes_before {
                 0
@@ -951,7 +991,6 @@ impl Statement {
         let timed = self.mode.timing.load(Ordering::SeqCst);
 
         let params = map_params(&self.stmt, params)?;
-        let stmt = self.stmt.clone();
         let column_names = self.column_names.clone();
 
         let start = if timed {
@@ -960,14 +999,27 @@ impl Statement {
             None
         };
 
+        let stmt = self.stmt.clone();
         let stmt_fut = stmt.clone();
-        let guard = self.start_timeout_guard(query_options);
+        let query_timeout = self.resolve_query_timeout(query_options);
+        let timeout_manager = self.timeout_manager.clone();
+        let execution_lock = self.execution_lock.clone();
         let future = async move {
-            let _guard = guard;
-            let mut rows = stmt_fut.query(params).await.map_err(Error::from)?;
-            let row = rows.next().await.map_err(Error::from)?;
-            let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
-            Ok((row, duration))
+            let result: std::result::Result<(Option<libsql::Row>, Option<f64>), Error> = {
+                let _execution_guard = execution_lock.lock_owned().await;
+                let _timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
+                async {
+                    let mut rows = stmt_fut.query(params).await.map_err(Error::from)?;
+                    let row = rows.next().await.map_err(Error::from)?;
+                    let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
+                    Ok((row, duration))
+                }
+                .await
+            };
+            if result.is_err() {
+                stmt_fut.reset();
+            }
+            result.map_err(napi::Error::from)
         };
 
         env.execute_tokio_future(future, move |&mut env, (row, duration)| {
@@ -1031,23 +1083,33 @@ impl Statement {
         let stmt = self.stmt.clone();
         stmt.reset();
         let params = map_params(&stmt, params).unwrap();
-        let stmt = self.stmt.clone();
-        let guard = self.start_timeout_guard(query_options);
+        let stmt_for_query = self.stmt.clone();
+        let stmt_for_iter = stmt_for_query.clone();
+        let query_timeout = self.resolve_query_timeout(query_options);
+        let timeout_manager = self.timeout_manager.clone();
+        let execution_lock = self.execution_lock.clone();
         let future = async move {
-            let rows = stmt.query(params).await.map_err(Error::from)?;
-            Ok::<_, napi::Error>(rows)
+            let execution_guard = execution_lock.lock_owned().await;
+            let timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
+            let rows = stmt_for_query.query(params).await.map_err(Error::from)?;
+            Ok::<_, napi::Error>((rows, execution_guard, timeout_guard))
         };
         let column_names = self.column_names.clone();
-        env.execute_tokio_future(future, move |&mut _env, result| {
-            Ok(RowsIterator::new(
-                Arc::new(tokio::sync::Mutex::new(result)),
-                column_names,
-                safe_ints,
-                raw,
-                pluck,
-                guard,
-            ))
-        })
+        env.execute_tokio_future(
+            future,
+            move |&mut _env, (result, execution_guard, timeout_guard)| {
+                Ok(RowsIterator::new(
+                    Arc::new(tokio::sync::Mutex::new(result)),
+                    stmt_for_iter,
+                    column_names,
+                    safe_ints,
+                    raw,
+                    pluck,
+                    timeout_guard,
+                    execution_guard,
+                ))
+            },
+        )
     }
 
     #[napi]
@@ -1136,11 +1198,6 @@ impl Statement {
             None => self.query_timeout,
         }
     }
-
-    fn start_timeout_guard(&self, query_options: Option<QueryOptions>) -> Option<TimeoutGuard> {
-        self.resolve_query_timeout(query_options)
-            .map(|t| self.timeout_manager.register(&self.conn, t))
-    }
 }
 
 /// Gets first row from statement in blocking mode.
@@ -1163,24 +1220,39 @@ pub fn statement_get_sync(
     };
 
     let rt = runtime()?;
-    let _guard = stmt.start_timeout_guard(query_options);
-    rt.block_on(async move {
-        let params = map_params(&stmt.stmt, params)?;
-        let mut rows = stmt.stmt.query(params).await.map_err(Error::from)?;
-        let row = rows.next().await.map_err(Error::from)?;
-        let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
-        let result = Statement::get_internal(
-            &env,
-            &row,
-            &stmt.column_names,
-            safe_ints,
-            raw,
-            pluck,
-            duration,
-        );
-        stmt.stmt.reset();
-        result
-    })
+    let query_timeout = stmt.resolve_query_timeout(query_options);
+    let timeout_manager = stmt.timeout_manager.clone();
+    let execution_lock = stmt.execution_lock.clone();
+    let result: Result<(Option<libsql::Row>, Option<f64>)> = {
+        rt.block_on(async move {
+            let _execution_guard = execution_lock.lock_owned().await;
+            let _timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
+            let params = map_params(&stmt.stmt, params)?;
+            let mut rows = stmt.stmt.query(params).await.map_err(Error::from)?;
+            let row = rows.next().await.map_err(Error::from)?;
+            let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
+            Ok((row, duration))
+        })
+    };
+    match result {
+        Ok((row, duration)) => {
+            let mapped = Statement::get_internal(
+                &env,
+                &row,
+                &stmt.column_names,
+                safe_ints,
+                raw,
+                pluck,
+                duration,
+            );
+            stmt.stmt.reset();
+            mapped
+        }
+        Err(err) => {
+            stmt.stmt.reset();
+            Err(err)
+        }
+    }
 }
 
 /// Runs a statement in blocking mode.
@@ -1192,8 +1264,12 @@ pub fn statement_run_sync(
 ) -> Result<RunResult> {
     stmt.stmt.reset();
     let rt = runtime()?;
-    let _guard = stmt.start_timeout_guard(query_options);
+    let query_timeout = stmt.resolve_query_timeout(query_options);
+    let timeout_manager = stmt.timeout_manager.clone();
+    let execution_lock = stmt.execution_lock.clone();
     rt.block_on(async move {
+        let _execution_guard = execution_lock.lock_owned().await;
+        let _timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
         let params = map_params(&stmt.stmt, params)?;
         let total_changes_before = stmt.conn.total_changes();
         let start = std::time::Instant::now();
@@ -1225,9 +1301,14 @@ pub fn statement_iterate_sync(
     let safe_ints = stmt.mode.safe_ints.load(Ordering::SeqCst);
     let raw = stmt.mode.raw.load(Ordering::SeqCst);
     let pluck = stmt.mode.pluck.load(Ordering::SeqCst);
-    let guard = stmt.start_timeout_guard(query_options);
+    let query_timeout = stmt.resolve_query_timeout(query_options);
+    let timeout_manager = stmt.timeout_manager.clone();
+    let execution_lock = stmt.execution_lock.clone();
     let inner_stmt = stmt.stmt.clone();
-    let (rows, column_names) = rt.block_on(async move {
+    let iter_stmt = inner_stmt.clone();
+    let (rows, column_names, execution_guard, timeout_guard) = rt.block_on(async move {
+        let execution_guard = execution_lock.lock_owned().await;
+        let timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
         inner_stmt.reset();
         let params = map_params(&inner_stmt, params)?;
         let rows = inner_stmt.query(params).await.map_err(Error::from)?;
@@ -1236,15 +1317,17 @@ pub fn statement_iterate_sync(
             column_names
                 .push(std::ffi::CString::new(rows.column_name(i).unwrap().to_string()).unwrap());
         }
-        Ok::<_, napi::Error>((rows, column_names))
+        Ok::<_, napi::Error>((rows, column_names, execution_guard, timeout_guard))
     })?;
     Ok(RowsIterator::new(
         Arc::new(tokio::sync::Mutex::new(rows)),
+        iter_stmt,
         column_names,
         safe_ints,
         raw,
         pluck,
-        guard,
+        timeout_guard,
+        execution_guard,
     ))
 }
 
@@ -1387,30 +1470,36 @@ fn map_value(value: JsUnknown) -> Result<libsql::Value> {
 #[napi]
 pub struct RowsIterator {
     rows: Arc<tokio::sync::Mutex<libsql::Rows>>,
+    stmt: Arc<libsql::Statement>,
     column_names: Vec<std::ffi::CString>,
     safe_ints: bool,
     raw: bool,
     pluck: bool,
-    timeout_guard: Mutex<Option<TimeoutGuard>>,
+    timeout_guard: Mutex<Option<QueryTimeoutGuard>>,
+    execution_guard: Mutex<Option<tokio::sync::OwnedMutexGuard<()>>>,
 }
 
 #[napi]
 impl RowsIterator {
     pub fn new(
         rows: Arc<tokio::sync::Mutex<libsql::Rows>>,
+        stmt: Arc<libsql::Statement>,
         column_names: Vec<std::ffi::CString>,
         safe_ints: bool,
         raw: bool,
         pluck: bool,
-        timeout_guard: Option<TimeoutGuard>,
+        timeout_guard: Option<QueryTimeoutGuard>,
+        execution_guard: tokio::sync::OwnedMutexGuard<()>,
     ) -> Self {
         Self {
             rows,
+            stmt,
             column_names,
             safe_ints,
             raw,
             pluck,
             timeout_guard: Mutex::new(timeout_guard),
+            execution_guard: Mutex::new(Some(execution_guard)),
         }
     }
 
@@ -1420,12 +1509,12 @@ impl RowsIterator {
         let row = match rows.next().await {
             Ok(row) => row,
             Err(err) => {
-                self.release_timeout_guard();
+                self.release_operation_resources();
                 return Err(Error::from(err).into());
             }
         };
         if row.is_none() {
-            self.release_timeout_guard();
+            self.release_operation_resources();
         }
         Ok(Record {
             row,
@@ -1438,12 +1527,15 @@ impl RowsIterator {
 
     #[napi]
     pub fn close(&self) {
-        self.release_timeout_guard();
+        self.release_operation_resources();
     }
 
-    fn release_timeout_guard(&self) {
-        let mut guard = self.timeout_guard.lock().unwrap();
-        guard.take();
+    fn release_operation_resources(&self) {
+        self.stmt.reset();
+        let mut timeout_guard = self.timeout_guard.lock().unwrap();
+        timeout_guard.take();
+        let mut execution_guard = self.execution_guard.lock().unwrap();
+        execution_guard.take();
     }
 }
 
