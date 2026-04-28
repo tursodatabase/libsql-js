@@ -52,7 +52,10 @@ function splitBindParameters(bindParameters) {
   if (bindParameters.length === 0) {
     return { params: undefined, queryOptions: undefined };
   }
-  if (bindParameters.length > 1 && isQueryOptions(bindParameters[bindParameters.length - 1])) {
+  if (isQueryOptions(bindParameters[bindParameters.length - 1])) {
+    if (bindParameters.length === 1) {
+      return { params: undefined, queryOptions: bindParameters[0] };
+    }
     return {
       params: bindParameters.length === 2 ? bindParameters[0] : bindParameters.slice(0, -1),
       queryOptions: bindParameters[bindParameters.length - 1],
@@ -167,6 +170,50 @@ class Database {
     Object.defineProperties(properties.immediate.value, properties);
     Object.defineProperties(properties.exclusive.value, properties);
     return properties.default.value;
+  }
+
+  /**
+   * Prepares the SQL and executes it as `Statement.run`, returning the run info.
+   *
+   * @param {string} sql - The SQL statement string.
+   * @param {...any} bindParameters - Bind parameters, optionally followed by a query options object.
+   */
+  async run(sql, ...bindParameters) {
+    const stmt = await this.prepare(sql);
+    return await stmt.run(...bindParameters);
+  }
+
+  /**
+   * Prepares the SQL and executes it as `Statement.get`, returning the first row.
+   *
+   * @param {string} sql - The SQL statement string.
+   * @param {...any} bindParameters - Bind parameters, optionally followed by a query options object.
+   */
+  async get(sql, ...bindParameters) {
+    const stmt = await this.prepare(sql);
+    return await stmt.get(...bindParameters);
+  }
+
+  /**
+   * Prepares the SQL and executes it as `Statement.all`, returning all rows.
+   *
+   * @param {string} sql - The SQL statement string.
+   * @param {...any} bindParameters - Bind parameters, optionally followed by a query options object.
+   */
+  async all(sql, ...bindParameters) {
+    const stmt = await this.prepare(sql);
+    return await stmt.all(...bindParameters);
+  }
+
+  /**
+   * Prepares the SQL and executes it as `Statement.iterate`, returning an async iterator over rows.
+   *
+   * @param {string} sql - The SQL statement string.
+   * @param {...any} bindParameters - Bind parameters, optionally followed by a query options object.
+   */
+  async iterate(sql, ...bindParameters) {
+    const stmt = await this.prepare(sql);
+    return await stmt.iterate(...bindParameters);
   }
 
   /**
