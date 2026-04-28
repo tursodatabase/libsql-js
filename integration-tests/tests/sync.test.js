@@ -479,6 +479,34 @@ test.serial("Query timeout option interrupts long-running query", async (t) => {
   db.close();
 });
 
+test.serial("Query timeout option interrupts long-running Statement.get()", async (t) => {
+  if (t.context.provider === "sqlite") {
+    t.assert(true);
+    return;
+  }
+
+  const [db, errorType] = await connect(":memory:", { defaultQueryTimeout: 100 });
+  const stmt = db.prepare(`
+    WITH RECURSIVE numbers(value) AS (
+      SELECT 1
+      UNION ALL
+      SELECT value + 1 FROM numbers WHERE value < 1000000000
+    )
+    SELECT sum(value) FROM numbers;
+  `);
+
+  const error = t.throws(() => {
+    stmt.get();
+  });
+  t.truthy(error);
+  t.true(error instanceof Error);
+  t.true(error instanceof errorType);
+  t.true(error.message.toLowerCase().includes("interrupt"));
+  t.is(error.code, "SQLITE_INTERRUPT");
+
+  db.close();
+});
+
 test.serial("Query timeout option allows short-running query", async (t) => {
   if (t.context.provider === "sqlite") {
     t.assert(true);
@@ -509,6 +537,67 @@ test.serial("Per-query timeout option interrupts long-running Statement.all()", 
     message: "interrupted",
     code: "SQLITE_INTERRUPT",
   });
+
+  db.close();
+});
+
+test.serial("Per-query timeout option interrupts long-running Statement.get()", async (t) => {
+  if (t.context.provider === "sqlite") {
+    t.assert(true);
+    return;
+  }
+
+  const [db, errorType] = await connect(":memory:");
+  const stmt = db.prepare(`
+    WITH RECURSIVE numbers(value) AS (
+      SELECT 1
+      UNION ALL
+      SELECT value + 1 FROM numbers WHERE value < 1000000000
+    )
+    SELECT sum(value) FROM numbers;
+  `);
+
+  const error = t.throws(() => {
+    stmt.get(undefined, { queryTimeout: 100 });
+  });
+  t.truthy(error);
+  t.true(error instanceof Error);
+  t.true(error instanceof errorType);
+  t.true(error.message.toLowerCase().includes("interrupt"));
+  t.is(error.code, "SQLITE_INTERRUPT");
+
+  db.close();
+});
+
+test.serial("Timeout on Statement.get() does not leak into later prepare()/EXPLAIN", async (t) => {
+  if (t.context.provider === "sqlite") {
+    t.assert(true);
+    return;
+  }
+
+  t.timeout(30_000);
+  const [db, errorType] = await connect(":memory:");
+  const longRunningStmt = db.prepare(`
+    WITH RECURSIVE numbers(value) AS (
+      SELECT 1
+      UNION ALL
+      SELECT value + 1 FROM numbers WHERE value < 1000000000
+    )
+    SELECT sum(value) FROM numbers;
+  `);
+
+  for (let i = 0; i < 20; i++) {
+    const error = t.throws(() => {
+      longRunningStmt.get(undefined, { queryTimeout: 50 });
+    });
+    t.truthy(error);
+    t.true(error instanceof errorType);
+    t.true(error.message.toLowerCase().includes("interrupt"));
+
+    const explainStmt = db.prepare("EXPLAIN QUERY PLAN SELECT 1");
+    const explainRows = explainStmt.all();
+    t.true(explainRows.length > 0);
+  }
 
   db.close();
 });
