@@ -199,8 +199,8 @@ export declare class Statement {
 }
 /** A raw iterator over rows. The JavaScript layer wraps this in a iterable. */
 export declare class RowsIterator {
-  close(): void
   next(): Promise<Record>
+  close(): void
 }
 export declare class Record {
   get value(): unknown

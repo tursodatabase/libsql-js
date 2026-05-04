@@ -605,6 +605,103 @@ test.serial("Statement.reader [DELETE RETURNING is true]", async (t) => {
   t.is(stmt.reader, true);
 });
 
+test.serial("Database.run() [positional]", async (t) => {
+  const db = t.context.db;
+
+  const info = await db.run(
+    "INSERT INTO users(name, email) VALUES (?, ?)",
+    "Carol",
+    "carol@example.net"
+  );
+  t.is(info.changes, 1);
+  t.is(info.lastInsertRowid, 3);
+
+  const row = await db.get("SELECT name, email FROM users WHERE id = ?", 3);
+  t.is(row.name, "Carol");
+  t.is(row.email, "carol@example.net");
+});
+
+test.serial("Database.run() [named]", async (t) => {
+  const db = t.context.db;
+
+  const info = await db.run(
+    "INSERT INTO users(name, email) VALUES (:name, :email)",
+    { name: "Carol", email: "carol@example.net" }
+  );
+  t.is(info.changes, 1);
+  t.is(info.lastInsertRowid, 3);
+});
+
+test.serial("Database.get() returns no rows", async (t) => {
+  const db = t.context.db;
+  t.is(await db.get("SELECT * FROM users WHERE id = ?", 0), undefined);
+});
+
+test.serial("Database.get() [positional]", async (t) => {
+  const db = t.context.db;
+  t.is((await db.get("SELECT * FROM users WHERE id = ?", 1)).name, "Alice");
+  t.is((await db.get("SELECT * FROM users WHERE id = ?", 2)).name, "Bob");
+});
+
+test.serial("Database.get() [named]", async (t) => {
+  const db = t.context.db;
+  t.is(
+    (await db.get("SELECT * FROM users WHERE id = :id", { id: 1 })).name,
+    "Alice"
+  );
+});
+
+test.serial("Database.all()", async (t) => {
+  const db = t.context.db;
+  const expected = [
+    { id: 1, name: "Alice", email: "alice@example.org" },
+    { id: 2, name: "Bob", email: "bob@example.com" },
+  ];
+  t.deepEqual(await db.all("SELECT * FROM users"), expected);
+});
+
+test.serial("Database.all() [positional]", async (t) => {
+  const db = t.context.db;
+  const expected = [{ id: 1, name: "Alice", email: "alice@example.org" }];
+  t.deepEqual(await db.all("SELECT * FROM users WHERE id = ?", 1), expected);
+});
+
+test.serial("Database.iterate()", async (t) => {
+  const db = t.context.db;
+  const expected = [1, 2];
+  let idx = 0;
+  for await (const row of await db.iterate("SELECT * FROM users")) {
+    t.is(row.id, expected[idx++]);
+  }
+  t.is(idx, 2);
+});
+
+test.serial("Database.iterate() [positional]", async (t) => {
+  const db = t.context.db;
+  let count = 0;
+  for await (const row of await db.iterate(
+    "SELECT * FROM users WHERE id = ?",
+    2
+  )) {
+    t.is(row.name, "Bob");
+    count++;
+  }
+  t.is(count, 1);
+});
+
+test.serial("Database.run() forwards queryOptions", async (t) => {
+  const db = t.context.db;
+  await t.throwsAsync(
+    async () => {
+      await db.run(
+        "WITH RECURSIVE infinite(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM infinite) SELECT count(*) FROM infinite",
+        { queryTimeout: 50 }
+      );
+    },
+    { instanceOf: t.context.errorType, code: "SQLITE_INTERRUPT" }
+  );
+});
+
 const connect = async (path_opt, options = {}) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;
