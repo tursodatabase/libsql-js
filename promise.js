@@ -101,9 +101,9 @@ class Database {
     });
   }
 
-  sync() {
+  async sync() {
     try {
-      return this.db.sync();
+      return await this.db.sync();
     } catch (err) {
       throw convertError(err);
     }

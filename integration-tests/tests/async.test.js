@@ -340,6 +340,17 @@ test.serial("Database.exec() after close()", async (t) => {
   });
 });
 
+test.serial("Database.sync() after close()", async (t) => {
+  const db = t.context.db;
+  db.close();
+  await t.throwsAsync(async () => {
+    await db.sync();
+  }, {
+    instanceOf: TypeError,
+    message: "The database connection is not open"
+  });
+});
+
 test.serial("Database.interrupt()", async (t) => {
   const db = t.context.db;
   const stmt = await db.prepare("WITH RECURSIVE infinite_loop(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM infinite_loop) SELECT * FROM infinite_loop;");
