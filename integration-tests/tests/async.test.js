@@ -139,6 +139,16 @@ test.serial("Statement.iterate()", async (t) => {
   }
 });
 
+test.serial("Statement.iterate() with invalid bind parameter", async (t) => {
+  const db = t.context.db;
+
+  const stmt = await db.prepare("SELECT * FROM users WHERE id = ?");
+  const error = await t.throwsAsync(async () => {
+    await stmt.iterate([[1, 2, 3]]);
+  });
+  t.is(error.message, "SQLite3 can only bind numbers, strings, bigints, buffers, and null");
+});
+
 test.serial("Statement.all()", async (t) => {
   const db = t.context.db;
 

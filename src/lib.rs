@@ -1082,7 +1082,7 @@ impl Statement {
         let pluck = self.mode.pluck.load(Ordering::SeqCst);
         let stmt = self.stmt.clone();
         stmt.reset();
-        let params = map_params(&stmt, params).unwrap();
+        let params = map_params(&stmt, params)?;
         let stmt_for_query = self.stmt.clone();
         let stmt_for_iter = stmt_for_query.clone();
         let query_timeout = self.resolve_query_timeout(query_options);
