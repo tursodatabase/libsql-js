@@ -8,6 +8,7 @@
     "test:async": "cross-env LIBSQL_JS_DEV=1 ava tests/async.test.js",
     "test:extensions": "cross-env LIBSQL_JS_DEV=1 ava tests/extensions.test.js",
     "test:concurrency": "ava tests/concurrency.test.js",
+    "test:connections": "cross-env LIBSQL_JS_DEV=1 ava tests/connections.test.js",
     "test": "run-s test:* -cln"
   },
   "devDependencies": {

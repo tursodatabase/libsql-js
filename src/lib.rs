@@ -30,6 +30,15 @@ use napi::{
 use napi_derive::napi;
 use once_cell::sync::OnceCell;
 use query_timeout::{QueryTimeoutGuard, QueryTimeoutManager};
+
+/// Registers a query timeout against the process-wide timer wheel, if one was
+/// requested. Returns a guard that cancels the timeout when dropped.
+fn register_query_timeout(
+    conn: &Arc<libsql::Connection>,
+    query_timeout: Option<Duration>,
+) -> Option<QueryTimeoutGuard> {
+    query_timeout.map(|t| QueryTimeoutManager::global().register(conn, t))
+}
 use std::{
     str::FromStr,
     sync::{
@@ -237,15 +246,12 @@ pub struct Database {
     memory: bool,
     // Maximum time in milliseconds that a query is allowed to run.
     query_timeout: Option<Duration>,
-    // Shared timeout manager for efficient query timeout handling.
-    timeout_manager: Arc<QueryTimeoutManager>,
     // Ensures only one operation executes per connection at a time.
     execution_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Drop for Database {
     fn drop(&mut self) {
-        self.timeout_manager.shutdown();
         self.conn = None;
         self.db = None;
     }
@@ -343,7 +349,6 @@ pub async fn connect(path: String, opts: Option<Options>) -> Result<Database> {
         .as_ref()
         .and_then(|o| o.defaultQueryTimeout)
         .and_then(query_timeout_duration);
-    let timeout_manager = Arc::new(QueryTimeoutManager::new(&conn));
     let execution_lock = Arc::new(tokio::sync::Mutex::new(()));
     Ok(Database {
         db: Some(db),
@@ -351,7 +356,6 @@ pub async fn connect(path: String, opts: Option<Options>) -> Result<Database> {
         default_safe_integers,
         memory,
         query_timeout,
-        timeout_manager,
         execution_lock,
     })
 }
@@ -428,7 +432,6 @@ impl Database {
             stmt,
             mode,
             self.query_timeout,
-            self.timeout_manager.clone(),
             self.execution_lock.clone(),
         ))
     }
@@ -573,7 +576,7 @@ impl Database {
             None => self.query_timeout,
         };
         let _execution_guard = self.execution_lock.clone().lock_owned().await;
-        let _timeout_guard = query_timeout.map(|t| self.timeout_manager.register(t));
+        let _timeout_guard = register_query_timeout(&conn, query_timeout);
         conn.execute_batch(&sql).await.map_err(Error::from)?;
         Ok(())
     }
@@ -620,7 +623,6 @@ impl Database {
     /// Closes the database connection.
     #[napi]
     pub fn close(&mut self) -> Result<()> {
-        self.timeout_manager.shutdown();
         self.conn = None;
         self.db = None;
         Ok(())
@@ -889,8 +891,6 @@ pub struct Statement {
     mode: AccessMode,
     // Maximum time in milliseconds that a query is allowed to run.
     query_timeout: Option<Duration>,
-    // Shared timeout manager.
-    timeout_manager: Arc<QueryTimeoutManager>,
     // Shared per-connection execution lock.
     execution_lock: Arc<tokio::sync::Mutex<()>>,
 }
@@ -909,7 +909,6 @@ impl Statement {
         stmt: libsql::Statement,
         mode: AccessMode,
         query_timeout: Option<Duration>,
-        timeout_manager: Arc<QueryTimeoutManager>,
         execution_lock: Arc<tokio::sync::Mutex<()>>,
     ) -> Self {
         let column_names: Vec<std::ffi::CString> = stmt
@@ -924,7 +923,6 @@ impl Statement {
             column_names,
             mode,
             query_timeout,
-            timeout_manager,
             execution_lock,
         }
     }
@@ -948,12 +946,11 @@ impl Statement {
         let stmt = self.stmt.clone();
         let conn = self.conn.clone();
         let query_timeout = self.resolve_query_timeout(query_options);
-        let timeout_manager = self.timeout_manager.clone();
         let execution_lock = self.execution_lock.clone();
 
         let future = async move {
             let _execution_guard = execution_lock.lock_owned().await;
-            let _timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
+            let _timeout_guard = register_query_timeout(&conn, query_timeout);
             stmt.run(params).await.map_err(Error::from)?;
             let changes = if conn.total_changes() == total_changes_before {
                 0
@@ -1001,13 +998,13 @@ impl Statement {
 
         let stmt = self.stmt.clone();
         let stmt_fut = stmt.clone();
+        let conn = self.conn.clone();
         let query_timeout = self.resolve_query_timeout(query_options);
-        let timeout_manager = self.timeout_manager.clone();
         let execution_lock = self.execution_lock.clone();
         let future = async move {
             let result: std::result::Result<(Option<libsql::Row>, Option<f64>), Error> = {
                 let _execution_guard = execution_lock.lock_owned().await;
-                let _timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
+                let _timeout_guard = register_query_timeout(&conn, query_timeout);
                 async {
                     let mut rows = stmt_fut.query(params).await.map_err(Error::from)?;
                     let row = rows.next().await.map_err(Error::from)?;
@@ -1085,12 +1082,12 @@ impl Statement {
         let params = map_params(&stmt, params)?;
         let stmt_for_query = self.stmt.clone();
         let stmt_for_iter = stmt_for_query.clone();
+        let conn = self.conn.clone();
         let query_timeout = self.resolve_query_timeout(query_options);
-        let timeout_manager = self.timeout_manager.clone();
         let execution_lock = self.execution_lock.clone();
         let future = async move {
             let execution_guard = execution_lock.lock_owned().await;
-            let timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
+            let timeout_guard = register_query_timeout(&conn, query_timeout);
             let rows = stmt_for_query.query(params).await.map_err(Error::from)?;
             Ok::<_, napi::Error>((rows, execution_guard, timeout_guard))
         };
@@ -1221,12 +1218,11 @@ pub fn statement_get_sync(
 
     let rt = runtime()?;
     let query_timeout = stmt.resolve_query_timeout(query_options);
-    let timeout_manager = stmt.timeout_manager.clone();
     let execution_lock = stmt.execution_lock.clone();
     let result: Result<(Option<libsql::Row>, Option<f64>)> = {
         rt.block_on(async move {
             let _execution_guard = execution_lock.lock_owned().await;
-            let _timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
+            let _timeout_guard = register_query_timeout(&stmt.conn, query_timeout);
             let params = map_params(&stmt.stmt, params)?;
             let mut rows = stmt.stmt.query(params).await.map_err(Error::from)?;
             let row = rows.next().await.map_err(Error::from)?;
@@ -1265,11 +1261,10 @@ pub fn statement_run_sync(
     stmt.stmt.reset();
     let rt = runtime()?;
     let query_timeout = stmt.resolve_query_timeout(query_options);
-    let timeout_manager = stmt.timeout_manager.clone();
     let execution_lock = stmt.execution_lock.clone();
     rt.block_on(async move {
         let _execution_guard = execution_lock.lock_owned().await;
-        let _timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
+        let _timeout_guard = register_query_timeout(&stmt.conn, query_timeout);
         let params = map_params(&stmt.stmt, params)?;
         let total_changes_before = stmt.conn.total_changes();
         let start = std::time::Instant::now();
@@ -1302,13 +1297,13 @@ pub fn statement_iterate_sync(
     let raw = stmt.mode.raw.load(Ordering::SeqCst);
     let pluck = stmt.mode.pluck.load(Ordering::SeqCst);
     let query_timeout = stmt.resolve_query_timeout(query_options);
-    let timeout_manager = stmt.timeout_manager.clone();
+    let conn = stmt.conn.clone();
     let execution_lock = stmt.execution_lock.clone();
     let inner_stmt = stmt.stmt.clone();
     let iter_stmt = inner_stmt.clone();
     let (rows, column_names, execution_guard, timeout_guard) = rt.block_on(async move {
         let execution_guard = execution_lock.lock_owned().await;
-        let timeout_guard = query_timeout.map(|t| timeout_manager.register(t));
+        let timeout_guard = register_query_timeout(&conn, query_timeout);
         inner_stmt.reset();
         let params = map_params(&inner_stmt, params)?;
         let rows = inner_stmt.query(params).await.map_err(Error::from)?;
