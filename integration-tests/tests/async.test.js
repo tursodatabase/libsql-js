@@ -548,6 +548,36 @@ test.serial("Timeout on Statement.get() does not leak into later prepare()/EXPLA
   db.close();
 });
 
+test.serial("Query timeout covers wait time on the execution lock", async (t) => {
+  t.timeout(15_000);
+  const [db, errorType] = await connect(":memory:", { defaultQueryTimeout: 200 });
+  await db.exec("CREATE TABLE t(x INTEGER)");
+  const insert = await db.prepare("INSERT INTO t VALUES (?)");
+  for (let i = 0; i < 5000; i++) {
+    await insert.run(i);
+  }
+  const stmt = await db.prepare("SELECT * FROM t ORDER BY x ASC");
+
+  let interrupts = 0;
+  const promises = [];
+  for (let i = 0; i < 50; i++) {
+    promises.push(
+      stmt.all().catch((err) => {
+        if (err.code === "SQLITE_INTERRUPT") {
+          interrupts++;
+        } else {
+          throw err;
+        }
+      })
+    );
+  }
+  await Promise.all(promises);
+
+  t.true(interrupts > 0, `expected some queries to timeout, got ${interrupts}`);
+
+  db.close();
+});
+
 test.serial("Per-query timeout option is accepted by Database.exec()", async (t) => {
   const [db] = await connect(":memory:");
   await db.exec("SELECT 1", { queryTimeout: 100 });

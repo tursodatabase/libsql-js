@@ -31,21 +31,13 @@ use napi_derive::napi;
 use once_cell::sync::OnceCell;
 use query_timeout::{QueryTimeoutGuard, QueryTimeoutManager};
 
-/// Registers a query timeout against the process-wide timer wheel, if one was
-/// requested. Returns a guard that cancels the timeout when dropped.
-fn register_query_timeout(
-    conn: &Arc<libsql::Connection>,
-    query_timeout: Option<Duration>,
-) -> Option<QueryTimeoutGuard> {
-    query_timeout.map(|t| QueryTimeoutManager::global().register(conn, t))
-}
 use std::{
     str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::runtime::Runtime;
 use tracing_subscriber::{filter::LevelFilter, EnvFilter};
@@ -412,11 +404,17 @@ impl Database {
                 ));
             }
         };
-        let _execution_guard = self.execution_lock.clone().lock_owned().await;
+        let (_execution_guard, deadline) =
+            acquire_execution_lock(&self.execution_lock, self.query_timeout).await?;
+        let timeout_guard = register_remaining_timeout(&conn, deadline)?;
         let stmt = match conn.prepare(&sql).await {
             Ok(stmt) => stmt,
             Err(err) if is_sqlite_interrupt(&err) => {
+                // Drop our guard before clear_stale_interrupt so the bg thread
+                // can't fire conn.interrupt() for our id mid-probe.
+                drop(timeout_guard);
                 clear_stale_interrupt(&conn).await;
+                let _retry_guard = register_remaining_timeout(&conn, deadline)?;
                 conn.prepare(&sql).await.map_err(Error::from)?
             }
             Err(err) => return Err(Error::from(err).into()),
@@ -575,8 +573,9 @@ impl Database {
             Some(timeout_ms) => query_timeout_duration(timeout_ms),
             None => self.query_timeout,
         };
-        let _execution_guard = self.execution_lock.clone().lock_owned().await;
-        let _timeout_guard = register_query_timeout(&conn, query_timeout);
+        let (_execution_guard, deadline) =
+            acquire_execution_lock(&self.execution_lock, query_timeout).await?;
+        let _timeout_guard = register_remaining_timeout(&conn, deadline)?;
         conn.execute_batch(&sql).await.map_err(Error::from)?;
         Ok(())
     }
@@ -866,6 +865,60 @@ fn is_sqlite_interrupt(err: &libsql::Error) -> bool {
     )
 }
 
+fn query_timeout_error() -> napi::Error {
+    throw_sqlite_error(
+        "interrupted".to_string(),
+        "SQLITE_INTERRUPT".to_string(),
+        libsql::ffi::SQLITE_INTERRUPT,
+    )
+}
+
+fn timeout_deadline(timeout: Duration) -> Instant {
+    let now = Instant::now();
+    now.checked_add(timeout)
+        .unwrap_or_else(|| now + Duration::from_secs(86400))
+}
+
+fn register_remaining_timeout(
+    conn: &Arc<libsql::Connection>,
+    deadline: Option<Instant>,
+) -> Result<Option<QueryTimeoutGuard>> {
+    match deadline {
+        Some(deadline) => match deadline.checked_duration_since(Instant::now()) {
+            Some(remaining) if remaining > Duration::ZERO => {
+                Ok(Some(QueryTimeoutManager::global().register(conn, remaining)))
+            }
+            _ => Err(query_timeout_error()),
+        },
+        None => Ok(None),
+    }
+}
+
+/// Acquire the per-connection execution lock, enforcing the query timeout
+/// across the queue-wait. Returns the lock guard and the absolute deadline
+/// for the current operation. If the timeout elapses while waiting, returns
+/// a SQLITE_INTERRUPT error so the caller sees the same behaviour as when a
+/// timeout fires during execution.
+async fn acquire_execution_lock(
+    lock: &Arc<tokio::sync::Mutex<()>>,
+    timeout: Option<Duration>,
+) -> Result<(tokio::sync::OwnedMutexGuard<()>, Option<Instant>)> {
+    let lock = lock.clone();
+    match timeout {
+        None => Ok((lock.lock_owned().await, None)),
+        Some(t) => {
+            let deadline = timeout_deadline(t);
+            match tokio::time::timeout(t, lock.lock_owned()).await {
+                Ok(guard) => match deadline.checked_duration_since(Instant::now()) {
+                    Some(remaining) if remaining > Duration::ZERO => Ok((guard, Some(deadline))),
+                    _ => Err(query_timeout_error()),
+                },
+                Err(_) => Err(query_timeout_error()),
+            }
+        }
+    }
+}
+
 async fn clear_stale_interrupt(conn: &Arc<libsql::Connection>) {
     // If a timeout interrupt races with operation completion, the next operation
     // can observe a stale SQLITE_INTERRUPT. Probe the connection to consume it.
@@ -949,8 +1002,9 @@ impl Statement {
         let execution_lock = self.execution_lock.clone();
 
         let future = async move {
-            let _execution_guard = execution_lock.lock_owned().await;
-            let _timeout_guard = register_query_timeout(&conn, query_timeout);
+            let (_execution_guard, deadline) =
+                acquire_execution_lock(&execution_lock, query_timeout).await?;
+            let _timeout_guard = register_remaining_timeout(&conn, deadline)?;
             stmt.run(params).await.map_err(Error::from)?;
             let changes = if conn.total_changes() == total_changes_before {
                 0
@@ -1002,9 +1056,10 @@ impl Statement {
         let query_timeout = self.resolve_query_timeout(query_options);
         let execution_lock = self.execution_lock.clone();
         let future = async move {
+            let (_execution_guard, deadline) =
+                acquire_execution_lock(&execution_lock, query_timeout).await?;
             let result: std::result::Result<(Option<libsql::Row>, Option<f64>), Error> = {
-                let _execution_guard = execution_lock.lock_owned().await;
-                let _timeout_guard = register_query_timeout(&conn, query_timeout);
+                let _timeout_guard = register_remaining_timeout(&conn, deadline)?;
                 async {
                     let mut rows = stmt_fut.query(params).await.map_err(Error::from)?;
                     let row = rows.next().await.map_err(Error::from)?;
@@ -1086,8 +1141,9 @@ impl Statement {
         let query_timeout = self.resolve_query_timeout(query_options);
         let execution_lock = self.execution_lock.clone();
         let future = async move {
-            let execution_guard = execution_lock.lock_owned().await;
-            let timeout_guard = register_query_timeout(&conn, query_timeout);
+            let (execution_guard, deadline) =
+                acquire_execution_lock(&execution_lock, query_timeout).await?;
+            let timeout_guard = register_remaining_timeout(&conn, deadline)?;
             let rows = stmt_for_query.query(params).await.map_err(Error::from)?;
             Ok::<_, napi::Error>((rows, execution_guard, timeout_guard))
         };
@@ -1221,8 +1277,9 @@ pub fn statement_get_sync(
     let execution_lock = stmt.execution_lock.clone();
     let result: Result<(Option<libsql::Row>, Option<f64>)> = {
         rt.block_on(async move {
-            let _execution_guard = execution_lock.lock_owned().await;
-            let _timeout_guard = register_query_timeout(&stmt.conn, query_timeout);
+            let (_execution_guard, deadline) =
+                acquire_execution_lock(&execution_lock, query_timeout).await?;
+            let _timeout_guard = register_remaining_timeout(&stmt.conn, deadline)?;
             let params = map_params(&stmt.stmt, params)?;
             let mut rows = stmt.stmt.query(params).await.map_err(Error::from)?;
             let row = rows.next().await.map_err(Error::from)?;
@@ -1263,8 +1320,9 @@ pub fn statement_run_sync(
     let query_timeout = stmt.resolve_query_timeout(query_options);
     let execution_lock = stmt.execution_lock.clone();
     rt.block_on(async move {
-        let _execution_guard = execution_lock.lock_owned().await;
-        let _timeout_guard = register_query_timeout(&stmt.conn, query_timeout);
+        let (_execution_guard, deadline) =
+            acquire_execution_lock(&execution_lock, query_timeout).await?;
+        let _timeout_guard = register_remaining_timeout(&stmt.conn, deadline)?;
         let params = map_params(&stmt.stmt, params)?;
         let total_changes_before = stmt.conn.total_changes();
         let start = std::time::Instant::now();
@@ -1302,8 +1360,9 @@ pub fn statement_iterate_sync(
     let inner_stmt = stmt.stmt.clone();
     let iter_stmt = inner_stmt.clone();
     let (rows, column_names, execution_guard, timeout_guard) = rt.block_on(async move {
-        let execution_guard = execution_lock.lock_owned().await;
-        let timeout_guard = register_query_timeout(&conn, query_timeout);
+        let (execution_guard, deadline) =
+            acquire_execution_lock(&execution_lock, query_timeout).await?;
+        let timeout_guard = register_remaining_timeout(&conn, deadline)?;
         inner_stmt.reset();
         let params = map_params(&inner_stmt, params)?;
         let rows = inner_stmt.query(params).await.map_err(Error::from)?;
