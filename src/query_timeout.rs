@@ -1,12 +1,16 @@
 use std::{
     cmp::Reverse,
-    collections::BinaryHeap,
-    sync::{Arc, Condvar, Mutex, Weak},
+    collections::{BinaryHeap, HashMap},
+    sync::{Arc, Condvar, Mutex, OnceLock, Weak},
     time::{Duration, Instant},
 };
 
-/// A single background thread with a timer wheel that interrupts a connection
-/// when the currently registered operation exceeds its deadline.
+/// A process-wide timer wheel: a single background thread that interrupts
+/// connections when their currently registered operation exceeds its deadline.
+///
+/// All connections share one manager — and therefore one thread. Each
+/// registered timeout carries a weak reference to the connection it should
+/// interrupt, so a single wheel serves any number of connections.
 pub struct QueryTimeoutManager {
     inner: Arc<Inner>,
 }
@@ -14,13 +18,16 @@ pub struct QueryTimeoutManager {
 struct Inner {
     state: Mutex<State>,
     cv: Condvar,
-    /// Connection to interrupt on timeout.
-    conn: Weak<libsql::Connection>,
 }
 
 struct State {
+    /// Pending deadlines, soonest first.
     heap: BinaryHeap<Reverse<Entry>>,
-    current_operation_id: Option<u64>,
+    /// Operations currently in flight, keyed by id. An expired entry is only
+    /// interrupted if it is still present here; a completed operation removes
+    /// itself via its guard's `Drop`, leaving a stale heap entry that is
+    /// discarded lazily when its deadline is reached.
+    active: HashMap<u64, Weak<libsql::Connection>>,
     next_id: u64,
     shutdown: bool,
 }
@@ -53,17 +60,24 @@ impl Ord for Entry {
     }
 }
 
+static GLOBAL: OnceLock<QueryTimeoutManager> = OnceLock::new();
+
 impl QueryTimeoutManager {
-    pub fn new(conn: &Arc<libsql::Connection>) -> Self {
+    /// Returns the process-wide timeout manager, spawning its single
+    /// background thread on first use.
+    pub fn global() -> &'static QueryTimeoutManager {
+        GLOBAL.get_or_init(QueryTimeoutManager::new)
+    }
+
+    pub fn new() -> Self {
         let inner = Arc::new(Inner {
             state: Mutex::new(State {
                 heap: BinaryHeap::new(),
-                current_operation_id: None,
+                active: HashMap::new(),
                 next_id: 0,
                 shutdown: false,
             }),
             cv: Condvar::new(),
-            conn: Arc::downgrade(conn),
         });
 
         let bg = Arc::downgrade(&inner);
@@ -75,27 +89,31 @@ impl QueryTimeoutManager {
     }
 
     /// Signal the background thread to exit and clear all entries.
+    ///
+    /// Only used to tear down standalone managers (e.g. in tests); the global
+    /// manager lives for the lifetime of the process.
     pub fn shutdown(&self) {
         {
             let mut state = self.inner.state.lock().unwrap();
             state.shutdown = true;
             state.heap.clear();
-            state.current_operation_id = None;
+            state.active.clear();
         }
         self.inner.cv.notify_one();
     }
 
-    /// Register a timeout for the currently executing operation.
-    pub fn register(&self, timeout: Duration) -> QueryTimeoutGuard {
+    /// Register a timeout for an operation about to run on `conn`. The returned
+    /// guard cancels the timeout when dropped (i.e. when the operation
+    /// completes).
+    pub fn register(
+        &self,
+        conn: &Arc<libsql::Connection>,
+        timeout: Duration,
+    ) -> QueryTimeoutGuard {
         let mut state = self.inner.state.lock().unwrap();
 
         let id = state.next_id;
         state.next_id += 1;
-
-        debug_assert!(
-            state.current_operation_id.is_none(),
-            "only one operation may be active per connection"
-        );
 
         let deadline = Instant::now()
             .checked_add(timeout)
@@ -107,10 +125,14 @@ impl QueryTimeoutManager {
             .peek()
             .map_or(true, |Reverse(existing)| entry.deadline < existing.deadline);
 
-        state.current_operation_id = Some(id);
+        state.active.insert(id, Arc::downgrade(conn));
         state.heap.push(Reverse(entry));
         drop(state);
 
+        // Only the soonest deadline dictates when the thread next wakes, so we
+        // only need to nudge it when this registration moves that deadline
+        // earlier. Guard drops never need to wake the thread: a cancelled entry
+        // is simply skipped when its (unchanged) deadline is reached.
         if is_new_earliest {
             self.inner.cv.notify_one();
         }
@@ -123,13 +145,10 @@ impl QueryTimeoutManager {
 
     fn deregister(inner: &Arc<Inner>, op_id: u64) {
         let mut state = inner.state.lock().unwrap();
-        if state.current_operation_id == Some(op_id) {
-            state.current_operation_id = None;
-        }
+        state.active.remove(&op_id);
     }
 
-    fn process_expired_deadlines(inner: &Arc<Inner>, state: &mut State) {
-        let mut should_interrupt = false;
+    fn process_expired_deadlines(state: &mut State) {
         let now = Instant::now();
 
         while let Some(Reverse(entry)) = state.heap.peek() {
@@ -143,14 +162,12 @@ impl QueryTimeoutManager {
                 .expect("heap peek succeeded but pop failed")
                 .0;
 
-            if state.current_operation_id == Some(entry.id) {
-                should_interrupt = true;
-            }
-        }
-
-        if should_interrupt {
-            if let Some(conn) = inner.conn.upgrade() {
-                let _ = conn.interrupt();
+            // Interrupt only if the operation is still in flight; a completed
+            // operation will have removed itself from `active` already.
+            if let Some(conn) = state.active.remove(&entry.id) {
+                if let Some(conn) = conn.upgrade() {
+                    let _ = conn.interrupt();
+                }
             }
         }
     }
@@ -183,7 +200,7 @@ impl QueryTimeoutManager {
                             }
                         }
 
-                        Self::process_expired_deadlines(&inner, &mut state);
+                        Self::process_expired_deadlines(&mut state);
                     }
                     None => {
                         state = inner.cv.wait(state).unwrap();
@@ -209,7 +226,6 @@ pub struct QueryTimeoutGuard {
 impl Drop for QueryTimeoutGuard {
     fn drop(&mut self) {
         QueryTimeoutManager::deregister(&self.inner, self.op_id);
-        self.inner.cv.notify_one();
     }
 }
 
@@ -229,9 +245,9 @@ mod tests {
     #[ntest::timeout(10000)]
     async fn deadline_expires_interrupts_connection() {
         let conn = test_conn().await;
-        let mgr = QueryTimeoutManager::new(&conn);
+        let mgr = QueryTimeoutManager::new();
 
-        let _guard = mgr.register(Duration::from_millis(200));
+        let _guard = mgr.register(&conn, Duration::from_millis(200));
 
         let fut = {
             let conn = conn.clone();
@@ -251,9 +267,9 @@ mod tests {
     #[ntest::timeout(10000)]
     async fn guard_dropped_before_deadline_cancels_timeout() {
         let conn = test_conn().await;
-        let mgr = QueryTimeoutManager::new(&conn);
+        let mgr = QueryTimeoutManager::new();
 
-        let guard = mgr.register(Duration::from_millis(200));
+        let guard = mgr.register(&conn, Duration::from_millis(200));
         drop(guard);
 
         std::thread::sleep(Duration::from_millis(300));
@@ -269,13 +285,13 @@ mod tests {
     #[ntest::timeout(10000)]
     async fn stale_deadline_does_not_interrupt_next_operation() {
         let conn = test_conn().await;
-        let mgr = QueryTimeoutManager::new(&conn);
+        let mgr = QueryTimeoutManager::new();
 
-        let guard = mgr.register(Duration::from_millis(200));
+        let guard = mgr.register(&conn, Duration::from_millis(200));
         drop(guard);
 
         // Register a second operation after the first one has been deregistered.
-        let _guard2 = mgr.register(Duration::from_millis(5000));
+        let _guard2 = mgr.register(&conn, Duration::from_millis(5000));
 
         std::thread::sleep(Duration::from_millis(300));
 
@@ -283,6 +299,44 @@ mod tests {
         assert!(
             result.is_ok(),
             "stale timeout entry should not interrupt a different operation"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ntest::timeout(10000)]
+    async fn one_wheel_serves_many_connections() {
+        let mgr = QueryTimeoutManager::new();
+
+        // A short-deadline operation on one connection must be interrupted...
+        let slow_conn = test_conn().await;
+        let _slow_guard = mgr.register(&slow_conn, Duration::from_millis(200));
+
+        // ...while a long-deadline operation on a different connection,
+        // registered through the same manager, is left untouched.
+        let fast_conn = test_conn().await;
+        let _fast_guard = mgr.register(&fast_conn, Duration::from_millis(60_000));
+
+        let slow = {
+            let slow_conn = slow_conn.clone();
+            tokio::spawn(async move {
+                slow_conn
+                    .execute_batch(
+                        "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM r",
+                    )
+                    .await
+            })
+        };
+
+        let slow_result = slow.await.unwrap();
+        assert!(
+            slow_result.is_err(),
+            "the short-deadline connection should have been interrupted"
+        );
+
+        let fast_result = fast_conn.execute_batch("SELECT 1").await;
+        assert!(
+            fast_result.is_ok(),
+            "a different connection sharing the wheel should not be interrupted"
         );
     }
 }
