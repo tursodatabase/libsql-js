@@ -5,11 +5,33 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Something a timeout can interrupt when its deadline expires. Implemented for
+/// both libSQL connections and statements so a single wheel can interrupt at
+/// whichever granularity the operation registered with: statement-level for the
+/// `Statement` operations (so concurrent operations on the same connection are
+/// left untouched) and connection-level for connection-wide operations such as
+/// `prepare` and `execute_batch`.
+pub trait Interruptible: Send + Sync {
+    fn interrupt(&self);
+}
+
+impl Interruptible for libsql::Connection {
+    fn interrupt(&self) {
+        let _ = libsql::Connection::interrupt(self);
+    }
+}
+
+impl Interruptible for libsql::Statement {
+    fn interrupt(&self) {
+        let _ = libsql::Statement::interrupt(self);
+    }
+}
+
 /// A process-wide timer wheel: a single background thread that interrupts
-/// connections when their currently registered operation exceeds its deadline.
+/// operations when they exceed their deadline.
 ///
 /// All connections share one manager — and therefore one thread. Each
-/// registered timeout carries a weak reference to the connection it should
+/// registered timeout carries a weak reference to the target it should
 /// interrupt, so a single wheel serves any number of connections.
 pub struct QueryTimeoutManager {
     inner: Arc<Inner>,
@@ -27,7 +49,7 @@ struct State {
     /// interrupted if it is still present here; a completed operation removes
     /// itself via its guard's `Drop`, leaving a stale heap entry that is
     /// discarded lazily when its deadline is reached.
-    active: HashMap<u64, Weak<libsql::Connection>>,
+    active: HashMap<u64, Weak<dyn Interruptible>>,
     next_id: u64,
     shutdown: bool,
 }
@@ -102,12 +124,12 @@ impl QueryTimeoutManager {
         self.inner.cv.notify_one();
     }
 
-    /// Register a timeout for an operation about to run on `conn`. The returned
-    /// guard cancels the timeout when dropped (i.e. when the operation
+    /// Register a timeout for an operation about to run against `target`. The
+    /// returned guard cancels the timeout when dropped (i.e. when the operation
     /// completes).
-    pub fn register(
+    pub fn register<T: Interruptible + 'static>(
         &self,
-        conn: &Arc<libsql::Connection>,
+        target: &Arc<T>,
         timeout: Duration,
     ) -> QueryTimeoutGuard {
         let mut state = self.inner.state.lock().unwrap();
@@ -125,7 +147,9 @@ impl QueryTimeoutManager {
             .peek()
             .map_or(true, |Reverse(existing)| entry.deadline < existing.deadline);
 
-        state.active.insert(id, Arc::downgrade(conn));
+        let weak = Arc::downgrade(target);
+        let target: Weak<dyn Interruptible> = weak;
+        state.active.insert(id, target);
         state.heap.push(Reverse(entry));
         drop(state);
 
@@ -164,9 +188,9 @@ impl QueryTimeoutManager {
 
             // Interrupt only if the operation is still in flight; a completed
             // operation will have removed itself from `active` already.
-            if let Some(conn) = state.active.remove(&entry.id) {
-                if let Some(conn) = conn.upgrade() {
-                    let _ = conn.interrupt();
+            if let Some(target) = state.active.remove(&entry.id) {
+                if let Some(target) = target.upgrade() {
+                    target.interrupt();
                 }
             }
         }
@@ -261,6 +285,93 @@ mod tests {
 
         let result = fut.await.unwrap();
         assert!(result.is_err(), "query should have been interrupted");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ntest::timeout(10000)]
+    async fn deadline_expires_interrupts_statement() {
+        let conn = test_conn().await;
+        let stmt = Arc::new(
+            conn.prepare(
+                "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r) SELECT * FROM r",
+            )
+            .await
+            .unwrap(),
+        );
+        let mgr = QueryTimeoutManager::new();
+
+        let _guard = mgr.register(&stmt, Duration::from_millis(200));
+
+        // Drain the (effectively infinite) result set; the statement-level
+        // interrupt must abort it once the deadline expires.
+        let result = async {
+            let mut rows = stmt.query(()).await?;
+            while rows.next().await?.is_some() {}
+            Ok::<_, libsql::Error>(())
+        }
+        .await;
+
+        assert!(result.is_err(), "statement should have been interrupted");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ntest::timeout(10000)]
+    async fn deadline_expires_interrupts_single_step_aggregate() {
+        // A query whose entire work happens inside the first `step()` (an
+        // aggregate over a large recursive CTE). libSQL runs that first step
+        // synchronously inside `query()`, so this exercises whether a
+        // statement-level interrupt aborts an in-progress step.
+        let conn = test_conn().await;
+        let stmt = Arc::new(
+            conn.prepare(
+                "WITH RECURSIVE numbers(value) AS (
+                   SELECT 1 UNION ALL SELECT value + 1 FROM numbers WHERE value < 1000000000
+                 ) SELECT sum(value) FROM numbers",
+            )
+            .await
+            .unwrap(),
+        );
+        let mgr = QueryTimeoutManager::new();
+
+        let _guard = mgr.register(&stmt, Duration::from_millis(200));
+
+        let result = async {
+            let mut rows = stmt.query(()).await?;
+            while rows.next().await?.is_some() {}
+            Ok::<_, libsql::Error>(())
+        }
+        .await;
+
+        assert!(result.is_err(), "statement should have been interrupted");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ntest::timeout(10000)]
+    async fn statement_interrupt_flag_is_sticky_until_reset() {
+        // `libsql_stmt_interrupt` sets a per-statement flag that `sqlite3_step`
+        // checks at entry and does NOT clear; only `reset()` clears it. So a
+        // statement interrupted by a timeout stays poisoned until reset — every
+        // operation must reset before stepping it again.
+        let conn = test_conn().await;
+        let stmt = Arc::new(conn.prepare("SELECT 1").await.unwrap());
+
+        stmt.interrupt().unwrap();
+
+        // The flag survives into the next execution.
+        let mut rows = stmt.query(()).await.unwrap();
+        assert!(
+            rows.next().await.is_err(),
+            "sticky interrupt flag should fail the next step"
+        );
+        drop(rows);
+
+        // ...and reset clears it, making the statement reusable.
+        stmt.reset();
+        let mut rows = stmt.query(()).await.unwrap();
+        assert!(
+            rows.next().await.unwrap().is_some(),
+            "statement should be reusable after reset"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

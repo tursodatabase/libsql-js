@@ -548,32 +548,35 @@ test.serial("Timeout on Statement.get() does not leak into later prepare()/EXPLA
   db.close();
 });
 
-test.serial("Query timeout covers wait time on the execution lock", async (t) => {
-  t.timeout(15_000);
-  const [db, errorType] = await connect(":memory:", { defaultQueryTimeout: 200 });
-  await db.exec("CREATE TABLE t(x INTEGER)");
-  const insert = await db.prepare("INSERT INTO t VALUES (?)");
-  for (let i = 0; i < 5000; i++) {
-    await insert.run(i);
-  }
-  const stmt = await db.prepare("SELECT * FROM t ORDER BY x ASC");
+test.serial("Query timeout interrupts long-running queries under concurrency", async (t) => {
+  t.timeout(30_000);
+  const [db] = await connect(":memory:");
+
+  // Run many never-ending queries concurrently, each on its own statement so
+  // they genuinely run in parallel. Every one must be interrupted by its own
+  // query timeout, leaving no query running.
+  const CONCURRENCY = 20;
+  const sql =
+    "WITH RECURSIVE inf(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM inf) SELECT * FROM inf";
 
   let interrupts = 0;
   const promises = [];
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < CONCURRENCY; i++) {
     promises.push(
-      stmt.all().catch((err) => {
-        if (err.code === "SQLITE_INTERRUPT") {
-          interrupts++;
-        } else {
-          throw err;
-        }
-      })
+      db.prepare(sql).then((stmt) =>
+        stmt.all(undefined, { queryTimeout: 100 }).catch((err) => {
+          if (err.code === "SQLITE_INTERRUPT") {
+            interrupts++;
+          } else {
+            throw err;
+          }
+        })
+      )
     );
   }
   await Promise.all(promises);
 
-  t.true(interrupts > 0, `expected some queries to timeout, got ${interrupts}`);
+  t.is(interrupts, CONCURRENCY, `expected every query to time out, got ${interrupts}`);
 
   db.close();
 });
