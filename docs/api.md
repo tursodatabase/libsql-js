@@ -262,6 +262,36 @@ Executes a SQL statement.
 | sql    | <code>string</code> | The SQL statement string to execute. |
 | queryOptions | <code>object</code> | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
 
+### batch(statements, [options]) ⇒ array of ResultSet
+
+Executes a batch of SQL statements sequentially and returns one `ResultSet`
+per input statement. Each statement may be a SQL string or an object of the
+form `{ sql, args }`, where `args` is an array (positional) or an object
+(named) of bind parameters.
+
+`options` may be a transaction mode string for compatibility, or an object with
+`mode` and `raw` fields. Set `raw: true` to return reader rows in the same array
+form as `Statement.raw().all()`.
+
+| Param      | Type                | Description                          |
+| ---------- | ------------------- | ------------------------------------ |
+| statements | <code>array</code>  | The statements to execute. |
+| options    | <code>string \| object</code> | Optional transaction mode string or `{ mode, raw }` object. When `mode` is provided and the connection is not already in a transaction, the batch runs inside a transaction that is rolled back if any statement fails. When `raw` is true, reader rows are arrays. |
+
+Each `ResultSet` has the following shape:
+
+| Field           | Type                          | Description                                   |
+| --------------- | ----------------------------- | --------------------------------------------- |
+| columns         | <code>string[]</code>         | The column names of the result.               |
+| columnTypes     | <code>string[]</code>         | The declared column types of the result.      |
+| rows            | <code>Row[]</code>            | Rows returned by `Statement.all()`. |
+| rowsAffected    | <code>number</code>           | The number of rows changed by the statement.  |
+
+Mutation result sets intentionally expose `rowsAffected` only. Unlike
+`Statement.run()`, `batch()` result sets do not include `lastInsertRowid`.
+
+**Note:** This is an extension in libSQL and not available in `better-sqlite3`.
+
 ### interrupt() ⇒ this
 
 Cancel ongoing operations and make them return at earliest opportunity.

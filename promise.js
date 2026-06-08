@@ -285,6 +285,77 @@ class Database {
   }
 
   /**
+   * Executes a batch of SQL statements sequentially, returning one
+   * result object per input statement.
+   *
+   * When `mode` is provided and the connection is not already inside a
+   * transaction, the batch is wrapped in a `BEGIN <mode>` / `COMMIT`
+   * transaction that is rolled back if any statement fails.
+   *
+   * @param {Array<string | { sql: string, args?: any[] | Record<string, any> }>} statements - The statements to execute.
+   * @param {string | { mode?: string, raw?: boolean }} [options] - Optional
+   *   transaction mode or batch options. When `mode` is provided and the
+   *   connection is not already inside a transaction, the statements run inside
+   *   a transaction. When `raw` is true, reader rows are returned as arrays.
+   *
+   * Batch mutation result sets intentionally expose `rowsAffected` only. Unlike
+   * `Statement.run()`, they do not include `lastInsertRowid`.
+   * @returns {Promise<Array<{ columns: string[], columnTypes: string[], rows: Array<Record<string, any> | any[]>, rowsAffected: number }>>}
+   */
+  async batch(statements, options) {
+    if (!Array.isArray(statements)) {
+      throw new TypeError("Expected first argument to be an array of statements");
+    }
+
+    const { mode, raw } = normalizeBatchOptions(options);
+    const wrap = mode != null && !this.inTransaction;
+    if (wrap) {
+      await this.exec(`BEGIN ${normalizeBatchMode(mode)}`);
+    }
+
+    const results = [];
+    try {
+      for (const statement of statements) {
+        const sql = typeof statement === "string" ? statement : statement.sql;
+        const args = typeof statement === "string" ? undefined : statement.args;
+
+        const stmt = await this.prepare(sql);
+        const cols = stmt.columns();
+        const columnNames = cols.map((c) => c.name);
+        const columnTypes = cols.map((c) => c.type ?? "");
+
+        if (columnNames.length > 0) {
+          // Reader statement: collect the returned rows.
+          if (raw) {
+            stmt.raw(true);
+          }
+          const rows = args !== undefined ? await stmt.all(args) : await stmt.all();
+          results.push(makeResultSet(columnNames, columnTypes, rows, 0));
+        } else {
+          // Mutating statement: report affected rows only; batch results do not
+          // expose Statement.run()'s lastInsertRowid by design.
+          const info = args !== undefined ? await stmt.run(args) : await stmt.run();
+          results.push(makeResultSet(columnNames, columnTypes, [], info.changes));
+        }
+      }
+
+      if (wrap) {
+        await this.exec("COMMIT");
+      }
+    } catch (err) {
+      if (wrap) {
+        try {
+          await this.exec("ROLLBACK");
+        } catch (_) {
+          // ignore rollback failures and surface the original error
+        }
+      }
+      throw convertError(err);
+    }
+    return results;
+  }
+
+  /**
    * Interrupts the database connection.
    */
   interrupt() {
@@ -484,3 +555,42 @@ module.exports = {
   Statement,
   connect,
 };
+
+function normalizeBatchMode(mode) {
+  switch (String(mode).toLowerCase()) {
+    case "write":
+      return "IMMEDIATE";
+    case "read":
+      return "DEFERRED";
+    case "deferred":
+      return "DEFERRED";
+    case "immediate":
+      return "IMMEDIATE";
+    case "exclusive":
+      return "EXCLUSIVE";
+    default:
+      return String(mode).toUpperCase();
+  }
+}
+
+function normalizeBatchOptions(options) {
+  if (options != null && typeof options === "object") {
+    return {
+      mode: options.mode,
+      raw: options.raw === true,
+    };
+  }
+  return {
+    mode: options,
+    raw: false,
+  };
+}
+
+function makeResultSet(columns, columnTypes, rows, rowsAffected) {
+  return {
+    columns,
+    columnTypes,
+    rows,
+    rowsAffected,
+  };
+}
