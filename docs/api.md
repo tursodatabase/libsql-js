@@ -262,6 +262,31 @@ Executes a SQL statement.
 | sql    | <code>string</code> | The SQL statement string to execute. |
 | queryOptions | <code>object</code> | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
 
+### batch(statements, [mode]) ⇒ array of ResultSet
+
+Executes a batch of SQL statements sequentially and returns one `ResultSet`
+per input statement. Each statement may be a SQL string or an object of the
+form `{ sql, args }`, where `args` is an array (positional) or an object
+(named) of bind parameters.
+
+| Param      | Type                | Description                          |
+| ---------- | ------------------- | ------------------------------------ |
+| statements | <code>array</code>  | The statements to execute. |
+| mode       | <code>string</code> | Optional transaction mode (`"write"`, `"read"`, `"deferred"`, `"immediate"`, or `"exclusive"`). When provided and the connection is not already in a transaction, the batch runs inside a transaction that is rolled back if any statement fails. |
+
+Each `ResultSet` has the following shape:
+
+| Field           | Type                          | Description                                   |
+| --------------- | ----------------------------- | --------------------------------------------- |
+| columns         | <code>string[]</code>         | The column names of the result.               |
+| columnTypes     | <code>string[]</code>         | The declared column types of the result.      |
+| rows            | <code>Row[]</code>            | Rows, accessible both positionally and by name. |
+| rowsAffected    | <code>number</code>           | The number of rows changed by the statement.  |
+| lastInsertRowid | <code>bigint \| undefined</code> | The rowid of the last inserted row, if any. |
+| toJSON          | <code>function</code>         | Returns a JSON-serializable representation.    |
+
+**Note:** This is an extension in libSQL and not available in `better-sqlite3`.
+
 ### interrupt() ⇒ this
 
 Cancel ongoing operations and make them return at earliest opportunity.
