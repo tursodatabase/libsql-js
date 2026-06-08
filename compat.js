@@ -28,6 +28,109 @@ function convertError(err) {
   return err;
 }
 
+/**
+ * A single row of a `ResultSet`, supporting both positional and named access.
+ * @typedef {{ length: number, [index: number]: any, [name: string]: any }} Row
+ */
+
+/**
+ * The result of executing a single statement in a {@link Database#batch} call.
+ * @typedef {Object} ResultSet
+ * @property {string[]} columns - The column names of the result.
+ * @property {string[]} columnTypes - The declared column types of the result.
+ * @property {Row[]} rows - The rows returned by the statement.
+ * @property {number} rowsAffected - The number of rows changed by the statement.
+ * @property {bigint | undefined} lastInsertRowid - The rowid of the last inserted row, if any.
+ * @property {() => any} toJSON - Returns a JSON-serializable representation of the result set.
+ */
+
+/**
+ * A statement to execute as part of a {@link Database#batch} call.
+ * @typedef {string | { sql: string, args?: any[] | Record<string, any> }} BatchStatement
+ */
+
+/**
+ * Builds a libSQL-style Row from a positional value array and column names.
+ *
+ * The returned object supports both positional (`row[0]`) and named
+ * (`row.name`) access, matching the `@libsql/client` `Row` shape.
+ *
+ * @param {string[]} columnNames - The column names.
+ * @param {any[]} values - The positional row values.
+ * @returns {Row}
+ */
+function makeBatchRow(columnNames, values) {
+  const row = [...values];
+  for (let i = 0; i < columnNames.length; i++) {
+    const name = columnNames[i];
+    if (!name || name === "length" || /^\d+$/.test(name)) {
+      continue;
+    }
+    Object.defineProperty(row, name, {
+      value: values[i],
+      enumerable: false,
+      writable: false,
+      configurable: true,
+    });
+  }
+  return row;
+}
+
+/**
+ * Constructs a single `ResultSet` for one statement in a batch.
+ *
+ * @param {string[]} columns
+ * @param {string[]} columnTypes
+ * @param {Row[]} rows
+ * @param {number} rowsAffected
+ * @param {bigint | undefined} lastInsertRowid
+ * @returns {ResultSet}
+ */
+function makeResultSet(columns, columnTypes, rows, rowsAffected, lastInsertRowid) {
+  return {
+    columns,
+    columnTypes,
+    rows,
+    rowsAffected,
+    lastInsertRowid,
+    toJSON() {
+      return {
+        columns: this.columns,
+        columnTypes: this.columnTypes,
+        rows: this.rows,
+        rowsAffected: this.rowsAffected,
+        lastInsertRowid: this.lastInsertRowid?.toString(),
+      };
+    },
+  };
+}
+
+/**
+ * Normalizes a batch transaction mode into a SQLite `BEGIN` mode.
+ *
+ * Accepts the `@libsql/client` modes (`"write"`, `"read"`, `"deferred"`) as
+ * well as the native SQLite modes (`"deferred"`, `"immediate"`, `"exclusive"`).
+ *
+ * @param {string} mode
+ * @returns {string}
+ */
+function normalizeBatchMode(mode) {
+  switch (String(mode).toLowerCase()) {
+    case "write":
+      return "IMMEDIATE";
+    case "read":
+      return "DEFERRED";
+    case "deferred":
+      return "DEFERRED";
+    case "immediate":
+      return "IMMEDIATE";
+    case "exclusive":
+      return "EXCLUSIVE";
+    default:
+      return String(mode).toUpperCase();
+  }
+}
+
 function isQueryOptions(value) {
   return value != null
     && typeof value === "object"
@@ -194,6 +297,77 @@ class Database {
     } catch (err) {
       throw convertError(err);
     }
+  }
+
+  /**
+   * Executes a batch of SQL statements sequentially, returning one
+   * {@link ResultSet} per input statement.
+   *
+   * When `mode` is provided and the connection is not already inside a
+   * transaction, the batch is wrapped in a `BEGIN <mode>` / `COMMIT`
+   * transaction that is rolled back if any statement fails.
+   *
+   * @param {BatchStatement[]} statements - The statements to execute.
+   * @param {string} [mode] - Optional transaction mode (`"write"`, `"read"`,
+   *   `"deferred"`, `"immediate"`, or `"exclusive"`). When omitted, the
+   *   statements are executed without an enclosing transaction.
+   * @returns {ResultSet[]}
+   */
+  batch(statements, mode) {
+    if (!Array.isArray(statements)) {
+      throw new TypeError("Expected first argument to be an array of statements");
+    }
+
+    const wrap = mode != null && !this.inTransaction;
+    if (wrap) {
+      this.exec(`BEGIN ${normalizeBatchMode(mode)}`);
+    }
+
+    const results = [];
+    try {
+      // Seed the last inserted rowid so we can tell, per statement, whether it
+      // performed an insert (SQLite only updates last_insert_rowid() on insert).
+      let prevRowid = this.prepare("SELECT last_insert_rowid()").pluck().get();
+
+      for (const statement of statements) {
+        const sql = typeof statement === "string" ? statement : statement.sql;
+        const args = typeof statement === "string" ? undefined : statement.args;
+
+        const stmt = this.prepare(sql);
+        const cols = stmt.columns();
+        const columnNames = cols.map((c) => c.name);
+        const columnTypes = cols.map((c) => c.type ?? "");
+
+        if (columnNames.length > 0) {
+          // Reader statement: collect the returned rows.
+          stmt.raw(true);
+          const raw = args !== undefined ? stmt.all(args) : stmt.all();
+          const rows = raw.map((values) => makeBatchRow(columnNames, values));
+          results.push(makeResultSet(columnNames, columnTypes, rows, 0, undefined));
+        } else {
+          // Mutating statement: report affected rows and any inserted rowid.
+          const info = args !== undefined ? stmt.run(args) : stmt.run();
+          const after = info.lastInsertRowid;
+          const lastInsertRowid = after !== prevRowid ? BigInt(after) : undefined;
+          prevRowid = after;
+          results.push(makeResultSet(columnNames, columnTypes, [], info.changes, lastInsertRowid));
+        }
+      }
+
+      if (wrap) {
+        this.exec("COMMIT");
+      }
+    } catch (err) {
+      if (wrap) {
+        try {
+          this.exec("ROLLBACK");
+        } catch (_) {
+          // ignore rollback failures and surface the original error
+        }
+      }
+      throw convertError(err);
+    }
+    return results;
   }
 
   /**
