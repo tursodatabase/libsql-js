@@ -667,6 +667,98 @@ test.serial("Statement.reader [DELETE RETURNING is true]", async (t) => {
   t.is(stmt.reader, true);
 });
 
+test.serial("Database.batch() returns per-statement result sets", async (t) => {
+  if (t.context.provider !== "libsql") {
+    t.pass();
+    return;
+  }
+  const db = t.context.db;
+
+  const results = db.batch([
+    { sql: "INSERT INTO users (id, name, email) VALUES (?, ?, ?)", args: [3, "Carol", "carol@example.org"] },
+    { sql: "UPDATE users SET email = ? WHERE id = ?", args: ["alice@new.org", 1] },
+    "SELECT id, name FROM users ORDER BY id",
+  ]);
+
+  t.true(Array.isArray(results));
+  t.is(results.length, 3);
+
+  // INSERT
+  t.deepEqual(results[0].columns, []);
+  t.deepEqual(results[0].columnTypes, []);
+  t.deepEqual(results[0].rows, []);
+  t.is(results[0].rowsAffected, 1);
+
+  // UPDATE
+  t.is(results[1].rowsAffected, 1);
+
+  // SELECT
+  t.deepEqual(results[2].columns, ["id", "name"]);
+  t.is(results[2].rowsAffected, 0);
+  t.is(results[2].rows.length, 3);
+
+  // Default Statement.all() row shape
+  const row = results[2].rows[0];
+  t.false(Array.isArray(row));
+  t.is(row.id, 1);
+  t.is(row.name, "Alice");
+
+  t.is(results[0].toJSON, undefined);
+});
+
+test.serial("Database.batch() with named args", async (t) => {
+  if (t.context.provider !== "libsql") {
+    t.pass();
+    return;
+  }
+  const db = t.context.db;
+  const results = db.batch([
+    { sql: "SELECT * FROM users WHERE id = :id", args: { id: 2 } },
+  ]);
+  t.is(results.length, 1);
+  t.is(results[0].rows.length, 1);
+  t.is(results[0].rows[0].name, "Bob");
+});
+
+test.serial("Database.batch() with raw rows", async (t) => {
+  if (t.context.provider !== "libsql") {
+    t.pass();
+    return;
+  }
+  const db = t.context.db;
+  const results = db.batch([
+    { sql: "SELECT id, name FROM users WHERE id = ?", args: [1] },
+  ], { raw: true });
+  t.is(results.length, 1);
+  t.deepEqual(results[0].rows, [[1, "Alice"]]);
+});
+
+test.serial("Database.batch() rolls back on error when given a mode", async (t) => {
+  if (t.context.provider !== "libsql") {
+    t.pass();
+    return;
+  }
+  const db = t.context.db;
+  t.throws(() => {
+    db.batch([
+      { sql: "INSERT INTO users (id, name, email) VALUES (?, ?, ?)", args: [10, "Dan", "dan@example.org"] },
+      { sql: "INSERT INTO users (id, name, email) VALUES (?, ?, ?)", args: [1, "Dup", "dup@example.org"] },
+    ], "write");
+  });
+  // The first insert must have been rolled back.
+  const row = db.prepare("SELECT count(*) AS c FROM users WHERE id = 10").get();
+  t.is(row.c, 0);
+});
+
+test.serial("Database.batch() rejects non-array argument", async (t) => {
+  if (t.context.provider !== "libsql") {
+    t.pass();
+    return;
+  }
+  const db = t.context.db;
+  t.throws(() => db.batch("SELECT 1"), { instanceOf: TypeError });
+});
+
 const connect = async (path_opt, options = {}) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;
