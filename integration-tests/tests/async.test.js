@@ -160,6 +160,41 @@ test.serial("Statement.all()", async (t) => {
   t.deepEqual(await stmt.all(), expected);
 });
 
+test.serial("Statement.allBatched() returns rows from multiple native batches", async (t) => {
+  const db = t.context.db;
+  const stmt = await db.prepare(`
+    WITH RECURSIVE numbers(value) AS (
+      SELECT 1
+      UNION ALL
+      SELECT value + 1 FROM numbers WHERE value < 501
+    )
+    SELECT value FROM numbers ORDER BY value
+  `);
+
+  const rows = await stmt.allBatched(100);
+
+  t.is(rows.length, 501);
+  t.is(rows[0].value, 1);
+  t.is(rows[500].value, 501);
+});
+
+test.serial("Statement.allBatched() [raw]", async (t) => {
+  const db = t.context.db;
+  const stmt = await db.prepare("SELECT * FROM users ORDER BY id");
+
+  t.deepEqual(await stmt.raw().allBatched(1), [
+    [1, "Alice", "alice@example.org"],
+    [2, "Bob", "bob@example.com"],
+  ]);
+});
+
+test.serial("Statement.allBatched() [pluck and safe integers]", async (t) => {
+  const db = t.context.db;
+  const stmt = await db.prepare("SELECT id FROM users ORDER BY id");
+
+  t.deepEqual(await stmt.pluck().safeIntegers().allBatched(1), [1n, 2n]);
+});
+
 test.serial("Statement.all() [raw]", async (t) => {
   const db = t.context.db;
 

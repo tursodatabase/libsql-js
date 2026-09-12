@@ -504,6 +504,35 @@ class Statement {
   }
 
   /**
+   * Executes the SQL statement and returns all resulting rows in native batches.
+   *
+   * @param {number} batchSize - The maximum number of rows to read per native call.
+   * @param bindParameters - The bind parameters for executing the statement.
+   */
+  async allBatched(batchSize, ...bindParameters) {
+    try {
+      const { params, queryOptions } = splitBindParameters(bindParameters);
+      const result = [];
+      const iterator = await this.stmt.iterate(params, queryOptions);
+      try {
+        while (true) {
+          const batch = await iterator.nextBatch(batchSize);
+          result.push(...batch.records);
+          if (batch.done) {
+            return result;
+          }
+        }
+      } finally {
+        if (typeof iterator.close === "function") {
+          iterator.close();
+        }
+      }
+    } catch (err) {
+      throw convertError(err);
+    }
+  }
+
+  /**
    * Interrupts the statement.
    */
   interrupt() {

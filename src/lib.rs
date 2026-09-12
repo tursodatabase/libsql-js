@@ -906,6 +906,14 @@ fn throw_database_closed_error(env: &Env) -> napi::Error {
     err
 }
 
+fn database_not_open_error() -> napi::Error {
+    throw_sqlite_error(
+        "The database connection is not open".to_string(),
+        "SQLITE_NOTOPEN".to_string(),
+        0,
+    )
+}
+
 fn query_timeout_duration(timeout_ms: f64) -> Option<Duration> {
     if timeout_ms.is_finite() && timeout_ms > 0.0 {
         Some(Duration::from_millis(timeout_ms as u64))
@@ -1272,11 +1280,7 @@ impl Statement {
     fn handle(&self) -> Result<StatementHandle> {
         match &*self.slot.0.lock().unwrap() {
             Some(handle) => Ok(handle.clone()),
-            None => Err(throw_sqlite_error(
-                "The database connection is not open".to_string(),
-                "SQLITE_NOTOPEN".to_string(),
-                0,
-            )),
+            None => Err(database_not_open_error()),
         }
     }
 
@@ -1578,6 +1582,18 @@ impl RowsIteratorState {
     }
 }
 
+impl RowsIteratorState {
+    /// Drops the rows if the database was closed while they were locked.
+    /// Called after unlocking so that either the caller or release() drops them.
+    fn drop_rows_if_released(&self) {
+        if self.released.load(Ordering::SeqCst) {
+            if let Ok(mut rows) = self.rows.try_lock() {
+                rows.take();
+            }
+        }
+    }
+}
+
 impl ConnectionResource for RowsIteratorState {
     fn release(&self) {
         self.released.store(true, Ordering::SeqCst);
@@ -1629,22 +1645,10 @@ impl RowsIterator {
             }
             match rows_slot.as_mut() {
                 Some(rows) => rows.next().await,
-                None => {
-                    return Err(throw_sqlite_error(
-                        "The database connection is not open".to_string(),
-                        "SQLITE_NOTOPEN".to_string(),
-                        0,
-                    ));
-                }
+                None => return Err(database_not_open_error()),
             }
         };
-        // The database may have been closed while we held the rows. Checking
-        // after unlocking guarantees either we or release() drops them.
-        if self.state.released.load(Ordering::SeqCst) {
-            if let Ok(mut rows_slot) = self.state.rows.try_lock() {
-                rows_slot.take();
-            }
-        }
+        self.state.drop_rows_if_released();
         let row = match result {
             Ok(row) => row,
             Err(err) => {
@@ -1667,6 +1671,77 @@ impl RowsIterator {
             safe_ints: self.safe_ints,
             raw: self.raw,
             pluck: self.pluck,
+        })
+    }
+
+    #[napi(ts_return_type = "Promise<{ records: unknown[]; done: boolean }>")]
+    pub fn next_batch(&self, env: Env, max_rows: u32) -> Result<napi::JsObject> {
+        if max_rows == 0 {
+            return Err(napi::Error::from_reason(
+                "maxRows must be greater than zero",
+            ));
+        }
+
+        let state = self.state.clone();
+        let column_count = self.column_names.len();
+        let future = async move {
+            let result = async {
+                let mut rows_slot = state.rows.lock().await;
+                if state.released.load(Ordering::SeqCst) {
+                    rows_slot.take();
+                }
+                let Some(rows) = rows_slot.as_mut() else {
+                    return Err(database_not_open_error());
+                };
+                let mut records = Vec::with_capacity(max_rows as usize);
+                let mut done = false;
+
+                for _ in 0..max_rows {
+                    let row = match rows.next().await {
+                        Ok(row) => row,
+                        Err(err) => {
+                            state.release_operation_resources();
+                            return Err(Error::from(err).into());
+                        }
+                    };
+                    let Some(row) = row else {
+                        state.release_operation_resources();
+                        done = true;
+                        break;
+                    };
+                    let values = match read_row_values(&row, column_count) {
+                        Ok(values) => values,
+                        Err(err) => {
+                            state.release_operation_resources();
+                            return Err(err);
+                        }
+                    };
+                    records.push(values);
+                }
+
+                Ok::<_, napi::Error>((records, done))
+            }
+            .await;
+            state.drop_rows_if_released();
+            result
+        };
+        let column_names = self.column_names.clone();
+        let safe_ints = self.safe_ints;
+        let raw = self.raw;
+        let pluck = self.pluck;
+        env.execute_tokio_future(future, move |&mut env, (records, done)| {
+            let mut js_records = env.create_array(records.len() as u32)?;
+            for (index, values) in records.iter().enumerate() {
+                js_records.set(
+                    index as u32,
+                    map_values(&env, &column_names, values, safe_ints, raw, pluck)?,
+                )?;
+            }
+
+            let mut result = env.create_object()?;
+            result.set_named_property("records", js_records)?;
+            result.set_named_property("done", env.get_boolean(done)?)?;
+            Ok(result)
         })
     }
 
@@ -1781,6 +1856,15 @@ pub(crate) fn pin_module_in_memory() {
     });
 }
 
+fn read_row_values(row: &libsql::Row, column_count: usize) -> Result<Vec<libsql::Value>> {
+    (0..column_count)
+        .map(|index| {
+            row.get_value(index as i32)
+                .map_err(|error| napi::Error::from_reason(error.to_string()))
+        })
+        .collect()
+}
+
 fn map_row(
     env: &Env,
     column_names: &[std::ffi::CString],
@@ -1884,6 +1968,47 @@ fn map_row_raw(
         arr.set(idx as u32, js_value)?;
     }
     Ok(arr.coerce_to_object()?.into_unknown())
+}
+
+fn map_values(
+    env: &Env,
+    column_names: &[std::ffi::CString],
+    values: &[libsql::Value],
+    safe_ints: bool,
+    raw: bool,
+    pluck: bool,
+) -> Result<napi::JsUnknown> {
+    if pluck {
+        return values
+            .first()
+            .map(|value| convert_value_to_js(env, value, safe_ints))
+            .transpose()?
+            .map_or_else(|| Ok(env.get_null()?.into_unknown()), Ok);
+    }
+
+    if raw {
+        let mut result = env.create_array(values.len() as u32)?;
+        for (index, value) in values.iter().enumerate() {
+            result.set(index as u32, convert_value_to_js(env, value, safe_ints)?)?;
+        }
+        return Ok(result.coerce_to_object()?.into_unknown());
+    }
+
+    let result = env.create_object()?;
+    let result = unsafe { napi::JsObject::to_napi_value(env.raw(), result)? };
+    for (column_name, value) in column_names.iter().zip(values) {
+        let js_value = convert_value_to_js(env, value, safe_ints)?;
+        unsafe {
+            napi::sys::napi_set_named_property(
+                env.raw(),
+                result,
+                column_name.as_ptr(),
+                napi::JsUnknown::to_napi_value(env.raw(), js_value)?,
+            );
+        }
+    }
+    let result: napi::JsObject = unsafe { napi::JsObject::from_napi_value(env.raw(), result)? };
+    Ok(result.into_unknown())
 }
 
 static LOGGER_INIT: OnceCell<()> = OnceCell::new();
