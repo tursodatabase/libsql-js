@@ -162,20 +162,13 @@ test.serial("Statement.all()", async (t) => {
 
 test.serial("Statement.allBatched() returns rows from multiple native batches", async (t) => {
   const db = t.context.db;
-  const stmt = await db.prepare(`
-    WITH RECURSIVE numbers(value) AS (
-      SELECT 1
-      UNION ALL
-      SELECT value + 1 FROM numbers WHERE value < 501
-    )
-    SELECT value FROM numbers ORDER BY value
-  `);
+  const stmt = await db.prepare("SELECT 1 AS value UNION ALL SELECT 2 UNION ALL SELECT 3");
 
-  const rows = await stmt.allBatched(100);
-
-  t.is(rows.length, 501);
-  t.is(rows[0].value, 1);
-  t.is(rows[500].value, 501);
+  t.deepEqual(await stmt.allBatched(2), [
+    { value: 1 },
+    { value: 2 },
+    { value: 3 },
+  ]);
 });
 
 test.serial("Statement.allBatched() rejects invalid batch sizes", async (t) => {

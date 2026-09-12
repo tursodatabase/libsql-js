@@ -201,7 +201,7 @@ export declare class Statement {
 export declare class RowsIterator {
   next(): Promise<Record>
   /** Reads one batch of rows. The batch size must be an integer between 1 and 10,000. */
-  nextBatch(maxRows: number): Promise<{ records: unknown[]; done: boolean }>
+  nextBatch(maxRows: number): Promise<unknown[]>
   close(): void
 }
 export declare class Record {

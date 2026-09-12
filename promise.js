@@ -518,10 +518,10 @@ class Statement {
       try {
         while (true) {
           const batch = await iterator.nextBatch(batchSize);
-          for (const record of batch.records) {
+          for (const record of batch) {
             result.push(record);
           }
-          if (batch.done) {
+          if (batch.length < batchSize) {
             return result;
           }
         }
