@@ -507,6 +507,7 @@ class Statement {
    * Executes the SQL statement and returns all resulting rows in native batches.
    *
    * @param {number} batchSize - The maximum number of rows to read per native call.
+   * Must be an integer between 1 and 10,000.
    * @param bindParameters - The bind parameters for executing the statement.
    */
   async allBatched(batchSize, ...bindParameters) {
@@ -517,7 +518,9 @@ class Statement {
       try {
         while (true) {
           const batch = await iterator.nextBatch(batchSize);
-          result.push(...batch.records);
+          for (const record of batch.records) {
+            result.push(record);
+          }
           if (batch.done) {
             return result;
           }

@@ -200,6 +200,7 @@ export declare class Statement {
 /** A raw iterator over rows. The JavaScript layer wraps this in a iterable. */
 export declare class RowsIterator {
   next(): Promise<Record>
+  /** Reads one batch of rows. The batch size must be an integer between 1 and 10,000. */
   nextBatch(maxRows: number): Promise<{ records: unknown[]; done: boolean }>
   close(): void
 }

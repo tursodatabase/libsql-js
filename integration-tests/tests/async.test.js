@@ -178,6 +178,19 @@ test.serial("Statement.allBatched() returns rows from multiple native batches", 
   t.is(rows[500].value, 501);
 });
 
+test.serial("Statement.allBatched() rejects invalid batch sizes", async (t) => {
+  const db = t.context.db;
+  const stmt = await db.prepare("SELECT * FROM users");
+
+  for (const batchSize of [0, -1, 1.5, NaN, Infinity, 10_001]) {
+    await t.throwsAsync(() => stmt.allBatched(batchSize), {
+      message: "maxRows must be an integer between 1 and 10000",
+    });
+  }
+
+  t.is((await stmt.allBatched(10_000)).length, 2);
+});
+
 test.serial("Statement.allBatched() [raw]", async (t) => {
   const db = t.context.db;
   const stmt = await db.prepare("SELECT * FROM users ORDER BY id");
@@ -190,7 +203,7 @@ test.serial("Statement.allBatched() [raw]", async (t) => {
 
 test.serial("Statement.allBatched() [pluck and safe integers]", async (t) => {
   const db = t.context.db;
-  const stmt = await db.prepare("SELECT id FROM users ORDER BY id");
+  const stmt = await db.prepare("SELECT id, email FROM users ORDER BY id");
 
   t.deepEqual(await stmt.pluck().safeIntegers().allBatched(1), [1n, 2n]);
 });
@@ -488,6 +501,34 @@ test.serial("Query timeout option interrupts long-running query", async (t) => {
   db.close();
 });
 
+test.serial("Query timeout resets Statement.allBatched() for reuse", async (t) => {
+  const [db, errorType] = await connect(":memory:");
+  const stmt = await db.prepare(`
+    WITH RECURSIVE numbers(value) AS (
+      SELECT 1
+      UNION ALL
+      SELECT value + 1 FROM numbers WHERE value < ?
+    )
+    SELECT value FROM numbers
+  `);
+
+  await t.throwsAsync(async () => {
+    await stmt.allBatched(100, 1_000_000_000, { queryTimeout: 100 });
+  }, {
+    instanceOf: errorType,
+    message: "interrupted",
+    code: "SQLITE_INTERRUPT",
+  });
+
+  t.deepEqual(await stmt.allBatched(2, 3), [
+    { value: 1 },
+    { value: 2 },
+    { value: 3 },
+  ]);
+
+  db.close();
+});
+
 test.serial("Query timeout option interrupts long-running Statement.get()", async (t) => {
   const [db, errorType] = await connect(":memory:", { defaultQueryTimeout: 100 });
   const stmt = await db.prepare(`
@@ -536,6 +577,25 @@ test.serial("Stale timeout guard from exhausted iterator does not interrupt late
   const stmt = await db.prepare("SELECT * FROM t ORDER BY x ASC");
   for (let i = 0; i < 150; i++) {
     const rows = await stmt.all();
+    t.is(rows.length, 2_000);
+  }
+
+  db.close();
+});
+
+test.serial("Stale timeout guard from exhausted batched iterator does not interrupt later queries", async (t) => {
+  t.timeout(30_000);
+  const [db] = await connect(":memory:", { defaultQueryTimeout: 500 });
+
+  await db.exec("CREATE TABLE t(x INTEGER)");
+  const insert = await db.prepare("INSERT INTO t VALUES (?)");
+  for (let i = 0; i < 2_000; i++) {
+    await insert.run(i);
+  }
+
+  const stmt = await db.prepare("SELECT * FROM t ORDER BY x ASC");
+  for (let i = 0; i < 500; i++) {
+    const rows = await stmt.allBatched(250);
     t.is(rows.length, 2_000);
   }
 

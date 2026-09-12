@@ -1554,6 +1554,8 @@ fn map_value(value: JsUnknown) -> Result<libsql::Value> {
     }
 }
 
+const MAX_ROW_BATCH_SIZE: usize = 10_000;
+
 /// A raw iterator over rows. The JavaScript layer wraps this in a iterable.
 #[napi]
 pub struct RowsIterator {
@@ -1674,16 +1676,26 @@ impl RowsIterator {
         })
     }
 
+    /// Reads one batch of rows. The batch size must be an integer between 1 and 10,000.
     #[napi(ts_return_type = "Promise<{ records: unknown[]; done: boolean }>")]
-    pub fn next_batch(&self, env: Env, max_rows: u32) -> Result<napi::JsObject> {
-        if max_rows == 0 {
-            return Err(napi::Error::from_reason(
-                "maxRows must be greater than zero",
-            ));
+    pub fn next_batch(&self, env: Env, max_rows: f64) -> Result<napi::JsObject> {
+        if !max_rows.is_finite()
+            || max_rows.fract() != 0.0
+            || max_rows < 1.0
+            || max_rows > MAX_ROW_BATCH_SIZE as f64
+        {
+            return Err(napi::Error::from_reason(format!(
+                "maxRows must be an integer between 1 and {MAX_ROW_BATCH_SIZE}"
+            )));
         }
+        let max_rows = max_rows as usize;
 
         let state = self.state.clone();
-        let column_count = self.column_names.len();
+        let value_count = if self.pluck {
+            self.column_names.len().min(1)
+        } else {
+            self.column_names.len()
+        };
         let future = async move {
             let result = async {
                 let mut rows_slot = state.rows.lock().await;
@@ -1693,7 +1705,7 @@ impl RowsIterator {
                 let Some(rows) = rows_slot.as_mut() else {
                     return Err(database_not_open_error());
                 };
-                let mut records = Vec::with_capacity(max_rows as usize);
+                let mut records = Vec::with_capacity(max_rows);
                 let mut done = false;
 
                 for _ in 0..max_rows {
@@ -1709,7 +1721,7 @@ impl RowsIterator {
                         done = true;
                         break;
                     };
-                    let values = match read_row_values(&row, column_count) {
+                    let values = match read_row_values(&row, value_count) {
                         Ok(values) => values,
                         Err(err) => {
                             state.release_operation_resources();
