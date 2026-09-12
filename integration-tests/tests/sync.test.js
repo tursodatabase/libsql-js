@@ -759,6 +759,36 @@ test.serial("Database.batch() rejects non-array argument", async (t) => {
   t.throws(() => db.batch("SELECT 1"), { instanceOf: TypeError });
 });
 
+test.serial("Statement.get() with a single Buffer bind parameter", async (t) => {
+  const db = t.context.db;
+
+  db.exec(`
+      DROP TABLE IF EXISTS t;
+      CREATE TABLE t (key BLOB PRIMARY KEY, value BLOB);
+  `);
+
+  const key = Buffer.from([1, 2, 3]);
+  db.prepare("INSERT INTO t (key, value) VALUES (?, ?)").run(key, Buffer.from([9]));
+
+  // A buffer is an object, but it binds as one blob rather than as a bag of
+  // named parameters. Passed alone it used to reach the named-parameter path,
+  // where an anonymous '?' has no name and unwrapping it aborted the process.
+  const stmt = db.prepare("SELECT value FROM t WHERE key = ?");
+  t.deepEqual(stmt.raw().get(key)[0], Buffer.from([9]));
+  t.deepEqual(stmt.raw().get([key])[0], Buffer.from([9]));
+  t.deepEqual(stmt.raw().get(new Uint8Array([1, 2, 3]))[0], Buffer.from([9]));
+});
+
+test.serial("Statement with anonymous parameters rejects a named-parameter object", async (t) => {
+  const db = t.context.db;
+
+  // Reported rather than unwrapped: the statement has nothing to match the
+  // object's keys against.
+  t.throws(() => db.prepare("SELECT * FROM users WHERE id = ?").get({ id: 1 }), {
+    message: /anonymous/,
+  });
+});
+
 const connect = async (path_opt, options = {}) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;
