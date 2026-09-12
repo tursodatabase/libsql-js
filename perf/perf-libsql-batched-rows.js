@@ -8,7 +8,6 @@ import libsql from '../promise.js';
 const { connect } = libsql;
 
 const BATCH_SIZE = 250;
-const LARGE_RESULT_BATCH_SIZES = [100, BATCH_SIZE, 1_000];
 const ROW_COUNTS = [1_000, 10_000, 100_000, 1_000_000];
 const MAX_ROW_COUNT = ROW_COUNTS[ROW_COUNTS.length - 1];
 
@@ -31,18 +30,13 @@ const stmt = await db.prepare(`
 `);
 
 for (const rowCount of ROW_COUNTS) {
-  const batchSizes = rowCount === MAX_ROW_COUNT
-    ? LARGE_RESULT_BATCH_SIZES
-    : [BATCH_SIZE];
   group(`${rowCount.toLocaleString('en-US')} rows`, () => {
     baseline('all()', async () => {
       validateRows(await stmt.all(rowCount), rowCount);
     });
-    for (const batchSize of batchSizes) {
-      bench(`allBatched(${batchSize})`, async () => {
-        validateRows(await stmt.allBatched(batchSize, rowCount), rowCount);
-      });
-    }
+    bench(`allBatched(${BATCH_SIZE})`, async () => {
+      validateRows(await stmt.allBatched(BATCH_SIZE, rowCount), rowCount);
+    });
   });
 }
 
