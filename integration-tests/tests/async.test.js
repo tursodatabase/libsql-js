@@ -212,6 +212,18 @@ test.serial("Statement.all() rejects invalid batch sizes", async (t) => {
   t.is((await stmt.all(undefined, { batchSize: 10_000 })).length, 2);
 });
 
+test.serial("defaultBatchSize applies and batchSize overrides it", async (t) => {
+  const [db] = await connect(":memory:", { defaultBatchSize: 0 });
+  const stmt = await db.prepare("SELECT 1 AS value");
+
+  await t.throwsAsync(() => stmt.all(), {
+    message: "maxRows must be an integer between 1 and 10000",
+  });
+  t.deepEqual(await stmt.all(undefined, { batchSize: 1 }), [{ value: 1 }]);
+
+  db.close();
+});
+
 test.serial("Statement.all() [raw]", async (t) => {
   const db = t.context.db;
 

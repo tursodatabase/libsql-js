@@ -476,7 +476,7 @@ class Statement {
     try {
       const { params, queryOptions } = splitBindParameters(bindParameters, true);
       const it = await this.stmt.iterate(params, queryOptions);
-      return wrappedIter(it, queryOptions?.batchSize);
+      return wrappedIter(it, queryOptions?.batchSize ?? this.stmt.defaultBatchSize);
     } catch (err) {
       throw convertError(err);
     }

@@ -23,6 +23,9 @@ You can use the `options` parameter to specify various options. Options supporte
 - `authToken`: authentication token for the provider URL (optional).
 - `timeout`: number of milliseconds to wait on locked database before returning `SQLITE_BUSY` error
 - `defaultQueryTimeout`: default maximum number of milliseconds a query is allowed to run before being interrupted with `SQLITE_INTERRUPT` error
+- `defaultBatchSize`: default number of rows that the promise API reads per native iterator call. It must be an integer from 1 through 10,000 and defaults to 1.
+
+Use `batchSize` in `queryOptions` to override `defaultBatchSize` for one `all()` or `iterate()` call. When the query has no bind parameters, pass `undefined` before the options: `statement.all(undefined, { batchSize: 250 })`.
 
 The function returns a `Database` object.
 
@@ -68,7 +71,7 @@ Convenience wrapper that prepares `sql` and executes `Statement.all`. Returns al
 | -------------- | ------------------- | -------------------------------------------------------------------- |
 | sql            | <code>string</code> | The SQL statement string.                                            |
 | bindParameters | <code>any</code>    | Optional positional or named bind parameters.                        |
-| queryOptions   | <code>object</code> | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
+| queryOptions   | <code>object</code> | Optional per-query overrides (for example, `{ queryTimeout: 100, batchSize: 250 }`). |
 
 **Note:** This is an extension in libSQL and not available in `better-sqlite3`.
 
@@ -80,7 +83,7 @@ Convenience wrapper that prepares `sql` and executes `Statement.iterate`. Return
 | -------------- | ------------------- | -------------------------------------------------------------------- |
 | sql            | <code>string</code> | The SQL statement string.                                            |
 | bindParameters | <code>any</code>    | Optional positional or named bind parameters.                        |
-| queryOptions   | <code>object</code> | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
+| queryOptions   | <code>object</code> | Optional per-query overrides (for example, `{ queryTimeout: 100, batchSize: 250 }`). |
 
 **Note:** This is an extension in libSQL and not available in `better-sqlite3`.
 
@@ -333,7 +336,7 @@ Executes the SQL statement and returns an array of the resulting rows.
 | Param          | Type                          | Description                                      |
 | -------------- | ----------------------------- | ------------------------------------------------ |
 | bindParameters | <code>array of objects</code> | The bind parameters for executing the statement. |
-| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
+| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100, batchSize: 250 }`). |
 
 ### iterate([...bindParameters][, queryOptions]) ⇒ iterator
 
@@ -342,7 +345,7 @@ Executes the SQL statement and returns an iterator to the resulting rows.
 | Param          | Type                          | Description                                      |
 | -------------- | ----------------------------- | ------------------------------------------------ |
 | bindParameters | <code>array of objects</code> | The bind parameters for executing the statement. |
-| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). |
+| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100, batchSize: 250 }`). |
 
 ### pluck([toggleState]) ⇒ this
 

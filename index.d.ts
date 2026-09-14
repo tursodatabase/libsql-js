@@ -14,6 +14,7 @@ export interface Options {
   encryptionKey?: string
   remoteEncryptionKey?: string
   defaultQueryTimeout?: number
+  defaultBatchSize?: number
 }
 /** Per-query execution options. */
 export interface QueryOptions {
@@ -165,6 +166,7 @@ export declare class Database {
 }
 /** SQLite statement object. */
 export declare class Statement {
+  get defaultBatchSize(): number
   /**
    * Executes a SQL statement.
    *
