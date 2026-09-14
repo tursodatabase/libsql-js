@@ -4,8 +4,6 @@ const { Database: NativeDb, connect: nativeConnect } = require("./index.js");
 const SqliteError = require("./sqlite-error.js");
 const { Authorization, Action } = require("./auth");
 
-const DEFAULT_ROW_BATCH_SIZE = 1;
-
 /**
  * @import {Options as NativeOptions, Statement as NativeStatement} from './index.js'
  */
@@ -533,7 +531,7 @@ class Statement {
   }
 }
 
-function wrappedIter(it, batchSize = DEFAULT_ROW_BATCH_SIZE) {
+function wrappedIter(it, batchSize = 1) {
   let batch = [];
   let done = false;
   let index = 0;
