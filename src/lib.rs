@@ -1711,7 +1711,12 @@ impl RowsIterator {
                     let Some(row) = rows.next().await.map_err(Error::from)? else {
                         break;
                     };
-                    records.push(read_row_values(&row, value_count).map_err(Error::from)?);
+                    records.push(
+                        (0..value_count)
+                            .map(|index| row.get_value(index as i32))
+                            .collect::<libsql::Result<Vec<_>>>()
+                            .map_err(Error::from)?,
+                    );
                 }
                 Ok(records)
             }
@@ -1850,12 +1855,6 @@ pub(crate) fn pin_module_in_memory() {
             }
         }
     });
-}
-
-fn read_row_values(row: &libsql::Row, column_count: usize) -> libsql::Result<Vec<libsql::Value>> {
-    (0..column_count)
-        .map(|index| row.get_value(index as i32))
-        .collect()
 }
 
 fn map_row(
