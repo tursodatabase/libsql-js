@@ -212,6 +212,8 @@ pub struct Options {
 pub struct QueryOptions {
     // Maximum time in milliseconds that this query is allowed to run.
     pub queryTimeout: Option<f64>,
+    // Maximum number of rows to read per native iterator call.
+    pub batchSize: Option<f64>,
 }
 
 /// Access mode.

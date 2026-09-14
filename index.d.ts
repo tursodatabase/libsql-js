@@ -18,6 +18,7 @@ export interface Options {
 /** Per-query execution options. */
 export interface QueryOptions {
   queryTimeout?: number
+  batchSize?: number
 }
 export declare function connect(path: string, opts?: Options | undefined | null): Promise<Database>
 /** Result of a database sync operation. */

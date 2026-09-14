@@ -34,8 +34,8 @@ for (const rowCount of ROW_COUNTS) {
     baseline('all()', async () => {
       validateRows(await stmt.all(rowCount), rowCount);
     });
-    bench(`allBatched(${BATCH_SIZE})`, async () => {
-      validateRows(await stmt.allBatched(BATCH_SIZE, rowCount), rowCount);
+    bench(`all() with batchSize ${BATCH_SIZE}`, async () => {
+      validateRows(await stmt.all(rowCount, { batchSize: BATCH_SIZE }), rowCount);
     });
   });
 }
