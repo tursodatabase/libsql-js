@@ -110,7 +110,6 @@ test.serial("Statement.get() [named]", async (t) => {
   t.is((await stmt.get({ id: 0 })), undefined);
   t.is((await stmt.get({ id: 1 })).name, "Alice");
   t.is((await stmt.get({ id: 2 })).name, "Bob");
-
 });
 
 
