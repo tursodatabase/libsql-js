@@ -20,6 +20,9 @@ tokio = { version = "1.47.1", features = [ "rt-multi-thread" ] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 ntest = "0.9"
 tokio = { version = "1.47.1", features = ["test-util", "macros"] }

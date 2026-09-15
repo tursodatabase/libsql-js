@@ -88,7 +88,10 @@ impl QueryTimeoutManager {
     /// Returns the process-wide timeout manager, spawning its single
     /// background thread on first use.
     pub fn global() -> &'static QueryTimeoutManager {
-        GLOBAL.get_or_init(QueryTimeoutManager::new)
+        GLOBAL.get_or_init(|| {
+            crate::pin_module_in_memory();
+            QueryTimeoutManager::new()
+        })
     }
 
     pub fn new() -> Self {
