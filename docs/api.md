@@ -23,9 +23,9 @@ You can use the `options` parameter to specify various options. Options supporte
 - `authToken`: authentication token for the provider URL (optional).
 - `timeout`: number of milliseconds to wait on locked database before returning `SQLITE_BUSY` error
 - `defaultQueryTimeout`: default maximum number of milliseconds a query is allowed to run before being interrupted with `SQLITE_INTERRUPT` error
-- `defaultBatchSize`: default number of rows that the promise API reads per native iterator call. It must be an integer from 1 through 10,000 and defaults to 1.
+- `defaultBatchSize`: default number of rows that the promise API (`libsql/promise`) reads per native iterator call. It must be an integer from 1 through 10,000 and defaults to 1. The synchronous API ignores it.
 
-Use `batchSize` in `queryOptions` to override `defaultBatchSize` for one `all()` or `iterate()` call. When the query has no bind parameters, pass `undefined` before the options: `statement.all(undefined, { batchSize: 250 })`.
+With the promise API, use `batchSize` in `queryOptions` to override `defaultBatchSize` for one `all()` or `iterate()` call. When the query has no bind parameters, pass `undefined` before the options: `await statement.all(undefined, { batchSize: 250 })`. The synchronous API does not support `batchSize`.
 
 The function returns a `Database` object.
 
@@ -336,7 +336,7 @@ Executes the SQL statement and returns an array of the resulting rows.
 | Param          | Type                          | Description                                      |
 | -------------- | ----------------------------- | ------------------------------------------------ |
 | bindParameters | <code>array of objects</code> | The bind parameters for executing the statement. |
-| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100, batchSize: 250 }`). |
+| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). The promise API also accepts `batchSize`. |
 
 ### iterate([...bindParameters][, queryOptions]) ⇒ iterator
 
@@ -345,7 +345,7 @@ Executes the SQL statement and returns an iterator to the resulting rows.
 | Param          | Type                          | Description                                      |
 | -------------- | ----------------------------- | ------------------------------------------------ |
 | bindParameters | <code>array of objects</code> | The bind parameters for executing the statement. |
-| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100, batchSize: 250 }`). |
+| queryOptions   | <code>object</code>           | Optional per-query overrides (for example, `{ queryTimeout: 100 }`). The promise API also accepts `batchSize`. |
 
 ### pluck([toggleState]) ⇒ this
 
