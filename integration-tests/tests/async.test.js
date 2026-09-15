@@ -168,6 +168,32 @@ test.serial("Statement.iterate() discards buffered rows after return()", async (
   t.deepEqual(await iterator.next(), { done: true, value: null });
 });
 
+test.serial("Statement.iterate() return() during an in-flight batch releases the statement", async (t) => {
+  const path = genDatabaseFilename();
+  const [conn1] = await connect(path);
+  await conn1.exec("CREATE TABLE t(x)");
+  await conn1.exec(`
+    WITH RECURSIVE numbers(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM numbers WHERE x < 20000)
+    INSERT INTO t SELECT x FROM numbers
+  `);
+  const stmt = await conn1.prepare("SELECT x FROM t");
+  const iterator = await stmt.iterate(undefined, { batchSize: 10_000 });
+
+  const pending = iterator.next();
+  // Let the wrapper issue nextBatch() before closing the iterator.
+  await null;
+  iterator.return();
+  await pending;
+
+  // An active reader would hold a SHARED lock and make this write fail with SQLITE_BUSY.
+  const [conn2] = await connect(path);
+  await t.notThrowsAsync(() => conn2.exec("INSERT INTO t VALUES (0)"));
+
+  conn1.close();
+  conn2.close();
+  fs.unlinkSync(path);
+});
+
 test.serial("Statement.iterate() with invalid bind parameter", async (t) => {
   const db = t.context.db;
 

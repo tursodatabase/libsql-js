@@ -1594,6 +1594,8 @@ struct RowsIteratorState {
     timeout_guard: Mutex<Option<QueryTimeoutGuard>>,
     // Set when the database is closed while next() holds the rows.
     released: AtomicBool,
+    // Set by close() so that an in-flight batch stops stepping the reset statement.
+    closed: AtomicBool,
 }
 
 impl RowsIteratorState {
@@ -1606,6 +1608,12 @@ impl RowsIteratorState {
 }
 
 impl RowsIteratorState {
+    /// Whether the iterator or its database was closed. Stepping the reset
+    /// statement afterwards would restart the query from the first row.
+    fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::SeqCst) || self.released.load(Ordering::SeqCst)
+    }
+
     /// Drops the rows if the database was closed while they were locked.
     /// Called after unlocking so that either the caller or release() drops them.
     fn drop_rows_if_released(&self) {
@@ -1647,6 +1655,7 @@ impl RowsIterator {
             stmt: Mutex::new(Some(stmt)),
             timeout_guard: Mutex::new(timeout_guard),
             released: AtomicBool::new(false),
+            closed: AtomicBool::new(false),
         });
         let weak_state: Weak<dyn ConnectionResource> = Arc::downgrade(&state) as _;
         resources.register(weak_state);
@@ -1727,6 +1736,10 @@ impl RowsIterator {
                 };
                 let mut records = Vec::with_capacity(max_rows);
                 for _ in 0..max_rows {
+                    // Stepping after close() would restart the query from the first row.
+                    if state.is_closed() {
+                        break;
+                    }
                     let Some(row) = rows.next().await.map_err(Error::from)? else {
                         break;
                     };
@@ -1741,9 +1754,10 @@ impl RowsIterator {
             }
             .await;
             state.drop_rows_if_released();
-            if result
-                .as_ref()
-                .map_or(true, |records| records.len() < max_rows)
+            if state.is_closed()
+                || result
+                    .as_ref()
+                    .map_or(true, |records| records.len() < max_rows)
             {
                 state.release_operation_resources();
             }
@@ -1767,6 +1781,7 @@ impl RowsIterator {
 
     #[napi]
     pub fn close(&self) {
+        self.state.closed.store(true, Ordering::SeqCst);
         self.state.release_operation_resources();
     }
 }
