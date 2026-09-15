@@ -238,6 +238,30 @@ test.serial("Statement.all() rejects invalid batch sizes", async (t) => {
   t.is((await stmt.all(undefined, { batchSize: 10_000 })).length, 2);
 });
 
+test.serial("Invalid batch size in for await releases the statement", async (t) => {
+  const path = genDatabaseFilename();
+  const [conn1] = await connect(path);
+  await conn1.exec("CREATE TABLE t(x)");
+  await conn1.exec("INSERT INTO t VALUES (1), (2)");
+  const stmt = await conn1.prepare("SELECT x FROM t");
+
+  // A rejected next() does not call return(), so the statement must be released natively.
+  await t.throwsAsync(async () => {
+    for await (const _ of await stmt.iterate(undefined, { batchSize: 0 })) {
+    }
+  }, {
+    message: "maxRows must be an integer between 1 and 10000",
+  });
+
+  // An active reader would hold a SHARED lock and make this write fail with SQLITE_BUSY.
+  const [conn2] = await connect(path);
+  await t.notThrowsAsync(() => conn2.exec("INSERT INTO t VALUES (0)"));
+
+  conn1.close();
+  conn2.close();
+  fs.unlinkSync(path);
+});
+
 test.serial("defaultBatchSize applies and batchSize overrides it", async (t) => {
   const [db] = await connect(":memory:", { defaultBatchSize: 0 });
   const stmt = await db.prepare("SELECT 1 AS value");

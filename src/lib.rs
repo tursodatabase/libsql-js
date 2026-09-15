@@ -1713,6 +1713,8 @@ impl RowsIterator {
             || max_rows.fract() != 0.0
             || !(1.0..=MAX_ROW_BATCH_SIZE as f64).contains(&max_rows)
         {
+            // A rejected next() does not trigger return() in `for await`.
+            self.state.release_operation_resources();
             return Err(napi::Error::from_reason(format!(
                 "maxRows must be an integer between 1 and {MAX_ROW_BATCH_SIZE}"
             )));
