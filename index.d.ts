@@ -14,10 +14,12 @@ export interface Options {
   encryptionKey?: string
   remoteEncryptionKey?: string
   defaultQueryTimeout?: number
+  defaultBatchSize?: number
 }
 /** Per-query execution options. */
 export interface QueryOptions {
   queryTimeout?: number
+  batchSize?: number
 }
 export declare function connect(path: string, opts?: Options | undefined | null): Promise<Database>
 /** Result of a database sync operation. */
@@ -164,6 +166,7 @@ export declare class Database {
 }
 /** SQLite statement object. */
 export declare class Statement {
+  get defaultBatchSize(): number
   /**
    * Executes a SQL statement.
    *
@@ -200,6 +203,8 @@ export declare class Statement {
 /** A raw iterator over rows. The JavaScript layer wraps this in a iterable. */
 export declare class RowsIterator {
   next(): Promise<Record>
+  /** Reads one batch of rows. The batch size must be an integer between 1 and 10,000. */
+  nextBatch(maxRows: number): Promise<unknown[]>
   close(): void
 }
 export declare class Record {

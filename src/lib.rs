@@ -205,6 +205,8 @@ pub struct Options {
     pub remoteEncryptionKey: Option<String>,
     // Default maximum time in milliseconds that a query is allowed to run.
     pub defaultQueryTimeout: Option<f64>,
+    // Default maximum number of rows to read per native iterator call.
+    pub defaultBatchSize: Option<f64>,
 }
 
 /// Per-query execution options.
@@ -212,6 +214,8 @@ pub struct Options {
 pub struct QueryOptions {
     // Maximum time in milliseconds that this query is allowed to run.
     pub queryTimeout: Option<f64>,
+    // Maximum number of rows to read per native iterator call.
+    pub batchSize: Option<f64>,
 }
 
 /// Access mode.
@@ -238,6 +242,8 @@ pub struct Database {
     memory: bool,
     // Maximum time in milliseconds that a query is allowed to run.
     query_timeout: Option<Duration>,
+    // Default maximum number of rows to read per native iterator call.
+    default_batch_size: f64,
     // Statements and iterators that hold references to the connection.
     resources: Arc<OpenResources>,
 }
@@ -403,12 +409,17 @@ pub async fn connect(path: String, opts: Option<Options>) -> Result<Database> {
         .as_ref()
         .and_then(|o| o.defaultQueryTimeout)
         .and_then(query_timeout_duration);
+    let default_batch_size = opts
+        .as_ref()
+        .and_then(|o| o.defaultBatchSize)
+        .unwrap_or(1.0);
     Ok(Database {
         db: Some(db),
         conn: Some(conn),
         default_safe_integers,
         memory,
         query_timeout,
+        default_batch_size,
         resources: Arc::new(OpenResources::default()),
     })
 }
@@ -489,6 +500,7 @@ impl Database {
             stmt,
             mode,
             self.query_timeout,
+            self.default_batch_size,
             self.resources.clone(),
         ))
     }
@@ -906,6 +918,14 @@ fn throw_database_closed_error(env: &Env) -> napi::Error {
     err
 }
 
+fn database_not_open_error() -> napi::Error {
+    throw_sqlite_error(
+        "The database connection is not open".to_string(),
+        "SQLITE_NOTOPEN".to_string(),
+        0,
+    )
+}
+
 fn query_timeout_duration(timeout_ms: f64) -> Option<Duration> {
     if timeout_ms.is_finite() && timeout_ms > 0.0 {
         Some(Duration::from_millis(timeout_ms as u64))
@@ -977,6 +997,8 @@ pub struct Statement {
     mode: AccessMode,
     // Maximum time in milliseconds that a query is allowed to run.
     query_timeout: Option<Duration>,
+    // Default maximum number of rows to read per native iterator call.
+    default_batch_size: f64,
 }
 
 #[napi]
@@ -993,6 +1015,7 @@ impl Statement {
         stmt: libsql::Statement,
         mode: AccessMode,
         query_timeout: Option<Duration>,
+        default_batch_size: f64,
         resources: Arc<OpenResources>,
     ) -> Self {
         let column_names: Vec<std::ffi::CString> = stmt
@@ -1013,7 +1036,13 @@ impl Statement {
             column_names,
             mode,
             query_timeout,
+            default_batch_size,
         }
+    }
+
+    #[napi(getter)]
+    pub fn default_batch_size(&self) -> f64 {
+        self.default_batch_size
     }
 
     /// Executes a SQL statement.
@@ -1272,11 +1301,7 @@ impl Statement {
     fn handle(&self) -> Result<StatementHandle> {
         match &*self.slot.0.lock().unwrap() {
             Some(handle) => Ok(handle.clone()),
-            None => Err(throw_sqlite_error(
-                "The database connection is not open".to_string(),
-                "SQLITE_NOTOPEN".to_string(),
-                0,
-            )),
+            None => Err(database_not_open_error()),
         }
     }
 
@@ -1550,6 +1575,8 @@ fn map_value(value: JsUnknown) -> Result<libsql::Value> {
     }
 }
 
+const MAX_ROW_BATCH_SIZE: usize = 10_000;
+
 /// A raw iterator over rows. The JavaScript layer wraps this in a iterable.
 #[napi]
 pub struct RowsIterator {
@@ -1567,6 +1594,8 @@ struct RowsIteratorState {
     timeout_guard: Mutex<Option<QueryTimeoutGuard>>,
     // Set when the database is closed while next() holds the rows.
     released: AtomicBool,
+    // Set by close() so that an in-flight batch stops stepping the reset statement.
+    closed: AtomicBool,
 }
 
 impl RowsIteratorState {
@@ -1575,6 +1604,24 @@ impl RowsIteratorState {
             stmt.reset();
         }
         self.timeout_guard.lock().unwrap().take();
+    }
+}
+
+impl RowsIteratorState {
+    /// Whether the iterator or its database was closed. Stepping the reset
+    /// statement afterwards would restart the query from the first row.
+    fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::SeqCst) || self.released.load(Ordering::SeqCst)
+    }
+
+    /// Drops the rows if the database was closed while they were locked.
+    /// Called after unlocking so that either the caller or release() drops them.
+    fn drop_rows_if_released(&self) {
+        if self.released.load(Ordering::SeqCst) {
+            if let Ok(mut rows) = self.rows.try_lock() {
+                rows.take();
+            }
+        }
     }
 }
 
@@ -1608,6 +1655,7 @@ impl RowsIterator {
             stmt: Mutex::new(Some(stmt)),
             timeout_guard: Mutex::new(timeout_guard),
             released: AtomicBool::new(false),
+            closed: AtomicBool::new(false),
         });
         let weak_state: Weak<dyn ConnectionResource> = Arc::downgrade(&state) as _;
         resources.register(weak_state);
@@ -1629,22 +1677,10 @@ impl RowsIterator {
             }
             match rows_slot.as_mut() {
                 Some(rows) => rows.next().await,
-                None => {
-                    return Err(throw_sqlite_error(
-                        "The database connection is not open".to_string(),
-                        "SQLITE_NOTOPEN".to_string(),
-                        0,
-                    ));
-                }
+                None => return Err(database_not_open_error()),
             }
         };
-        // The database may have been closed while we held the rows. Checking
-        // after unlocking guarantees either we or release() drops them.
-        if self.state.released.load(Ordering::SeqCst) {
-            if let Ok(mut rows_slot) = self.state.rows.try_lock() {
-                rows_slot.take();
-            }
-        }
+        self.state.drop_rows_if_released();
         let row = match result {
             Ok(row) => row,
             Err(err) => {
@@ -1670,8 +1706,84 @@ impl RowsIterator {
         })
     }
 
+    /// Reads one batch of rows. The batch size must be an integer between 1 and 10,000.
+    #[napi(ts_return_type = "Promise<unknown[]>")]
+    pub fn next_batch(&self, env: Env, max_rows: f64) -> Result<napi::JsObject> {
+        if !max_rows.is_finite()
+            || max_rows.fract() != 0.0
+            || !(1.0..=MAX_ROW_BATCH_SIZE as f64).contains(&max_rows)
+        {
+            // A rejected next() does not trigger return() in `for await`.
+            self.state.release_operation_resources();
+            return Err(napi::Error::from_reason(format!(
+                "maxRows must be an integer between 1 and {MAX_ROW_BATCH_SIZE}"
+            )));
+        }
+        let max_rows = max_rows as usize;
+
+        let state = self.state.clone();
+        let value_count = if self.pluck {
+            self.column_names.len().min(1)
+        } else {
+            self.column_names.len()
+        };
+        let future = async move {
+            let result: Result<_> = async {
+                let mut rows_slot = state.rows.lock().await;
+                if state.released.load(Ordering::SeqCst) {
+                    rows_slot.take();
+                }
+                let Some(rows) = rows_slot.as_mut() else {
+                    return Err(database_not_open_error());
+                };
+                let mut records = Vec::with_capacity(max_rows);
+                for _ in 0..max_rows {
+                    // Stepping after close() would restart the query from the first row.
+                    if state.is_closed() {
+                        break;
+                    }
+                    let Some(row) = rows.next().await.map_err(Error::from)? else {
+                        break;
+                    };
+                    records.push(
+                        (0..value_count)
+                            .map(|index| row.get_value(index as i32))
+                            .collect::<libsql::Result<Vec<_>>>()
+                            .map_err(Error::from)?,
+                    );
+                }
+                Ok(records)
+            }
+            .await;
+            state.drop_rows_if_released();
+            if state.is_closed()
+                || result
+                    .as_ref()
+                    .map_or(true, |records| records.len() < max_rows)
+            {
+                state.release_operation_resources();
+            }
+            result
+        };
+        let column_names = self.column_names.clone();
+        let safe_ints = self.safe_ints;
+        let raw = self.raw;
+        let pluck = self.pluck;
+        env.execute_tokio_future(future, move |&mut env, records| {
+            let mut js_records = env.create_array(records.len() as u32)?;
+            for (index, values) in records.iter().enumerate() {
+                js_records.set(
+                    index as u32,
+                    map_values(&env, &column_names, values, safe_ints, raw, pluck)?,
+                )?;
+            }
+            Ok(js_records)
+        })
+    }
+
     #[napi]
     pub fn close(&self) {
+        self.state.closed.store(true, Ordering::SeqCst);
         self.state.release_operation_resources();
     }
 }
@@ -1884,6 +1996,47 @@ fn map_row_raw(
         arr.set(idx as u32, js_value)?;
     }
     Ok(arr.coerce_to_object()?.into_unknown())
+}
+
+fn map_values(
+    env: &Env,
+    column_names: &[std::ffi::CString],
+    values: &[libsql::Value],
+    safe_ints: bool,
+    raw: bool,
+    pluck: bool,
+) -> Result<napi::JsUnknown> {
+    if pluck {
+        return values
+            .first()
+            .map(|value| convert_value_to_js(env, value, safe_ints))
+            .transpose()?
+            .map_or_else(|| Ok(env.get_null()?.into_unknown()), Ok);
+    }
+
+    if raw {
+        let mut result = env.create_array(values.len() as u32)?;
+        for (index, value) in values.iter().enumerate() {
+            result.set(index as u32, convert_value_to_js(env, value, safe_ints)?)?;
+        }
+        return Ok(result.coerce_to_object()?.into_unknown());
+    }
+
+    let result = env.create_object()?;
+    let result = unsafe { napi::JsObject::to_napi_value(env.raw(), result)? };
+    for (column_name, value) in column_names.iter().zip(values) {
+        let js_value = convert_value_to_js(env, value, safe_ints)?;
+        unsafe {
+            napi::sys::napi_set_named_property(
+                env.raw(),
+                result,
+                column_name.as_ptr(),
+                napi::JsUnknown::to_napi_value(env.raw(), js_value)?,
+            );
+        }
+    }
+    let result: napi::JsObject = unsafe { napi::JsObject::from_napi_value(env.raw(), result)? };
+    Ok(result.into_unknown())
 }
 
 static LOGGER_INIT: OnceCell<()> = OnceCell::new();

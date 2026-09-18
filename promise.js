@@ -41,18 +41,22 @@ function convertError(err) {
   return err;
 }
 
-function isQueryOptions(value) {
+function isQueryOptions(value, allowBatchSize) {
   return value != null
     && typeof value === "object"
     && !Array.isArray(value)
-    && Object.prototype.hasOwnProperty.call(value, "queryTimeout");
+    && (Object.prototype.hasOwnProperty.call(value, "queryTimeout")
+      || (allowBatchSize && Object.prototype.hasOwnProperty.call(value, "batchSize")));
 }
 
-function splitBindParameters(bindParameters) {
+function splitBindParameters(bindParameters, allowBatchSize = false) {
   if (bindParameters.length === 0) {
     return { params: undefined, queryOptions: undefined };
   }
-  if (isQueryOptions(bindParameters[bindParameters.length - 1])) {
+  if (isQueryOptions(
+    bindParameters[bindParameters.length - 1],
+    allowBatchSize && bindParameters.length > 1,
+  )) {
     if (bindParameters.length === 1) {
       return { params: undefined, queryOptions: bindParameters[0] };
     }
@@ -470,9 +474,9 @@ class Statement {
    */
   async iterate(...bindParameters) {
     try {
-      const { params, queryOptions } = splitBindParameters(bindParameters);
+      const { params, queryOptions } = splitBindParameters(bindParameters, true);
       const it = await this.stmt.iterate(params, queryOptions);
-      return wrappedIter(it);
+      return wrappedIter(it, queryOptions?.batchSize ?? this.stmt.defaultBatchSize);
     } catch (err) {
       throw convertError(err);
     }
@@ -527,14 +531,47 @@ class Statement {
   }
 }
 
-function wrappedIter(it) {
+function wrappedIter(it, batchSize = 1) {
+  let batch = [];
+  let done = false;
+  let index = 0;
+  let pending = Promise.resolve();
+
   return {
     next() {
-      return it.next().catch((err) => {
-        throw convertError(err);
+      pending = pending.then(async () => {
+        if (index === batch.length) {
+          if (done) {
+            return { done: true, value: null };
+          }
+          let nextBatch;
+          try {
+            nextBatch = await it.nextBatch(batchSize);
+          } catch (error) {
+            if (done) {
+              return { done: true, value: null };
+            }
+            throw convertError(error);
+          }
+          if (done) {
+            return { done: true, value: null };
+          }
+          batch = nextBatch;
+          done = batch.length < batchSize;
+          index = 0;
+        }
+        if (batch.length === 0) {
+          return { done: true, value: null };
+        }
+        return { done: false, value: batch[index++] };
       });
+      return pending;
     },
     return(value) {
+      done = true;
+      batch = [];
+      index = 0;
+      pending = pending.catch(() => {});
       if (typeof it.close === "function") {
         it.close();
       }

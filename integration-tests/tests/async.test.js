@@ -139,6 +139,61 @@ test.serial("Statement.iterate()", async (t) => {
   }
 });
 
+test.serial("Statement.iterate() preserves concurrent next() order", async (t) => {
+  const db = t.context.db;
+  const stmt = await db.prepare("SELECT 1 AS value UNION ALL SELECT 2 UNION ALL SELECT 3");
+  const iterator = await stmt.iterate(undefined, { batchSize: 2 });
+
+  t.deepEqual(await Promise.all([
+    iterator.next(),
+    iterator.next(),
+    iterator.next(),
+    iterator.next(),
+  ]), [
+    { done: false, value: { value: 1 } },
+    { done: false, value: { value: 2 } },
+    { done: false, value: { value: 3 } },
+    { done: true, value: null },
+  ]);
+});
+
+test.serial("Statement.iterate() discards buffered rows after return()", async (t) => {
+  const db = t.context.db;
+  const stmt = await db.prepare("SELECT * FROM users ORDER BY id");
+  const iterator = await stmt.iterate(undefined, { batchSize: 2 });
+
+  await iterator.next();
+  iterator.return();
+
+  t.deepEqual(await iterator.next(), { done: true, value: null });
+});
+
+test.serial("Statement.iterate() return() during an in-flight batch releases the statement", async (t) => {
+  const path = genDatabaseFilename();
+  const [conn1] = await connect(path);
+  await conn1.exec("CREATE TABLE t(x)");
+  await conn1.exec(`
+    WITH RECURSIVE numbers(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM numbers WHERE x < 20000)
+    INSERT INTO t SELECT x FROM numbers
+  `);
+  const stmt = await conn1.prepare("SELECT x FROM t");
+  const iterator = await stmt.iterate(undefined, { batchSize: 10_000 });
+
+  const pending = iterator.next();
+  // Let the wrapper issue nextBatch() before closing the iterator.
+  await null;
+  iterator.return();
+  await pending;
+
+  // An active reader would hold a SHARED lock and make this write fail with SQLITE_BUSY.
+  const [conn2] = await connect(path);
+  await t.notThrowsAsync(() => conn2.exec("INSERT INTO t VALUES (0)"));
+
+  conn1.close();
+  conn2.close();
+  fs.unlinkSync(path);
+});
+
 test.serial("Statement.iterate() with invalid bind parameter", async (t) => {
   const db = t.context.db;
 
@@ -158,6 +213,65 @@ test.serial("Statement.all()", async (t) => {
     { id: 2, name: "Bob", email: "bob@example.com" },
   ];
   t.deepEqual(await stmt.all(), expected);
+
+  const namedStmt = await db.prepare("SELECT :batchSize AS value");
+  t.deepEqual(await namedStmt.all({ batchSize: 2 }), [{ value: 2 }]);
+});
+
+test.serial("Statement.all() rejects invalid batch sizes", async (t) => {
+  const db = t.context.db;
+  const stmt = await db.prepare("SELECT * FROM users");
+
+  const iterator = await stmt.iterate(undefined, { batchSize: 0 });
+  await t.throwsAsync(() => iterator.next(), {
+    message: "maxRows must be an integer between 1 and 10000",
+  });
+  iterator.return();
+  t.deepEqual(await iterator.next(), { done: true, value: null });
+
+  for (const batchSize of [-1, 1.5, NaN, Infinity, 10_001]) {
+    await t.throwsAsync(() => stmt.all(undefined, { batchSize }), {
+      message: "maxRows must be an integer between 1 and 10000",
+    });
+  }
+
+  t.is((await stmt.all(undefined, { batchSize: 10_000 })).length, 2);
+});
+
+test.serial("Invalid batch size in for await releases the statement", async (t) => {
+  const path = genDatabaseFilename();
+  const [conn1] = await connect(path);
+  await conn1.exec("CREATE TABLE t(x)");
+  await conn1.exec("INSERT INTO t VALUES (1), (2)");
+  const stmt = await conn1.prepare("SELECT x FROM t");
+
+  // A rejected next() does not call return(), so the statement must be released natively.
+  await t.throwsAsync(async () => {
+    for await (const _ of await stmt.iterate(undefined, { batchSize: 0 })) {
+    }
+  }, {
+    message: "maxRows must be an integer between 1 and 10000",
+  });
+
+  // An active reader would hold a SHARED lock and make this write fail with SQLITE_BUSY.
+  const [conn2] = await connect(path);
+  await t.notThrowsAsync(() => conn2.exec("INSERT INTO t VALUES (0)"));
+
+  conn1.close();
+  conn2.close();
+  fs.unlinkSync(path);
+});
+
+test.serial("defaultBatchSize applies and batchSize overrides it", async (t) => {
+  const [db] = await connect(":memory:", { defaultBatchSize: 0 });
+  const stmt = await db.prepare("SELECT 1 AS value");
+
+  await t.throwsAsync(() => stmt.all(), {
+    message: "maxRows must be an integer between 1 and 10000",
+  });
+  t.deepEqual(await stmt.all(undefined, { batchSize: 1 }), [{ value: 1 }]);
+
+  db.close();
 });
 
 test.serial("Statement.all() [raw]", async (t) => {
@@ -168,7 +282,7 @@ test.serial("Statement.all() [raw]", async (t) => {
     [1, "Alice", "alice@example.org"],
     [2, "Bob", "bob@example.com"],
   ];
-  t.deepEqual(await stmt.raw().all(), expected);
+  t.deepEqual(await stmt.raw().all(undefined, { batchSize: 250 }), expected);
 });
 
 test.serial("Statement.all() [pluck]", async (t) => {
@@ -179,7 +293,7 @@ test.serial("Statement.all() [pluck]", async (t) => {
     1,
     2,
   ];
-  t.deepEqual(await stmt.pluck().all(), expected);
+  t.deepEqual(await stmt.pluck().all(undefined, { batchSize: 250 }), expected);
 });
 
 test.serial("Statement.all() [default safe integers]", async (t) => {
@@ -190,7 +304,7 @@ test.serial("Statement.all() [default safe integers]", async (t) => {
     [1n, "Alice", "alice@example.org"],
     [2n, "Bob", "bob@example.com"],
   ];
-  t.deepEqual(await stmt.raw().all(), expected);
+  t.deepEqual(await stmt.raw().all(undefined, { batchSize: 250 }), expected);
 });
 
 test.serial("Statement.all() [statement safe integers]", async (t) => {
@@ -201,7 +315,7 @@ test.serial("Statement.all() [statement safe integers]", async (t) => {
     [1n, "Alice", "alice@example.org"],
     [2n, "Bob", "bob@example.com"],
   ];
-  t.deepEqual(await stmt.raw().all(), expected);
+  t.deepEqual(await stmt.raw().all(undefined, { batchSize: 250 }), expected);
 });
 
 test.serial("Statement.raw() [failure]", async (t) => {
@@ -453,6 +567,34 @@ test.serial("Query timeout option interrupts long-running query", async (t) => {
   db.close();
 });
 
+test.serial("Query timeout resets batched Statement.all() for reuse", async (t) => {
+  const [db, errorType] = await connect(":memory:");
+  const stmt = await db.prepare(`
+    WITH RECURSIVE numbers(value) AS (
+      SELECT 1
+      UNION ALL
+      SELECT value + 1 FROM numbers WHERE value < ?
+    )
+    SELECT value FROM numbers
+  `);
+
+  await t.throwsAsync(async () => {
+    await stmt.all(1_000_000_000, { queryTimeout: 100, batchSize: 100 });
+  }, {
+    instanceOf: errorType,
+    message: "interrupted",
+    code: "SQLITE_INTERRUPT",
+  });
+
+  t.deepEqual(await stmt.all(3, { batchSize: 2 }), [
+    { value: 1 },
+    { value: 2 },
+    { value: 3 },
+  ]);
+
+  db.close();
+});
+
 test.serial("Query timeout option interrupts long-running Statement.get()", async (t) => {
   const [db, errorType] = await connect(":memory:", { defaultQueryTimeout: 100 });
   const stmt = await db.prepare(`
@@ -500,7 +642,7 @@ test.serial("Stale timeout guard from exhausted iterator does not interrupt late
   // interrupt unrelated later queries.
   const stmt = await db.prepare("SELECT * FROM t ORDER BY x ASC");
   for (let i = 0; i < 150; i++) {
-    const rows = await stmt.all();
+    const rows = await stmt.all(undefined, { batchSize: 250 });
     t.is(rows.length, 2_000);
   }
 
