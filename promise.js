@@ -530,7 +530,9 @@ class Statement {
 function wrappedIter(it) {
   return {
     next() {
-      return it.next();
+      return it.next().catch((err) => {
+        throw convertError(err);
+      });
     },
     return(value) {
       if (typeof it.close === "function") {

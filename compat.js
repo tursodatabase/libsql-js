@@ -438,7 +438,11 @@ class Statement {
 function wrappedIter(it) {
   return {
     next() {
-      return iteratorNextSync(it);
+      try {
+        return iteratorNextSync(it);
+      } catch (err) {
+        throw convertError(err);
+      }
     },
     return(value) {
       if (typeof it.close === "function") {
