@@ -443,6 +443,48 @@ test.serial("Database.exec() after close()", async (t) => {
   });
 });
 
+test.serial("Database.close() releases open statements", async (t) => {
+  const path = genDatabaseFilename();
+  const [db] = await connect(path);
+  db.exec("CREATE TABLE t(x)");
+  const stmt = db.prepare("SELECT x FROM t");
+  db.close();
+
+  t.throws(() => stmt.all(), {
+    instanceOf: TypeError,
+    message: "The database connection is not open",
+  });
+  // Fails with EBUSY on Windows if the database file is still open.
+  fs.unlinkSync(path);
+});
+
+test.serial("Database.close() releases active iterators", async (t) => {
+  // better-sqlite3 refuses to close a database with an active iterator.
+  if (t.context.provider !== "libsql") {
+    t.pass();
+    return;
+  }
+  const path = genDatabaseFilename();
+  const [conn1] = await connect(path);
+  conn1.exec("CREATE TABLE t(x)");
+  conn1.exec("INSERT INTO t VALUES (1), (2)");
+  const iterator = conn1.prepare("SELECT x FROM t").iterate();
+  // A partially consumed iterator keeps a read transaction open.
+  t.is(iterator.next().value.x, 1);
+  conn1.close();
+
+  // A live reader would hold a SHARED lock and make this write fail with SQLITE_BUSY.
+  const [conn2] = await connect(path);
+  t.notThrows(() => conn2.exec("INSERT INTO t VALUES (3)"));
+  t.throws(() => iterator.next(), {
+    instanceOf: TypeError,
+    message: "The database connection is not open",
+  });
+  conn2.close();
+  // Fails with EBUSY on Windows if the database file is still open.
+  fs.unlinkSync(path);
+});
+
 test.serial("Timeout option", async (t) => {
   const timeout = 1000;
   const path = genDatabaseFilename();

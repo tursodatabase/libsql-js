@@ -35,7 +35,7 @@ use std::{
     str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        Arc, Mutex, Weak,
     },
     time::Duration,
 };
@@ -238,12 +238,76 @@ pub struct Database {
     memory: bool,
     // Maximum time in milliseconds that a query is allowed to run.
     query_timeout: Option<Duration>,
+    // Statements and iterators that hold references to the connection.
+    resources: Arc<OpenResources>,
 }
 
 impl Drop for Database {
     fn drop(&mut self) {
+        self.release_connection();
+    }
+}
+
+impl Database {
+    fn release_connection(&mut self) {
+        // Statements and iterators hold their own connection references, so
+        // the database file stays open until they are released as well.
+        self.resources.close_all();
         self.conn = None;
         self.db = None;
+    }
+}
+
+/// An object that holds a reference to the connection and must release it
+/// when the database is closed.
+trait ConnectionResource: Send + Sync {
+    fn release(&self);
+}
+
+/// Tracks the statements and iterators of a database so that closing the
+/// database releases their connection references. Without this, the database
+/// file stays open until the garbage collector reclaims every statement.
+#[derive(Default)]
+struct OpenResources {
+    inner: Mutex<OpenResourcesInner>,
+}
+
+#[derive(Default)]
+struct OpenResourcesInner {
+    closed: bool,
+    resources: Vec<Weak<dyn ConnectionResource>>,
+    // Length at which dead entries are pruned next, to keep registration amortized O(1).
+    prune_at: usize,
+}
+
+impl OpenResources {
+    fn register(&self, resource: Weak<dyn ConnectionResource>) {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.closed {
+            drop(inner);
+            if let Some(resource) = resource.upgrade() {
+                resource.release();
+            }
+            return;
+        }
+        inner.resources.push(resource);
+        if inner.resources.len() >= inner.prune_at {
+            inner.resources.retain(|r| r.strong_count() > 0);
+            inner.prune_at = (inner.resources.len() * 2).max(64);
+        }
+    }
+
+    fn close_all(&self) {
+        let resources = {
+            let mut inner = self.inner.lock().unwrap();
+            inner.closed = true;
+            std::mem::take(&mut inner.resources)
+        };
+        for resource in resources {
+            if let Some(resource) = resource.upgrade() {
+                resource.release();
+            }
+        }
     }
 }
 
@@ -345,6 +409,7 @@ pub async fn connect(path: String, opts: Option<Options>) -> Result<Database> {
         default_safe_integers,
         memory,
         query_timeout,
+        resources: Arc::new(OpenResources::default()),
     })
 }
 
@@ -419,7 +484,13 @@ impl Database {
             pluck: false.into(),
             timing: false.into(),
         };
-        Ok(Statement::new(conn, stmt, mode, self.query_timeout))
+        Ok(Statement::new(
+            conn,
+            stmt,
+            mode,
+            self.query_timeout,
+            self.resources.clone(),
+        ))
     }
 
     /// Sets the authorizer for the database.
@@ -608,8 +679,7 @@ impl Database {
     /// Closes the database connection.
     #[napi]
     pub fn close(&mut self) -> Result<()> {
-        self.conn = None;
-        self.db = None;
+        self.release_connection();
         Ok(())
     }
 
@@ -877,13 +947,30 @@ async fn clear_stale_interrupt(conn: &Arc<libsql::Connection>) {
     }
 }
 
-/// SQLite statement object.
-#[napi]
-pub struct Statement {
+/// The libSQL objects of a statement, released when the database is closed.
+#[derive(Clone)]
+struct StatementHandle {
     // The libSQL connection instance.
     conn: Arc<libsql::Connection>,
     // The libSQL statement instance.
     stmt: Arc<libsql::Statement>,
+}
+
+struct StatementSlot(Mutex<Option<StatementHandle>>);
+
+impl ConnectionResource for StatementSlot {
+    fn release(&self) {
+        self.0.lock().unwrap().take();
+    }
+}
+
+/// SQLite statement object.
+#[napi]
+pub struct Statement {
+    // The libSQL objects, or `None` once the database is closed.
+    slot: Arc<StatementSlot>,
+    // The resources of the database that owns this statement.
+    resources: Arc<OpenResources>,
     // The column names.
     column_names: Vec<std::ffi::CString>,
     // The access mode.
@@ -906,6 +993,7 @@ impl Statement {
         stmt: libsql::Statement,
         mode: AccessMode,
         query_timeout: Option<Duration>,
+        resources: Arc<OpenResources>,
     ) -> Self {
         let column_names: Vec<std::ffi::CString> = stmt
             .columns()
@@ -913,9 +1001,15 @@ impl Statement {
             .map(|c| std::ffi::CString::new(c.name().to_string()).unwrap())
             .collect();
         let stmt = Arc::new(stmt);
-        Self {
+        let slot = Arc::new(StatementSlot(Mutex::new(Some(StatementHandle {
             conn,
             stmt,
+        }))));
+        let weak_slot: Weak<dyn ConnectionResource> = Arc::downgrade(&slot) as _;
+        resources.register(weak_slot);
+        Self {
+            slot,
+            resources,
             column_names,
             mode,
             query_timeout,
@@ -934,12 +1028,11 @@ impl Statement {
         params: Option<napi::JsUnknown>,
         query_options: Option<QueryOptions>,
     ) -> Result<napi::JsObject> {
-        self.stmt.reset();
-        let params = map_params(&self.stmt, params)?;
-        let total_changes_before = self.conn.total_changes();
+        let StatementHandle { conn, stmt } = self.handle()?;
+        stmt.reset();
+        let params = map_params(&stmt, params)?;
+        let total_changes_before = conn.total_changes();
         let start = std::time::Instant::now();
-        let stmt = self.stmt.clone();
-        let conn = self.conn.clone();
         let query_timeout = self.resolve_query_timeout(query_options);
 
         let future = async move {
@@ -980,7 +1073,8 @@ impl Statement {
         let pluck = self.mode.pluck.load(Ordering::SeqCst);
         let timed = self.mode.timing.load(Ordering::SeqCst);
 
-        let params = map_params(&self.stmt, params)?;
+        let stmt = self.handle()?.stmt;
+        let params = map_params(&stmt, params)?;
         let column_names = self.column_names.clone();
 
         let start = if timed {
@@ -989,7 +1083,6 @@ impl Statement {
             None
         };
 
-        let stmt = self.stmt.clone();
         let stmt_fut = stmt.clone();
         let query_timeout = self.resolve_query_timeout(query_options);
         let future = async move {
@@ -1028,12 +1121,13 @@ impl Statement {
     ) -> Result<napi::JsUnknown> {
         match row {
             Some(row) => {
+                let values = row_values(row, column_names.len(), pluck)?;
                 if raw {
-                    let js_array = map_row_raw(&env, &column_names, &row, safe_ints, pluck)?;
+                    let js_array = map_row_raw(&env, &values, safe_ints, pluck)?;
                     Ok(js_array.into_unknown())
                 } else {
                     let mut js_object =
-                        map_row_object(&env, &column_names, &row, safe_ints, pluck)?
+                        map_row_object(&env, &column_names, &values, safe_ints, pluck)?
                             .coerce_to_object()?;
                     if let Some(duration) = duration {
                         let mut metadata = env.create_object()?;
@@ -1067,11 +1161,12 @@ impl Statement {
         let safe_ints = self.mode.safe_ints.load(Ordering::SeqCst);
         let raw = self.mode.raw.load(Ordering::SeqCst);
         let pluck = self.mode.pluck.load(Ordering::SeqCst);
-        let stmt = self.stmt.clone();
+        let stmt = self.handle()?.stmt;
         stmt.reset();
         let params = map_params(&stmt, params)?;
-        let stmt_for_query = self.stmt.clone();
-        let stmt_for_iter = stmt_for_query.clone();
+        let stmt_for_query = stmt.clone();
+        let stmt_for_iter = stmt;
+        let resources = self.resources.clone();
         let query_timeout = self.resolve_query_timeout(query_options);
         let future = async move {
             let timeout_guard = register_timeout(&stmt_for_query, query_timeout);
@@ -1081,20 +1176,21 @@ impl Statement {
         let column_names = self.column_names.clone();
         env.execute_tokio_future(future, move |&mut _env, (result, timeout_guard)| {
             Ok(RowsIterator::new(
-                Arc::new(tokio::sync::Mutex::new(result)),
+                result,
                 stmt_for_iter,
                 column_names,
                 safe_ints,
                 raw,
                 pluck,
                 timeout_guard,
+                &resources,
             ))
         })
     }
 
     #[napi]
     pub fn raw(&self, raw: Option<bool>) -> Result<&Self> {
-        let returns_data = !self.stmt.columns().is_empty();
+        let returns_data = !self.column_names.is_empty();
         if !returns_data {
             return Err(napi::Error::from_reason(
                 "The raw() method is only for statements that return data",
@@ -1122,7 +1218,8 @@ impl Statement {
 
     #[napi]
     pub fn columns(&self, env: Env) -> Result<Array> {
-        let columns = self.stmt.columns();
+        let stmt = self.handle()?.stmt;
+        let columns = stmt.columns();
         let mut js_array = env.create_array(columns.len() as u32)?;
         for (i, col) in columns.iter().enumerate() {
             let mut js_obj = env.create_object()?;
@@ -1166,12 +1263,23 @@ impl Statement {
 
     #[napi]
     pub fn interrupt(&self) -> Result<()> {
-        self.stmt.interrupt().map_err(Error::from)?;
+        self.handle()?.stmt.interrupt().map_err(Error::from)?;
         Ok(())
     }
 }
 
 impl Statement {
+    fn handle(&self) -> Result<StatementHandle> {
+        match &*self.slot.0.lock().unwrap() {
+            Some(handle) => Ok(handle.clone()),
+            None => Err(throw_sqlite_error(
+                "The database connection is not open".to_string(),
+                "SQLITE_NOTOPEN".to_string(),
+                0,
+            )),
+        }
+    }
+
     fn resolve_query_timeout(&self, query_options: Option<QueryOptions>) -> Option<Duration> {
         match query_options.and_then(|o| o.queryTimeout) {
             Some(timeout_ms) => query_timeout_duration(timeout_ms),
@@ -1201,11 +1309,12 @@ pub fn statement_get_sync(
 
     let rt = runtime()?;
     let query_timeout = stmt.resolve_query_timeout(query_options);
+    let inner_stmt = stmt.handle()?.stmt;
     let result: Result<(Option<libsql::Row>, Option<f64>)> = {
-        rt.block_on(async move {
-            let _timeout_guard = register_timeout(&stmt.stmt, query_timeout);
-            let params = map_params(&stmt.stmt, params)?;
-            let mut rows = stmt.stmt.query(params).await.map_err(Error::from)?;
+        rt.block_on(async {
+            let _timeout_guard = register_timeout(&inner_stmt, query_timeout);
+            let params = map_params(&inner_stmt, params)?;
+            let mut rows = inner_stmt.query(params).await.map_err(Error::from)?;
             let row = rows.next().await.map_err(Error::from)?;
             let duration: Option<f64> = start.map(|start| start.elapsed().as_secs_f64());
             Ok((row, duration))
@@ -1222,11 +1331,11 @@ pub fn statement_get_sync(
                 pluck,
                 duration,
             );
-            stmt.stmt.reset();
+            inner_stmt.reset();
             mapped
         }
         Err(err) => {
-            stmt.stmt.reset();
+            inner_stmt.reset();
             Err(err)
         }
     }
@@ -1239,22 +1348,26 @@ pub fn statement_run_sync(
     params: Option<napi::JsUnknown>,
     query_options: Option<QueryOptions>,
 ) -> Result<RunResult> {
-    stmt.stmt.reset();
+    let StatementHandle {
+        conn,
+        stmt: inner_stmt,
+    } = stmt.handle()?;
+    inner_stmt.reset();
     let rt = runtime()?;
     let query_timeout = stmt.resolve_query_timeout(query_options);
     rt.block_on(async move {
-        let _timeout_guard = register_timeout(&stmt.stmt, query_timeout);
-        let params = map_params(&stmt.stmt, params)?;
-        let total_changes_before = stmt.conn.total_changes();
+        let _timeout_guard = register_timeout(&inner_stmt, query_timeout);
+        let params = map_params(&inner_stmt, params)?;
+        let total_changes_before = conn.total_changes();
         let start = std::time::Instant::now();
 
-        stmt.stmt.run(params).await.map_err(Error::from)?;
-        let changes = if stmt.conn.total_changes() == total_changes_before {
+        inner_stmt.run(params).await.map_err(Error::from)?;
+        let changes = if conn.total_changes() == total_changes_before {
             0
         } else {
-            stmt.conn.changes()
+            conn.changes()
         };
-        let last_insert_row_id = stmt.conn.last_insert_rowid();
+        let last_insert_row_id = conn.last_insert_rowid();
         let duration = start.elapsed().as_secs_f64();
         Ok(RunResult {
             changes: changes as f64,
@@ -1276,7 +1389,7 @@ pub fn statement_iterate_sync(
     let raw = stmt.mode.raw.load(Ordering::SeqCst);
     let pluck = stmt.mode.pluck.load(Ordering::SeqCst);
     let query_timeout = stmt.resolve_query_timeout(query_options);
-    let inner_stmt = stmt.stmt.clone();
+    let inner_stmt = stmt.handle()?.stmt;
     let iter_stmt = inner_stmt.clone();
     let (rows, column_names, timeout_guard) = rt.block_on(async move {
         let timeout_guard = register_timeout(&inner_stmt, query_timeout);
@@ -1291,13 +1404,14 @@ pub fn statement_iterate_sync(
         Ok::<_, napi::Error>((rows, column_names, timeout_guard))
     })?;
     Ok(RowsIterator::new(
-        Arc::new(tokio::sync::Mutex::new(rows)),
+        rows,
         iter_stmt,
         column_names,
         safe_ints,
         raw,
         pluck,
         timeout_guard,
+        &stmt.resources,
     ))
 }
 
@@ -1439,52 +1553,116 @@ fn map_value(value: JsUnknown) -> Result<libsql::Value> {
 /// A raw iterator over rows. The JavaScript layer wraps this in a iterable.
 #[napi]
 pub struct RowsIterator {
-    rows: Arc<tokio::sync::Mutex<libsql::Rows>>,
-    stmt: Arc<libsql::Statement>,
+    state: Arc<RowsIteratorState>,
     column_names: Vec<std::ffi::CString>,
     safe_ints: bool,
     raw: bool,
     pluck: bool,
+}
+
+/// The libSQL objects of an iterator, released when the database is closed.
+struct RowsIteratorState {
+    rows: tokio::sync::Mutex<Option<libsql::Rows>>,
+    stmt: Mutex<Option<Arc<libsql::Statement>>>,
     timeout_guard: Mutex<Option<QueryTimeoutGuard>>,
+    // Set when the database is closed while next() holds the rows.
+    released: AtomicBool,
+}
+
+impl RowsIteratorState {
+    fn release_operation_resources(&self) {
+        if let Some(stmt) = &*self.stmt.lock().unwrap() {
+            stmt.reset();
+        }
+        self.timeout_guard.lock().unwrap().take();
+    }
+}
+
+impl ConnectionResource for RowsIteratorState {
+    fn release(&self) {
+        self.released.store(true, Ordering::SeqCst);
+        self.release_operation_resources();
+        self.stmt.lock().unwrap().take();
+        // An in-flight next() drops the rows itself once it observes `released`.
+        if let Ok(mut rows) = self.rows.try_lock() {
+            rows.take();
+        }
+    }
 }
 
 #[napi]
 impl RowsIterator {
-    pub fn new(
-        rows: Arc<tokio::sync::Mutex<libsql::Rows>>,
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        rows: libsql::Rows,
         stmt: Arc<libsql::Statement>,
         column_names: Vec<std::ffi::CString>,
         safe_ints: bool,
         raw: bool,
         pluck: bool,
         timeout_guard: Option<QueryTimeoutGuard>,
+        resources: &OpenResources,
     ) -> Self {
+        let state = Arc::new(RowsIteratorState {
+            rows: tokio::sync::Mutex::new(Some(rows)),
+            stmt: Mutex::new(Some(stmt)),
+            timeout_guard: Mutex::new(timeout_guard),
+            released: AtomicBool::new(false),
+        });
+        let weak_state: Weak<dyn ConnectionResource> = Arc::downgrade(&state) as _;
+        resources.register(weak_state);
         Self {
-            rows,
-            stmt,
+            state,
             column_names,
             safe_ints,
             raw,
             pluck,
-            timeout_guard: Mutex::new(timeout_guard),
         }
     }
 
     #[napi]
     pub async fn next(&self) -> Result<Record> {
-        let mut rows = self.rows.lock().await;
-        let row = match rows.next().await {
+        let result = {
+            let mut rows_slot = self.state.rows.lock().await;
+            if self.state.released.load(Ordering::SeqCst) {
+                rows_slot.take();
+            }
+            match rows_slot.as_mut() {
+                Some(rows) => rows.next().await,
+                None => {
+                    return Err(throw_sqlite_error(
+                        "The database connection is not open".to_string(),
+                        "SQLITE_NOTOPEN".to_string(),
+                        0,
+                    ));
+                }
+            }
+        };
+        // The database may have been closed while we held the rows. Checking
+        // after unlocking guarantees either we or release() drops them.
+        if self.state.released.load(Ordering::SeqCst) {
+            if let Ok(mut rows_slot) = self.state.rows.try_lock() {
+                rows_slot.take();
+            }
+        }
+        let row = match result {
             Ok(row) => row,
             Err(err) => {
-                self.release_operation_resources();
+                self.state.release_operation_resources();
                 return Err(Error::from(err).into());
             }
         };
-        if row.is_none() {
-            self.release_operation_resources();
-        }
+        // Copy the values out: a libSQL row references the statement, which
+        // would keep the connection open for as long as the record is alive.
+        let values = match row {
+            Some(row) => Some(row_values(&row, self.column_names.len(), self.pluck)?),
+            None => {
+                self.state.release_operation_resources();
+                None
+            }
+        };
         Ok(Record {
-            row,
+            values,
             column_names: self.column_names.clone(),
             safe_ints: self.safe_ints,
             raw: self.raw,
@@ -1494,13 +1672,7 @@ impl RowsIterator {
 
     #[napi]
     pub fn close(&self) {
-        self.release_operation_resources();
-    }
-
-    fn release_operation_resources(&self) {
-        self.stmt.reset();
-        let mut timeout_guard = self.timeout_guard.lock().unwrap();
-        timeout_guard.take();
+        self.state.release_operation_resources();
     }
 }
 
@@ -1513,7 +1685,7 @@ pub fn iterator_next_sync(iter: &RowsIterator) -> Result<Record> {
 
 #[napi]
 pub struct Record {
-    row: Option<libsql::Row>,
+    values: Option<Vec<libsql::Value>>,
     column_names: Vec<std::ffi::CString>,
     safe_ints: bool,
     raw: bool,
@@ -1524,11 +1696,11 @@ pub struct Record {
 impl Record {
     #[napi(getter)]
     pub fn value(&self, env: Env) -> napi::Result<napi::JsUnknown> {
-        if let Some(row) = &self.row {
+        if let Some(values) = &self.values {
             Ok(map_row(
                 &env,
                 &self.column_names,
-                &row,
+                values,
                 self.safe_ints,
                 self.raw,
                 self.pluck,
@@ -1540,7 +1712,7 @@ impl Record {
 
     #[napi(getter)]
     pub fn done(&self) -> bool {
-        self.row.is_none()
+        self.values.is_none()
     }
 }
 
@@ -1612,17 +1784,32 @@ pub(crate) fn pin_module_in_memory() {
 fn map_row(
     env: &Env,
     column_names: &[std::ffi::CString],
-    row: &libsql::Row,
+    values: &[libsql::Value],
     safe_ints: bool,
     raw: bool,
     pluck: bool,
 ) -> Result<napi::JsUnknown> {
     let result = if raw {
-        map_row_raw(env, column_names, row, safe_ints, pluck)?
+        map_row_raw(env, values, safe_ints, pluck)?
     } else {
-        map_row_object(env, column_names, row, safe_ints, pluck)?.into_unknown()
+        map_row_object(env, column_names, values, safe_ints, pluck)?.into_unknown()
     };
     Ok(result)
+}
+
+/// Reads the column values of a row. When plucking, only the first column is read.
+fn row_values(row: &libsql::Row, column_count: usize, pluck: bool) -> Result<Vec<libsql::Value>> {
+    let count = if pluck {
+        column_count.min(1)
+    } else {
+        column_count
+    };
+    (0..count)
+        .map(|idx| {
+            row.get_value(idx as i32)
+                .map_err(|e| napi::Error::from_reason(e.to_string()))
+        })
+        .collect()
 }
 
 fn convert_value_to_js(
@@ -1648,34 +1835,21 @@ fn convert_value_to_js(
 fn map_row_object(
     env: &Env,
     column_names: &[std::ffi::CString],
-    row: &libsql::Row,
+    values: &[libsql::Value],
     safe_ints: bool,
     pluck: bool,
 ) -> Result<napi::JsUnknown> {
-    let column_count = column_names.len();
-
     let result = if pluck {
-        if column_count > 0 {
-            let value = match row.get_value(0) {
-                Ok(v) => v,
-                Err(e) => return Err(napi::Error::from_reason(e.to_string())),
-            };
-            convert_value_to_js(env, &value, safe_ints)?
-        } else {
-            env.get_null()?.into_unknown()
+        match values.first() {
+            Some(value) => convert_value_to_js(env, value, safe_ints)?,
+            None => env.get_null()?.into_unknown(),
         }
     } else {
         let result = env.create_object()?;
         let result = unsafe { napi::JsObject::to_napi_value(env.raw(), result)? };
         // If not plucking, get all columns
-        for idx in 0..column_count {
-            let value = match row.get_value(idx as i32) {
-                Ok(v) => v,
-                Err(e) => return Err(napi::Error::from_reason(e.to_string())),
-            };
-
-            let column_name = &column_names[idx];
-            let js_value = convert_value_to_js(env, &value, safe_ints)?;
+        for (value, column_name) in values.iter().zip(column_names) {
+            let js_value = convert_value_to_js(env, value, safe_ints)?;
             unsafe {
                 napi::sys::napi_set_named_property(
                     env.raw(),
@@ -1693,26 +1867,20 @@ fn map_row_object(
 
 fn map_row_raw(
     env: &Env,
-    column_names: &[std::ffi::CString],
-    row: &libsql::Row,
+    values: &[libsql::Value],
     safe_ints: bool,
     pluck: bool,
 ) -> Result<napi::JsUnknown> {
     if pluck {
-        let value = match row.get_value(0) {
-            Ok(v) => convert_value_to_js(env, &v, safe_ints)?,
-            Err(_) => env.get_null()?.into_unknown(),
+        let value = match values.first() {
+            Some(value) => convert_value_to_js(env, value, safe_ints)?,
+            None => env.get_null()?.into_unknown(),
         };
         return Ok(value);
     }
-    let column_count = column_names.len();
-    let mut arr = env.create_array(column_count as u32)?;
-    for idx in 0..column_count {
-        let value = match row.get_value(idx as i32) {
-            Ok(v) => v,
-            Err(e) => return Err(napi::Error::from_reason(e.to_string())),
-        };
-        let js_value = convert_value_to_js(env, &value, safe_ints)?;
+    let mut arr = env.create_array(values.len() as u32)?;
+    for (idx, value) in values.iter().enumerate() {
+        let js_value = convert_value_to_js(env, value, safe_ints)?;
         arr.set(idx as u32, js_value)?;
     }
     Ok(arr.coerce_to_object()?.into_unknown())
