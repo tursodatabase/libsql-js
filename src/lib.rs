@@ -1121,12 +1121,13 @@ impl Statement {
     ) -> Result<napi::JsUnknown> {
         match row {
             Some(row) => {
+                let values = row_values(row, column_names.len(), pluck)?;
                 if raw {
-                    let js_array = map_row_raw(&env, &column_names, &row, safe_ints, pluck)?;
+                    let js_array = map_row_raw(&env, &values, safe_ints, pluck)?;
                     Ok(js_array.into_unknown())
                 } else {
                     let mut js_object =
-                        map_row_object(&env, &column_names, &row, safe_ints, pluck)?
+                        map_row_object(&env, &column_names, &values, safe_ints, pluck)?
                             .coerce_to_object()?;
                     if let Some(duration) = duration {
                         let mut metadata = env.create_object()?;
@@ -1651,11 +1652,17 @@ impl RowsIterator {
                 return Err(Error::from(err).into());
             }
         };
-        if row.is_none() {
-            self.state.release_operation_resources();
-        }
+        // Copy the values out: a libSQL row references the statement, which
+        // would keep the connection open for as long as the record is alive.
+        let values = match row {
+            Some(row) => Some(row_values(&row, self.column_names.len(), self.pluck)?),
+            None => {
+                self.state.release_operation_resources();
+                None
+            }
+        };
         Ok(Record {
-            row,
+            values,
             column_names: self.column_names.clone(),
             safe_ints: self.safe_ints,
             raw: self.raw,
@@ -1678,7 +1685,7 @@ pub fn iterator_next_sync(iter: &RowsIterator) -> Result<Record> {
 
 #[napi]
 pub struct Record {
-    row: Option<libsql::Row>,
+    values: Option<Vec<libsql::Value>>,
     column_names: Vec<std::ffi::CString>,
     safe_ints: bool,
     raw: bool,
@@ -1689,11 +1696,11 @@ pub struct Record {
 impl Record {
     #[napi(getter)]
     pub fn value(&self, env: Env) -> napi::Result<napi::JsUnknown> {
-        if let Some(row) = &self.row {
+        if let Some(values) = &self.values {
             Ok(map_row(
                 &env,
                 &self.column_names,
-                &row,
+                values,
                 self.safe_ints,
                 self.raw,
                 self.pluck,
@@ -1705,7 +1712,7 @@ impl Record {
 
     #[napi(getter)]
     pub fn done(&self) -> bool {
-        self.row.is_none()
+        self.values.is_none()
     }
 }
 
@@ -1777,17 +1784,32 @@ pub(crate) fn pin_module_in_memory() {
 fn map_row(
     env: &Env,
     column_names: &[std::ffi::CString],
-    row: &libsql::Row,
+    values: &[libsql::Value],
     safe_ints: bool,
     raw: bool,
     pluck: bool,
 ) -> Result<napi::JsUnknown> {
     let result = if raw {
-        map_row_raw(env, column_names, row, safe_ints, pluck)?
+        map_row_raw(env, values, safe_ints, pluck)?
     } else {
-        map_row_object(env, column_names, row, safe_ints, pluck)?.into_unknown()
+        map_row_object(env, column_names, values, safe_ints, pluck)?.into_unknown()
     };
     Ok(result)
+}
+
+/// Reads the column values of a row. When plucking, only the first column is read.
+fn row_values(row: &libsql::Row, column_count: usize, pluck: bool) -> Result<Vec<libsql::Value>> {
+    let count = if pluck {
+        column_count.min(1)
+    } else {
+        column_count
+    };
+    (0..count)
+        .map(|idx| {
+            row.get_value(idx as i32)
+                .map_err(|e| napi::Error::from_reason(e.to_string()))
+        })
+        .collect()
 }
 
 fn convert_value_to_js(
@@ -1813,34 +1835,21 @@ fn convert_value_to_js(
 fn map_row_object(
     env: &Env,
     column_names: &[std::ffi::CString],
-    row: &libsql::Row,
+    values: &[libsql::Value],
     safe_ints: bool,
     pluck: bool,
 ) -> Result<napi::JsUnknown> {
-    let column_count = column_names.len();
-
     let result = if pluck {
-        if column_count > 0 {
-            let value = match row.get_value(0) {
-                Ok(v) => v,
-                Err(e) => return Err(napi::Error::from_reason(e.to_string())),
-            };
-            convert_value_to_js(env, &value, safe_ints)?
-        } else {
-            env.get_null()?.into_unknown()
+        match values.first() {
+            Some(value) => convert_value_to_js(env, value, safe_ints)?,
+            None => env.get_null()?.into_unknown(),
         }
     } else {
         let result = env.create_object()?;
         let result = unsafe { napi::JsObject::to_napi_value(env.raw(), result)? };
         // If not plucking, get all columns
-        for idx in 0..column_count {
-            let value = match row.get_value(idx as i32) {
-                Ok(v) => v,
-                Err(e) => return Err(napi::Error::from_reason(e.to_string())),
-            };
-
-            let column_name = &column_names[idx];
-            let js_value = convert_value_to_js(env, &value, safe_ints)?;
+        for (value, column_name) in values.iter().zip(column_names) {
+            let js_value = convert_value_to_js(env, value, safe_ints)?;
             unsafe {
                 napi::sys::napi_set_named_property(
                     env.raw(),
@@ -1858,26 +1867,20 @@ fn map_row_object(
 
 fn map_row_raw(
     env: &Env,
-    column_names: &[std::ffi::CString],
-    row: &libsql::Row,
+    values: &[libsql::Value],
     safe_ints: bool,
     pluck: bool,
 ) -> Result<napi::JsUnknown> {
     if pluck {
-        let value = match row.get_value(0) {
-            Ok(v) => convert_value_to_js(env, &v, safe_ints)?,
-            Err(_) => env.get_null()?.into_unknown(),
+        let value = match values.first() {
+            Some(value) => convert_value_to_js(env, value, safe_ints)?,
+            None => env.get_null()?.into_unknown(),
         };
         return Ok(value);
     }
-    let column_count = column_names.len();
-    let mut arr = env.create_array(column_count as u32)?;
-    for idx in 0..column_count {
-        let value = match row.get_value(idx as i32) {
-            Ok(v) => v,
-            Err(e) => return Err(napi::Error::from_reason(e.to_string())),
-        };
-        let js_value = convert_value_to_js(env, &value, safe_ints)?;
+    let mut arr = env.create_array(values.len() as u32)?;
+    for (idx, value) in values.iter().enumerate() {
+        let js_value = convert_value_to_js(env, value, safe_ints)?;
         arr.set(idx as u32, js_value)?;
     }
     Ok(arr.coerce_to_object()?.into_unknown())
