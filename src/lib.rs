@@ -1547,8 +1547,66 @@ impl Record {
 fn runtime() -> Result<&'static Runtime> {
     static RUNTIME: OnceCell<Runtime> = OnceCell::new();
 
-    let rt = RUNTIME.get_or_try_init(Runtime::new).unwrap();
+    let rt = RUNTIME
+        .get_or_try_init(|| {
+            pin_module_in_memory();
+            Runtime::new()
+        })
+        .unwrap();
     Ok(rt)
+}
+
+/// Keep this library mapped for the lifetime of the process.
+///
+/// Node.js unloads a native addon when the worker thread that loaded it exits
+/// (`Environment::~Environment` closes every addon a non-main thread loaded),
+/// unless something else still holds the library open. This addon owns
+/// process-wide threads that outlive any single environment: the tokio runtime
+/// behind the synchronous API and the query timeout thread. If the library is
+/// unmapped underneath them, they fault on the next instruction they execute,
+/// which is how `ava` (test files run in worker threads) crashed with an access
+/// violation on Windows. Every process-wide thread must be spawned after this
+/// has run.
+pub(crate) fn pin_module_in_memory() {
+    static PIN: std::sync::Once = std::sync::Once::new();
+    PIN.call_once(|| {
+        let addr_in_module = pin_module_in_memory as *const ();
+
+        #[cfg(windows)]
+        unsafe {
+            #[link(name = "kernel32")]
+            extern "system" {
+                fn GetModuleHandleExW(
+                    flags: u32,
+                    module_name: *const u16,
+                    module: *mut *mut std::ffi::c_void,
+                ) -> i32;
+            }
+            const GET_MODULE_HANDLE_EX_FLAG_PIN: u32 = 0x1;
+            const GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS: u32 = 0x4;
+            let mut module = std::ptr::null_mut();
+            GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_PIN | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                addr_in_module as *const u16,
+                &mut module,
+            );
+        }
+
+        #[cfg(unix)]
+        unsafe {
+            let mut info: libc::Dl_info = std::mem::zeroed();
+            if libc::dladdr(addr_in_module as *const libc::c_void, &mut info) != 0
+                && !info.dli_fname.is_null()
+            {
+                // Re-open our own image with RTLD_NODELETE so dlclose() never
+                // unmaps it. The handle is intentionally leaked.
+                libc::dlopen(
+                    info.dli_fname,
+                    libc::RTLD_NOW | libc::RTLD_NOLOAD | libc::RTLD_NODELETE,
+                );
+            }
+        }
+    });
 }
 
 fn map_row(
