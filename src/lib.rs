@@ -1458,6 +1458,11 @@ fn map_params(
                 let object = params.coerce_to_object()?;
                 if object.is_array()? {
                     map_params_array(object)
+                } else if object.is_buffer()? || object.is_typedarray()? {
+                    // A buffer is an object, but it is a value rather than a
+                    // bag of named parameters: `stmt.get(buffer)` binds one
+                    // blob positionally, as `stmt.get(text)` binds one string.
+                    map_params_single(object.into_unknown())
                 } else {
                     map_params_object(stmt, object)
                 }
@@ -1490,7 +1495,14 @@ fn map_params_object(
 ) -> Result<libsql::params::Params> {
     let mut params = vec![];
     for idx in 0..stmt.parameter_count() {
-        let name = stmt.parameter_name((idx + 1) as i32).unwrap();
+        // Anonymous in the statement (`?`), so there is no name to match this
+        // object's keys against. Report it rather than unwrapping None, which
+        // panics out of the runtime and takes the process with it.
+        let Some(name) = stmt.parameter_name((idx + 1) as i32) else {
+            return Err(napi::Error::from_reason(
+                "SQLite3 cannot bind named parameters to a statement using anonymous '?' parameters; pass them positionally instead",
+            ));
+        };
         let name = name.to_string();
         // Remove the leading ':' or '@' or '$' from parameter name
         let key = &name[1..];
