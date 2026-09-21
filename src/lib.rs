@@ -1066,7 +1066,11 @@ impl Statement {
 
         let future = async move {
             let _timeout_guard = register_timeout(&stmt, query_timeout);
-            stmt.run(params).await.map_err(Error::from)?;
+            let result = stmt.run(params).await;
+            if result.is_err() {
+                stmt.reset();
+            }
+            result.map_err(Error::from)?;
             let changes = if conn.total_changes() == total_changes_before {
                 0
             } else {
@@ -1386,7 +1390,11 @@ pub fn statement_run_sync(
         let total_changes_before = conn.total_changes();
         let start = std::time::Instant::now();
 
-        inner_stmt.run(params).await.map_err(Error::from)?;
+        let result = inner_stmt.run(params).await;
+        if result.is_err() {
+            inner_stmt.reset();
+        }
+        result.map_err(Error::from)?;
         let changes = if conn.total_changes() == total_changes_before {
             0
         } else {

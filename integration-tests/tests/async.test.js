@@ -987,6 +987,27 @@ test.serial("Database.batch() rejects non-array argument", async (t) => {
   await t.throwsAsync(() => db.batch("SELECT 1"), { instanceOf: TypeError });
 });
 
+test.serial("A statement that failed with SQLITE_BUSY does not block the next COMMIT", async (t) => {
+  const path = genDatabaseFilename();
+  const [holder] = await connect(path);
+  await holder.exec("PRAGMA journal_mode=WAL");
+  await holder.exec("CREATE TABLE t(x)");
+  const [db] = await connect(path, { timeout: 50 });
+  await holder.exec("BEGIN IMMEDIATE");
+  // Keep the failed statement referenced so that garbage collection cannot finalize it.
+  const begin = await db.prepare("BEGIN IMMEDIATE");
+  await t.throwsAsync(() => begin.run(), { code: "SQLITE_BUSY" });
+  await holder.exec("ROLLBACK");
+  await (await db.prepare("BEGIN IMMEDIATE")).run();
+  await (await db.prepare("INSERT INTO t VALUES (1)")).run();
+  await (await db.prepare("COMMIT")).run();
+  const row = await (await db.prepare("SELECT count(*) AS n FROM t")).get();
+  t.is(row.n, 1);
+  db.close();
+  holder.close();
+  for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(path + suffix, { force: true });
+});
+
 const connect = async (path_opt, options = {}) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;
