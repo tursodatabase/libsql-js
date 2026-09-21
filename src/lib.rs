@@ -1066,7 +1066,18 @@ impl Statement {
 
         let future = async move {
             let _timeout_guard = register_timeout(&stmt, query_timeout);
-            stmt.run(params).await.map_err(Error::from)?;
+            let result = stmt.run(params).await;
+            // Reset the statement whether or not the step succeeded, as
+            // better-sqlite3 does. SQLite leaves a statement in progress after
+            // a step that returned a row (INSERT ... RETURNING, PRAGMA
+            // journal_mode=...) or that failed with SQLITE_BUSY. Until it is
+            // reset, an autocommit write stays uncommitted, its locks stay
+            // held, and every COMMIT on the connection fails with "SQL
+            // statements in progress". SQLite only records changes() when the
+            // statement halts, which the reset forces, so the counters below
+            // are read after it.
+            stmt.reset();
+            result.map_err(Error::from)?;
             let changes = if conn.total_changes() == total_changes_before {
                 0
             } else {
@@ -1386,7 +1397,18 @@ pub fn statement_run_sync(
         let total_changes_before = conn.total_changes();
         let start = std::time::Instant::now();
 
-        inner_stmt.run(params).await.map_err(Error::from)?;
+        let result = inner_stmt.run(params).await;
+        // Reset the statement whether or not the step succeeded, as
+        // better-sqlite3 does. SQLite leaves a statement in progress after
+        // a step that returned a row (INSERT ... RETURNING, PRAGMA
+        // journal_mode=...) or that failed with SQLITE_BUSY. Until it is
+        // reset, an autocommit write stays uncommitted, its locks stay
+        // held, and every COMMIT on the connection fails with "SQL
+        // statements in progress". SQLite only records changes() when the
+        // statement halts, which the reset forces, so the counters below
+        // are read after it.
+        inner_stmt.reset();
+        result.map_err(Error::from)?;
         let changes = if conn.total_changes() == total_changes_before {
             0
         } else {

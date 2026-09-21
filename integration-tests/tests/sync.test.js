@@ -801,6 +801,81 @@ test.serial("Database.batch() rejects non-array argument", async (t) => {
   t.throws(() => db.batch("SELECT 1"), { instanceOf: TypeError });
 });
 
+test.serial("A statement that failed with SQLITE_BUSY does not block the next COMMIT", async (t) => {
+  const path = genDatabaseFilename();
+  const [holder] = await connect(path);
+  holder.exec("PRAGMA journal_mode=WAL");
+  holder.exec("CREATE TABLE t(x)");
+  const [db, errorType] = await connect(path, { timeout: 50 });
+  holder.exec("BEGIN IMMEDIATE");
+  // Keep the failed statement referenced so that garbage collection cannot finalize it.
+  const begin = db.prepare("BEGIN IMMEDIATE");
+  t.throws(() => begin.run(), { instanceOf: errorType, code: "SQLITE_BUSY" });
+  holder.exec("ROLLBACK");
+  db.prepare("BEGIN IMMEDIATE").run();
+  db.prepare("INSERT INTO t VALUES (1)").run();
+  db.prepare("COMMIT").run();
+  t.is(db.prepare("SELECT count(*) AS n FROM t").get().n, 1);
+  db.close();
+  holder.close();
+  for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(path + suffix, { force: true });
+});
+
+test.serial("Statement.run() on INSERT ... RETURNING commits the write", async (t) => {
+  const path = genDatabaseFilename();
+  const [db] = await connect(path);
+  db.exec("CREATE TABLE t(x)");
+  // Keep the statement referenced so that garbage collection cannot finalize it.
+  const insert = db.prepare("INSERT INTO t VALUES (?) RETURNING x");
+  const info = insert.run(42);
+  t.is(info.changes, 1);
+  t.is(info.lastInsertRowid, 1);
+  // The write is visible to, and does not block, another connection.
+  const [other] = await connect(path, { timeout: 100 });
+  t.is(other.prepare("SELECT count(*) AS n FROM t").get().n, 1);
+  other.prepare("INSERT INTO t VALUES (2)").run();
+  // The same connection can run a transaction afterwards.
+  db.prepare("BEGIN IMMEDIATE").run();
+  db.prepare("INSERT INTO t VALUES (3)").run();
+  db.prepare("COMMIT").run();
+  t.is(db.prepare("SELECT count(*) AS n FROM t").get().n, 3);
+  other.close();
+  db.close();
+  for (const suffix of ["", "-journal", "-wal", "-shm"]) fs.rmSync(path + suffix, { force: true });
+});
+
+test.serial("Statement.run() on a SELECT does not keep a read transaction open", async (t) => {
+  const path = genDatabaseFilename();
+  const [db] = await connect(path);
+  db.exec("CREATE TABLE t(x)");
+  db.exec("INSERT INTO t VALUES (1)");
+  // Keep the statement referenced so that garbage collection cannot finalize it.
+  const select = db.prepare("SELECT x FROM t");
+  t.is(select.run().changes, 0);
+  // In rollback-journal mode an open read transaction would block this write.
+  const [other] = await connect(path, { timeout: 100 });
+  other.prepare("INSERT INTO t VALUES (2)").run();
+  t.is(db.prepare("SELECT count(*) AS n FROM t").get().n, 2);
+  other.close();
+  db.close();
+  for (const suffix of ["", "-journal"]) fs.rmSync(path + suffix, { force: true });
+});
+
+test.serial("Statement.run() on a PRAGMA returning a row does not block the next COMMIT", async (t) => {
+  const path = genDatabaseFilename();
+  const [db] = await connect(path);
+  // Keep the statement referenced so that garbage collection cannot finalize it.
+  const pragma = db.prepare("PRAGMA journal_mode=WAL");
+  pragma.run();
+  db.prepare("CREATE TABLE t(x)").run();
+  db.prepare("BEGIN IMMEDIATE").run();
+  db.prepare("INSERT INTO t VALUES (1)").run();
+  db.prepare("COMMIT").run();
+  t.is(db.prepare("SELECT count(*) AS n FROM t").get().n, 1);
+  db.close();
+  for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(path + suffix, { force: true });
+});
+
 const connect = async (path_opt, options = {}) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;

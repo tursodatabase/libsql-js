@@ -987,6 +987,82 @@ test.serial("Database.batch() rejects non-array argument", async (t) => {
   await t.throwsAsync(() => db.batch("SELECT 1"), { instanceOf: TypeError });
 });
 
+test.serial("A statement that failed with SQLITE_BUSY does not block the next COMMIT", async (t) => {
+  const path = genDatabaseFilename();
+  const [holder] = await connect(path);
+  await holder.exec("PRAGMA journal_mode=WAL");
+  await holder.exec("CREATE TABLE t(x)");
+  const [db] = await connect(path, { timeout: 50 });
+  await holder.exec("BEGIN IMMEDIATE");
+  // Keep the failed statement referenced so that garbage collection cannot finalize it.
+  const begin = await db.prepare("BEGIN IMMEDIATE");
+  await t.throwsAsync(() => begin.run(), { code: "SQLITE_BUSY" });
+  await holder.exec("ROLLBACK");
+  await (await db.prepare("BEGIN IMMEDIATE")).run();
+  await (await db.prepare("INSERT INTO t VALUES (1)")).run();
+  await (await db.prepare("COMMIT")).run();
+  const row = await (await db.prepare("SELECT count(*) AS n FROM t")).get();
+  t.is(row.n, 1);
+  db.close();
+  holder.close();
+  for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(path + suffix, { force: true });
+});
+
+test.serial("Statement.run() on INSERT ... RETURNING commits the write", async (t) => {
+  const path = genDatabaseFilename();
+  const [db] = await connect(path);
+  await db.exec("CREATE TABLE t(x)");
+  // Keep the statement referenced so that garbage collection cannot finalize it.
+  const insert = await db.prepare("INSERT INTO t VALUES (?) RETURNING x");
+  const info = await insert.run(42);
+  t.is(info.changes, 1);
+  t.is(info.lastInsertRowid, 1);
+  // The write is visible to, and does not block, another connection.
+  const [other] = await connect(path, { timeout: 100 });
+  t.is((await (await other.prepare("SELECT count(*) AS n FROM t")).get()).n, 1);
+  await (await other.prepare("INSERT INTO t VALUES (2)")).run();
+  // The same connection can run a transaction afterwards.
+  await (await db.prepare("BEGIN IMMEDIATE")).run();
+  await (await db.prepare("INSERT INTO t VALUES (3)")).run();
+  await (await db.prepare("COMMIT")).run();
+  t.is((await (await db.prepare("SELECT count(*) AS n FROM t")).get()).n, 3);
+  other.close();
+  db.close();
+  for (const suffix of ["", "-journal", "-wal", "-shm"]) fs.rmSync(path + suffix, { force: true });
+});
+
+test.serial("Statement.run() on a SELECT does not keep a read transaction open", async (t) => {
+  const path = genDatabaseFilename();
+  const [db] = await connect(path);
+  await db.exec("CREATE TABLE t(x)");
+  await db.exec("INSERT INTO t VALUES (1)");
+  // Keep the statement referenced so that garbage collection cannot finalize it.
+  const select = await db.prepare("SELECT x FROM t");
+  t.is((await select.run()).changes, 0);
+  // In rollback-journal mode an open read transaction would block this write.
+  const [other] = await connect(path, { timeout: 100 });
+  await (await other.prepare("INSERT INTO t VALUES (2)")).run();
+  t.is((await (await db.prepare("SELECT count(*) AS n FROM t")).get()).n, 2);
+  other.close();
+  db.close();
+  for (const suffix of ["", "-journal"]) fs.rmSync(path + suffix, { force: true });
+});
+
+test.serial("Statement.run() on a PRAGMA returning a row does not block the next COMMIT", async (t) => {
+  const path = genDatabaseFilename();
+  const [db] = await connect(path);
+  // Keep the statement referenced so that garbage collection cannot finalize it.
+  const pragma = await db.prepare("PRAGMA journal_mode=WAL");
+  await pragma.run();
+  await (await db.prepare("CREATE TABLE t(x)")).run();
+  await (await db.prepare("BEGIN IMMEDIATE")).run();
+  await (await db.prepare("INSERT INTO t VALUES (1)")).run();
+  await (await db.prepare("COMMIT")).run();
+  t.is((await (await db.prepare("SELECT count(*) AS n FROM t")).get()).n, 1);
+  db.close();
+  for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(path + suffix, { force: true });
+});
+
 const connect = async (path_opt, options = {}) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;
