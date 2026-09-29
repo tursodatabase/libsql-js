@@ -50,10 +50,13 @@ jobs:
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian-aarch64
             build: |-
               apt-get update -yq &&
-              apt-get install -yq gcc-aarch64-linux-gnu g++-aarch64-linux-gnu lld &&
+              apt-get install -yq clang gcc-aarch64-linux-gnu g++-aarch64-linux-gnu lld &&
               ls -l /usr/bin &&
               rustup target add aarch64-unknown-linux-gnu &&
-              CC=x86_64-linux-gnu-gcc CMAKE_C_COMPILER=aarch64-linux-gnu-gcc CMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ RUSTC_LINKER=aarch64-linux-gnu-gcc yarn build --target aarch64-unknown-linux-gnu
+              # Match Clang's GCC runtime to the image's bundled sysroot.
+              CFLAGS_aarch64_unknown_linux_gnu="${CFLAGS_aarch64_unknown_linux_gnu:-} --gcc-toolchain=/usr/aarch64-unknown-linux-gnu" \
+              CXXFLAGS_aarch64_unknown_linux_gnu="${CXXFLAGS_aarch64_unknown_linux_gnu:-} --gcc-toolchain=/usr/aarch64-unknown-linux-gnu" \
+              CC=x86_64-linux-gnu-gcc CMAKE_C_COMPILER=clang CMAKE_CXX_COMPILER=clang++ RUSTC_LINKER=aarch64-linux-gnu-gcc yarn build --target aarch64-unknown-linux-gnu
           - host: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
