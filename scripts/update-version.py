@@ -25,6 +25,7 @@ NPM_PACKAGES = [
     "npm/darwin-arm64",
     "npm/linux-arm64-gnu",
     "npm/win32-x64-msvc",
+    "npm/win32-arm64-msvc",
 ]
 
 
