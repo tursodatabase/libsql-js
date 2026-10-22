@@ -157,7 +157,7 @@ class Database {
           await db.exec("COMMIT");
           return result;
         } catch (err) {
-          await db.exec("ROLLBACK");
+          if (db.inTransaction) await db.exec("ROLLBACK");
           throw err;
         }
       };

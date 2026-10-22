@@ -414,6 +414,28 @@ test.serial("Database.transaction().immediate()", async (t) => {
   t.is(db.inTransaction, false);
 });
 
+test.serial("Database.transaction() rethrows the error when SQLite already rolled back", async (t) => {
+  const db = t.context.db;
+  const insert = await db.prepare(
+    "INSERT OR ROLLBACK INTO users(id, name, email) VALUES (?, ?, ?)"
+  );
+  const insertMany = db.transaction(async (users) => {
+    for (const user of users) await insert.run(user.id, user.name, user.email);
+  });
+  await t.throwsAsync(async () => {
+    await insertMany([
+      { id: 3, name: "Joey", email: "joey@example.org" },
+      { id: 1, name: "Sally", email: "sally@example.org" },
+    ]);
+  }, {
+    instanceOf: t.context.errorType,
+    code: "SQLITE_CONSTRAINT_PRIMARYKEY",
+  });
+  t.is(db.inTransaction, false);
+  const stmt = await db.prepare("SELECT * FROM users WHERE id = ?");
+  t.is(await stmt.get(3), undefined);
+});
+
 test.serial("Database.pragma()", async (t) => {
   const db = t.context.db;
   await db.pragma("cache_size = 2000");

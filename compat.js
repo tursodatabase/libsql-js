@@ -119,7 +119,7 @@ class Database {
           db.exec("COMMIT");
           return result;
         } catch (err) {
-          db.exec("ROLLBACK");
+          if (db.inTransaction) db.exec("ROLLBACK");
           throw err;
         }
       };
