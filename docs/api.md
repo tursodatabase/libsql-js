@@ -252,6 +252,38 @@ Pass `null` to remove the authorizer and allow all operations:
 db.authorizer(null);
 ```
 
+### limit(id) ⇒ number
+
+Returns the current value of a run-time limit for this connection. `id` is one of the `Limit` constants.
+
+### setLimit(id, value) ⇒ number
+
+Changes a run-time limit for this connection and returns its previous value. The limit applies only to this connection.
+
+SQLite never raises a limit past its compile-time maximum, so `setLimit()` can only lower a limit below that maximum. A negative `value` leaves the limit unchanged.
+
+| Param | Type                | Description                                  |
+| ----- | ------------------- | -------------------------------------------- |
+| id    | <code>number</code> | The limit category, one of the `Limit` constants. |
+| value | <code>number</code> | The new limit.                               |
+
+For example, to cap the size of any string or BLOB at 1 MiB:
+
+```javascript
+const { Limit } = require('libsql');
+
+db.setLimit(Limit.LENGTH, 1024 * 1024);
+
+// Throws SQLITE_TOOBIG.
+db.prepare("SELECT zeroblob(2000000)").get();
+```
+
+SQLite's `printf()` and `format()` functions return `NULL` instead of throwing when their result would exceed `Limit.LENGTH`.
+
+The `Limit` constants match SQLite's `SQLITE_LIMIT_*` values: `LENGTH`, `SQL_LENGTH`, `COLUMN`, `EXPR_DEPTH`, `COMPOUND_SELECT`, `VDBE_OP`, `FUNCTION_ARG`, `ATTACHED`, `LIKE_PATTERN_LENGTH`, `VARIABLE_NUMBER`, `TRIGGER_DEPTH` and `WORKER_THREADS`. See the [SQLite documentation](https://sqlite.org/c3ref/c_limit_attached.html) for what each one controls.
+
+**Note:** This is an extension in libSQL and not available in `better-sqlite3`.
+
 ### loadExtension(path, [entryPoint]) ⇒ this
 
 Loads a SQLite3 extension

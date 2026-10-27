@@ -153,6 +153,27 @@ export declare class Database {
    * * `env` - The environment.
    */
   interrupt(): void
+  /**
+   * Returns the current value of a run-time limit for this connection.
+   *
+   * # Arguments
+   *
+   * * `id` - The limit category, one of the `Limit` constants.
+   */
+  limit(id: number): number
+  /**
+   * Changes a run-time limit for this connection and returns its previous value.
+   *
+   * SQLite caps the new value at the limit's compile-time maximum, so this can
+   * lower a limit but never raise it past that maximum. A negative value leaves
+   * the limit unchanged.
+   *
+   * # Arguments
+   *
+   * * `id` - The limit category, one of the `Limit` constants.
+   * * `value` - The new limit.
+   */
+  setLimit(id: number, value: number): number
   /** Closes the database connection. */
   close(): void
   /**

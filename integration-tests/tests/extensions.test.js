@@ -1,5 +1,5 @@
 import test from "ava";
-import { Authorization, Action } from "libsql";
+import { Authorization, Action, Limit } from "libsql";
 
 test.serial("Statement.run() returning duration", async (t) => {
   const db = t.context.db;
@@ -549,6 +549,46 @@ test.serial("Accessor: blocks subquery escape to underlying table", async (t) =>
 });
 
 // ---- Setup ----
+
+// ---- Limits ----
+
+test.serial("Database.setLimit() lowers the string length limit", async (t) => {
+  const db = t.context.db;
+  const bigFormat = "SELECT length(format('%2000000s', 'x')) AS n";
+  t.is(db.prepare(bigFormat).get().n, 2000000);
+
+  const defaultLength = db.limit(Limit.LENGTH);
+  t.is(db.setLimit(Limit.LENGTH, 1024 * 1024), defaultLength);
+  t.is(db.limit(Limit.LENGTH), 1024 * 1024);
+
+  // SQLite's printf() family stops at the limit and returns NULL. Other
+  // functions fail with SQLITE_TOOBIG.
+  t.is(db.prepare(bigFormat).get().n, null);
+  t.throws(() => db.prepare("SELECT zeroblob(2000000)").get(), {
+    instanceOf: t.context.errorType,
+    code: "SQLITE_TOOBIG",
+  });
+  t.is(db.prepare("SELECT length(format('%1000s', 'x')) AS n").get().n, 1000);
+});
+
+test.serial("Database.setLimit() with a negative value leaves the limit unchanged", async (t) => {
+  const db = t.context.db;
+  db.setLimit(Limit.LENGTH, 4096);
+  t.is(db.setLimit(Limit.LENGTH, -1), 4096);
+  t.is(db.limit(Limit.LENGTH), 4096);
+});
+
+test.serial("Database.limit() rejects unknown limit IDs", async (t) => {
+  const db = t.context.db;
+  t.throws(() => db.limit(99), { message: /Invalid limit '99'/ });
+  t.throws(() => db.setLimit(-5, 10), { message: /Invalid limit '-5'/ });
+});
+
+test.serial("Database.limit() throws after close", async (t) => {
+  const [db] = await connect(":memory:");
+  db.close();
+  t.throws(() => db.limit(Limit.LENGTH), { instanceOf: TypeError });
+});
 
 const connect = async (path_opt) => {
   const path = path_opt ?? "hello.db";

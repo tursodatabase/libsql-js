@@ -3,6 +3,7 @@
 const { Database: NativeDb, databasePrepareSync, databaseSyncSync, databaseExecSync, statementRunSync, statementGetSync, statementIterateSync, iteratorNextSync } = require("./index.js");
 const SqliteError = require("./sqlite-error.js");
 const { Authorization, Action } = require("./auth");
+const { Limit } = require("./limits");
 
 function convertError(err) {
   // Handle errors from Rust with JSON-encoded message
@@ -291,6 +292,36 @@ class Database {
   }
 
   /**
+   * Returns the current value of a run-time limit for this connection.
+   *
+   * @param {number} id - The limit category, one of the `Limit` constants.
+   * @returns {number}
+   */
+  limit(id) {
+    try {
+      return this.db.limit(id);
+    } catch (err) {
+      throw convertError(err);
+    }
+  }
+
+  /**
+   * Changes a run-time limit for this connection and returns its previous value.
+   *
+   * @param {number} id - The limit category, one of the `Limit` constants.
+   * @param {number} value - The new limit. SQLite never raises a limit past its
+   *   compile-time maximum, and a negative value leaves the limit unchanged.
+   * @returns {number}
+   */
+  setLimit(id, value) {
+    try {
+      return this.db.setLimit(id, value);
+    } catch (err) {
+      throw convertError(err);
+    }
+  }
+
+  /**
    * Toggle 64-bit integer support.
    */
   defaultSafeIntegers(toggle) {
@@ -463,6 +494,7 @@ module.exports = Database;
 module.exports.SqliteError = SqliteError;
 module.exports.Authorization = Authorization;
 module.exports.Action = Action;
+module.exports.Limit = Limit;
 
 function normalizeBatchMode(mode) {
   switch (String(mode).toLowerCase()) {
