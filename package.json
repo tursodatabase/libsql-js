@@ -36,6 +36,8 @@
     "compat.js",
     "index.d.ts",
     "index.js",
+    "limits.d.ts",
+    "limits.js",
     "promise.d.ts",
     "promise.js",
     "sqlite-error.d.ts",

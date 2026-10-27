@@ -3,6 +3,7 @@
 const { Database: NativeDb, connect: nativeConnect } = require("./index.js");
 const SqliteError = require("./sqlite-error.js");
 const { Authorization, Action } = require("./auth");
+const { Limit } = require("./limits");
 
 /**
  * @import {Options as NativeOptions, Statement as NativeStatement} from './index.js'
@@ -383,6 +384,36 @@ class Database {
   }
 
   /**
+   * Returns the current value of a run-time limit for this connection.
+   *
+   * @param {number} id - The limit category, one of the `Limit` constants.
+   * @returns {number}
+   */
+  limit(id) {
+    try {
+      return this.db.limit(id);
+    } catch (err) {
+      throw convertError(err);
+    }
+  }
+
+  /**
+   * Changes a run-time limit for this connection and returns its previous value.
+   *
+   * @param {number} id - The limit category, one of the `Limit` constants.
+   * @param {number} value - The new limit. SQLite never raises a limit past its
+   *   compile-time maximum, and a negative value leaves the limit unchanged.
+   * @returns {number}
+   */
+  setLimit(id, value) {
+    try {
+      return this.db.setLimit(id, value);
+    } catch (err) {
+      throw convertError(err);
+    }
+  }
+
+  /**
    * Toggle 64-bit integer support.
    * @param {boolean} [toggle] - Whether to use safe integers by default.
    */
@@ -590,6 +621,7 @@ module.exports = {
   Action,
   Authorization,
   Database,
+  Limit,
   SqliteError,
   Statement,
   connect,

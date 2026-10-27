@@ -987,6 +987,26 @@ test.serial("Database.batch() rejects non-array argument", async (t) => {
   await t.throwsAsync(() => db.batch("SELECT 1"), { instanceOf: TypeError });
 });
 
+test.serial("Database.setLimit() lowers the string length limit", async (t) => {
+  const db = t.context.db;
+  const { Limit } = await import("libsql/promise");
+  const bigFormat = "SELECT length(format('%2000000s', 'x')) AS n";
+  t.is((await (await db.prepare(bigFormat)).get()).n, 2000000);
+
+  const defaultLength = db.limit(Limit.LENGTH);
+  t.is(db.setLimit(Limit.LENGTH, 1024 * 1024), defaultLength);
+  t.is(db.limit(Limit.LENGTH), 1024 * 1024);
+
+  t.is((await (await db.prepare(bigFormat)).get()).n, null);
+  await t.throwsAsync(
+    async () => {
+      const stmt = await db.prepare("SELECT zeroblob(2000000)");
+      await stmt.get();
+    },
+    { instanceOf: t.context.errorType, code: "SQLITE_TOOBIG" }
+  );
+});
+
 const connect = async (path_opt, options = {}) => {
   const path = path_opt ?? "hello.db";
   const provider = process.env.PROVIDER;

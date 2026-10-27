@@ -197,6 +197,7 @@ Cargo.lock
 *.node
 
 auth.d.ts
+limits.d.ts
 compat.d.ts
 promise.d.ts
 sqlite-error.d.ts

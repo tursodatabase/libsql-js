@@ -688,6 +688,41 @@ impl Database {
         Ok(())
     }
 
+    /// Returns the current value of a run-time limit for this connection.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The limit category, one of the `Limit` constants.
+    #[napi]
+    pub fn limit(&self, env: Env, id: i32) -> Result<i32> {
+        let conn = match &self.conn {
+            Some(conn) => conn.clone(),
+            None => return Err(throw_database_closed_error(&env)),
+        };
+        let limit = int_to_limit(id)?;
+        Ok(conn.limit(limit).map_err(Error::from)?)
+    }
+
+    /// Changes a run-time limit for this connection and returns its previous value.
+    ///
+    /// SQLite caps the new value at the limit's compile-time maximum, so this can
+    /// lower a limit but never raise it past that maximum. A negative value leaves
+    /// the limit unchanged.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The limit category, one of the `Limit` constants.
+    /// * `value` - The new limit.
+    #[napi]
+    pub fn set_limit(&self, env: Env, id: i32, value: i32) -> Result<i32> {
+        let conn = match &self.conn {
+            Some(conn) => conn.clone(),
+            None => return Err(throw_database_closed_error(&env)),
+        };
+        let limit = int_to_limit(id)?;
+        Ok(conn.set_limit(limit, value).map_err(Error::from)?)
+    }
+
     /// Closes the database connection.
     #[napi]
     pub fn close(&mut self) -> Result<()> {
@@ -705,6 +740,26 @@ impl Database {
         self.default_safe_integers
             .store(toggle.unwrap_or(true), Ordering::SeqCst);
         Ok(())
+    }
+}
+
+fn int_to_limit(val: i32) -> Result<libsql::Limit> {
+    match val {
+        0 => Ok(libsql::Limit::Length),
+        1 => Ok(libsql::Limit::SqlLength),
+        2 => Ok(libsql::Limit::Column),
+        3 => Ok(libsql::Limit::ExprDepth),
+        4 => Ok(libsql::Limit::CompoundSelect),
+        5 => Ok(libsql::Limit::VdbeOp),
+        6 => Ok(libsql::Limit::FunctionArg),
+        7 => Ok(libsql::Limit::Attached),
+        8 => Ok(libsql::Limit::LikePatternLength),
+        9 => Ok(libsql::Limit::VariableNumber),
+        10 => Ok(libsql::Limit::TriggerDepth),
+        11 => Ok(libsql::Limit::WorkerThreads),
+        _ => Err(napi::Error::from_reason(format!(
+            "Invalid limit '{val}'. Expected one of the Limit constants (0 to 11).",
+        ))),
     }
 }
 
