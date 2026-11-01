@@ -93,11 +93,11 @@ jobs:
         run: npm ci
       - name: Build (native)
         if: ${{ !matrix.settings.use-cross }}
-        run: cargo build --message-format=json --release --target ${{ matrix.settings.target }} | npx neon dist --name libsql-js
+        run: cargo build --message-format=json --release --target ${{ matrix.settings.target }} | npx neon dist --name libsql_js
         shell: bash
       - name: Build (cross)
         if: ${{ matrix.settings.use-cross }}
-        run: cross build --message-format=json --release --target ${{ matrix.settings.target }} | npx neon dist --name libsql-js -m /target
+        run: cross build --message-format=json --release --target ${{ matrix.settings.target }} | npx neon dist --name libsql_js -m /target
         shell: bash
       - name: Pack platform package
         run: npx neon pack-build -t ${{ matrix.settings.target }} -o dist
